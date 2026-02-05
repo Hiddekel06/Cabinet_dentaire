@@ -1,0 +1,43 @@
+# Global ignores
+.DS_Store
+Thumbs.db
+.env
+.env.*
+
+# Node (React Frontend)
+Frontend (React)/node_modules/
+Frontend (React)/dist/
+Frontend (React)/.env*
+Frontend (React)/.next/
+Frontend (React)/.cache/
+
+# Laravel (Backend)
+Backend (Laravel)/vendor/
+Backend (Laravel)/node_modules/
+Backend (Laravel)/.env*
+Backend (Laravel)/storage/
+Backend (Laravel)/.phpunit.result.cache
+
+# Logs
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS
+*.swp
+*.bak
+*.tmp
+
+# Misc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Cabinet (static HTML)
+Cabinet/*.log
+Cabinet/.DS_Store

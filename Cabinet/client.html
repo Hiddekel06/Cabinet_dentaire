@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MATLABUL SHIFAH - Tous les Patients</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #4f8ca5;
+      --primary-light: #f3f7fa;
+      --secondary: #7bb7ae;
+      --accent: #b6d6e2;
+      --success: #7fc8a9;
+      --warning: #ffe5b4;
+      --danger: #f7b2ad;
+      --dark: #2d3a4a;
+      --light: #f8fafc;
+    }
+    
+    body { 
+      font-family: 'Roboto', sans-serif; 
+      background: linear-gradient(135deg, #f3f7fa 0%, #f8fafc 100%); 
+      min-height: 100vh; 
+    }
+    
+    h1, h2, h3, h4, h5, h6 { 
+      font-family: 'Montserrat', sans-serif; 
+    }
+    
+    .badge { 
+      padding: 4px 12px; 
+      border-radius: 20px; 
+      font-size: 0.75rem; 
+      font-weight: 600; 
+    }
+    
+    .patient-row { 
+      transition: all 0.3s ease; 
+    }
+    
+    .patient-row:hover { 
+      background-color: #f3f7fa; 
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 140, 165, 0.1);
+    }
+    
+    .modal-overlay {
+      animation: fadeIn 0.3s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .modal-content {
+      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    @keyframes slideUp {
+      from { 
+        opacity: 0; 
+        transform: translateY(40px) scale(0.95); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+      }
+    }
+    
+    .form-input {
+      transition: all 0.3s ease;
+      border: 2px solid #e5e7eb;
+    }
+    
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 140, 165, 0.1);
+    }
+    
+    .avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 1.1rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    }
+    
+    .gradient-header {
+      background: linear-gradient(90deg, #4f8ca5 0%, #7bb7ae 100%);
+    }
+    
+    .btn-primary {
+      background: linear-gradient(90deg, #4f8ca5 0%, #7bb7ae 100%);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(79, 140, 165, 0.25);
+    }
+    
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+  </style>
+</head>
+<body class="text-gray-800">
+  <!-- HEADER -->
+  <header class="gradient-header shadow-lg">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="bg-white p-3 rounded-xl shadow-lg">
+          <i class="fas fa-tooth text-[#4f8ca5] text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-white">MATLABUL SHIFAH</h1>
+          <p class="text-blue-100 text-sm">Cabinet Médical - Gestion des Patients</p>
+        </div>
+      </div>
+      <a href="index.html" class="text-white hover:text-blue-100 font-medium flex items-center transition duration-200">
+        <i class="fas fa-arrow-left mr-2"></i>Retour au dashboard
+      </a>
+    </div>
+  </header>
+
+  <div class="max-w-7xl mx-auto px-4 py-8 md:px-6">
+    <!-- HEADER WITH ACTIONS -->
+    <div class="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h2 class="text-2xl md:text-3xl font-bold text-gray-800">Liste des Patients</h2>
+        <p class="text-gray-600 mt-1">Gérez l'ensemble des patients du cabinet</p>
+      </div>
+      
+      <div class="flex flex-wrap gap-3">
+        <form class="flex gap-2">
+          <input type="text" placeholder="Rechercher un patient..." 
+                 class="border border-[#b6d6e2] rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#4f8ca5] focus:border-transparent w-full md:w-64">
+          <button type="submit" class="btn-primary text-white px-5 py-2.5 rounded-xl font-medium">
+            <i class="fas fa-search mr-2"></i>Rechercher
+          </button>
+        </form>
+        
+        <button onclick="openAddPatientModal()" 
+                class="btn-primary text-white px-5 py-2.5 rounded-xl font-medium flex items-center">
+          <i class="fas fa-user-plus mr-2"></i>Nouveau Patient
+        </button>
+      </div>
+    </div>
+
+    <!-- STATS CARDS -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#4f8ca5]">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-gray-500 text-sm font-medium">Total Patients</p>
+            <h3 class="text-3xl font-bold text-gray-800 mt-1">248</h3>
+          </div>
+          <div class="bg-[#f3f7fa] p-3 rounded-lg">
+            <i class="fas fa-users text-[#4f8ca5] text-xl"></i>
+          </div>
+        </div>
+      </div>
+      
+      <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7fc8a9]">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-gray-500 text-sm font-medium">En suivi actif</p>
+            <h3 class="text-3xl font-bold text-gray-800 mt-1">189</h3>
+          </div>
+          <div class="bg-[#f0f9f5] p-3 rounded-lg">
+            <i class="fas fa-heartbeat text-[#7fc8a9] text-xl"></i>
+          </div>
+        </div>
+      </div>
+      
+      <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#7bb7ae]">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-gray-500 text-sm font-medium">RDV ce mois</p>
+            <h3 class="text-3xl font-bold text-gray-800 mt-1">42</h3>
+          </div>
+          <div class="bg-[#f0f9f8] p-3 rounded-lg">
+            <i class="far fa-calendar-check text-[#7bb7ae] text-xl"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PATIENTS TABLE -->
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+      <div class="px-6 py-4 border-b flex justify-between items-center">
+        <div>
+          <h3 class="text-lg font-bold text-gray-800">Patients récemment consultés</h3>
+          <p class="text-gray-500 text-sm">3 patients sur 248</p>
+        </div>
+        <div class="flex space-x-2">
+          <select class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm">
+            <option>Trier par: Date récente</option>
+            <option>Trier par: Nom</option>
+            <option>Trier par: Statut</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-100">
+          <thead class="bg-[#f3f7fa]">
+            <tr>
+              <th class="px-6 py-4 text-left text-xs font-bold text-[#4f8ca5] uppercase tracking-wider">Patient</th>
+              <th class="px-6 py-4 text-left text-xs font-bold text-[#4f8ca5] uppercase tracking-wider">Contact</th>
+              <th class="px-6 py-4 text-left text-xs font-bold text-[#4f8ca5] uppercase tracking-wider">Dernière visite</th>
+              <th class="px-6 py-4 text-left text-xs font-bold text-[#4f8ca5] uppercase tracking-wider">Statut</th>
+              <th class="px-6 py-4 text-left text-xs font-bold text-[#4f8ca5] uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-50">
+            <!-- Patient 1 -->
+            <tr class="patient-row">
+              <td class="px-6 py-5 whitespace-nowrap">
+                <div class="flex items-center">
+                  <div class="avatar bg-[#e8f2f7] text-[#4f8ca5] mr-4">
+                    AD
+                  </div>
+                  <div>
+                    <div class="font-bold text-gray-800">Awa Diop</div>
+                    <div class="text-gray-500 text-sm">N°1248 • 28 ans</div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <div class="space-y-1">
+                  <div class="flex items-center">
+                    <i class="fas fa-phone text-[#4f8ca5] text-sm mr-2"></i>
+                    <span class="font-medium">77 123 45 67</span>
+                  </div>
+                  <div class="flex items-center">
+                    <i class="fas fa-envelope text-[#4f8ca5] text-sm mr-2"></i>
+                    <span class="text-gray-600 text-sm">awa.diop@email.com</span>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <div>
+                  <div class="font-medium">12/01/2026</div>
+                  <div class="text-gray-500 text-sm">Détartrage complet</div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <span class="badge bg-[#e8f7f0] text-[#2e7d5f]">
+                  <span class="status-dot bg-[#7fc8a9]"></span> En suivi
+                </span>
+              </td>
+              <td class="px-6 py-5">
+                <div class="flex space-x-2">
+                  <button onclick="showDetails('Awa Diop', 'N°1248', '77 123 45 67', 'awa.diop@email.com', '12/01/2026', 'Détartrage complet', 'En suivi', '28 ans', 'Féminin', '15/03/2026', 'Contrôle annuel')" 
+                          class="text-[#4f8ca5] hover:text-[#3a6a7d] p-2 rounded-lg hover:bg-[#f3f7fa] transition duration-200">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  <button class="text-[#7bb7ae] hover:text-[#5d958e] p-2 rounded-lg hover:bg-[#f0f9f8] transition duration-200">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button class="text-[#7fc8a9] hover:text-[#64a68d] p-2 rounded-lg hover:bg-[#f0f9f5] transition duration-200">
+                    <i class="fas fa-calendar-plus"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            
+            <!-- Patient 2 -->
+            <tr class="patient-row">
+              <td class="px-6 py-5 whitespace-nowrap">
+                <div class="flex items-center">
+                  <div class="avatar bg-[#fff5e6] text-[#d4a574] mr-4">
+                    MF
+                  </div>
+                  <div>
+                    <div class="font-bold text-gray-800">Moussa Fall</div>
+                    <div class="text-gray-500 text-sm">N°1249 • 45 ans</div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <div class="space-y-1">
+                  <div class="flex items-center">
+                    <i class="fas fa-phone text-[#4f8ca5] text-sm mr-2"></i>
+                    <span class="font-medium">76 987 65 43</span>
+                  </div>
+                  <div class="flex items-center">
+                    <i class="fas fa-envelope text-[#4f8ca5] text-sm mr-2"></i>
+                    <span class="text-gray-600 text-sm">m.fall@email.com</span>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <div>
+                  <div class="font-medium">08/01/2026</div>
+                  <div class="text-gray-500 text-sm">Traitement carie</div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <span class="badge bg-[#fff5e6] text-[#b26b00]">
+                  <span class="status-dot bg-[#ffb347]"></span> En traitement
+                </span>
+              </td>
+              <td class="px-6 py-5">
+                <div class="flex space-x-2">
+                  <button onclick="showDetails('Moussa Fall', 'N°1249', '76 987 65 43', 'm.fall@email.com', '08/01/2026', 'Traitement carie', 'En traitement', '45 ans', 'Masculin', '22/01/2026', 'Pose couronne')" 
+                          class="text-[#4f8ca5] hover:text-[#3a6a7d] p-2 rounded-lg hover:bg-[#f3f7fa] transition duration-200">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  <button class="text-[#7bb7ae] hover:text-[#5d958e] p-2 rounded-lg hover:bg-[#f0f9f8] transition duration-200">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button class="text-[#7fc8a9] hover:text-[#64a68d] p-2 rounded-lg hover:bg-[#f0f9f5] transition duration-200">
+                    <i class="fas fa-calendar-plus"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            
+            <!-- Patient 3 -->
+            <tr class="patient-row">
+              <td class="px-6 py-5 whitespace-nowrap">
+                <div class="flex items-center">
+                  <div class="avatar bg-[#fdeaea] text-[#d67c7c] mr-4">
+                    FN
+                  </div>
+                  <div>
+                    <div class="font-bold text-gray-800">Fatou Ndiaye</div>
+                    <div class="text-gray-500 text-sm">N°1250 • 32 ans</div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <div class="space-y-1">
+                  <div class="flex items-center">
+                    <i class="fas fa-phone text-[#4f8ca5] text-sm mr-2"></i>
+                    <span class="font-medium">70 456 78 90</span>
+                  </div>
+                  <div class="flex items-center">
+                    <i class="fas fa-envelope text-[#4f8ca5] text-sm mr-2"></i>
+                    <span class="text-gray-600 text-sm">f.ndiaye@email.com</span>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <div>
+                  <div class="font-medium">05/01/2026</div>
+                  <div class="text-gray-500 text-sm">Douleur aiguë</div>
+                </div>
+              </td>
+              <td class="px-6 py-5">
+                <span class="badge bg-[#fdeaea] text-[#c53030]">
+                  <span class="status-dot bg-[#f7b2ad]"></span> Urgence
+                </span>
+              </td>
+              <td class="px-6 py-5">
+                <div class="flex space-x-2">
+                  <button onclick="showDetails('Fatou Ndiaye', 'N°1250', '70 456 78 90', 'f.ndiaye@email.com', '05/01/2026', 'Douleur aiguë', 'Urgence', '32 ans', 'Féminin', '10/01/2026', 'Contrôle post-urgence')" 
+                          class="text-[#4f8ca5] hover:text-[#3a6a7d] p-2 rounded-lg hover:bg-[#f3f7fa] transition duration-200">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  <button class="text-[#7bb7ae] hover:text-[#5d958e] p-2 rounded-lg hover:bg-[#f0f9f8] transition duration-200">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button class="text-[#7fc8a9] hover:text-[#64a68d] p-2 rounded-lg hover:bg-[#f0f9f5] transition duration-200">
+                    <i class="fas fa-calendar-plus"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- PAGINATION -->
+      <div class="px-6 py-4 border-t flex justify-between items-center">
+        <div class="text-gray-600 text-sm">
+          Affichage de 1 à 3 sur 248 patients
+        </div>
+        <div class="flex space-x-2">
+          <button class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <button class="px-3 py-1.5 bg-[#4f8ca5] text-white rounded-lg font-medium">1</button>
+          <button class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">2</button>
+          <button class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">3</button>
+          <span class="px-2 py-1.5 text-gray-500">...</span>
+          <button class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DÉTAILS PATIENT -->
+  <div id="modal-details" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden p-4 modal-overlay">
+    <div class="modal-content bg-white rounded-2xl shadow-2xl max-w-md w-full">
+      <div class="bg-gradient-to-r from-[#4f8ca5] to-[#7bb7ae] text-white p-6 rounded-t-2xl">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xl font-bold">Détails du patient</h3>
+          <button onclick="closeDetails()" class="text-white hover:text-blue-100 text-2xl transition duration-200">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      
+      <div class="p-6">
+        <div id="modal-content-details" class="space-y-4">
+          <!-- Content will be inserted here by JavaScript -->
+        </div>
+        
+        <div class="mt-8 pt-6 border-t border-gray-100">
+          <button onclick="closeDetails()" class="w-full bg-[#f3f7fa] hover:bg-[#e8f2f7] text-[#4f8ca5] font-medium py-3 rounded-xl transition duration-200">
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL AJOUTER PATIENT -->
+  <div id="modal-add-patient" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden p-4 modal-overlay">
+    <div class="modal-content bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="bg-gradient-to-r from-[#4f8ca5] to-[#7bb7ae] text-white p-6 rounded-t-2xl">
+        <div class="flex justify-between items-center">
+          <div>
+            <h3 class="text-xl font-bold">Ajouter un nouveau patient</h3>
+            <p class="text-blue-100 text-sm mt-1">Remplissez les informations du patient</p>
+          </div>
+          <button onclick="closeAddPatientModal()" class="text-white hover:text-blue-100 text-2xl transition duration-200">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      
+      <div class="p-8">
+        <form id="add-patient-form" class="space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium" for="first-name">
+                Prénom <span class="text-red-500">*</span>
+              </label>
+              <input type="text" id="first-name" required
+                     class="form-input w-full p-3.5 rounded-xl focus:outline-none">
+            </div>
+            
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium" for="last-name">
+                Nom <span class="text-red-500">*</span>
+              </label>
+              <input type="text" id="last-name" required
+                     class="form-input w-full p-3.5 rounded-xl focus:outline-none">
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium" for="phone">
+                Téléphone <span class="text-red-500">*</span>
+              </label>
+              <input type="tel" id="phone" required
+                     class="form-input w-full p-3.5 rounded-xl focus:outline-none">
+              <p class="text-gray-500 text-xs mt-1">Format: 77 123 45 67</p>
+            </div>
+            
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium" for="email">
+                Adresse email
+              </label>
+              <input type="email" id="email"
+                     class="form-input w-full p-3.5 rounded-xl focus:outline-none">
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium" for="gender">
+                Genre
+              </label>
+              <select id="gender" class="form-input w-full p-3.5 rounded-xl focus:outline-none">
+                <option value="">Sélectionner</option>
+                <option value="M">Masculin</option>
+                <option value="F">Féminin</option>
+                <option value="O">Autre</option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium" for="age">
+                Âge (optionnel)
+              </label>
+              <div class="relative">
+                <input type="number" id="age" min="0" max="120"
+                       class="form-input w-full p-3.5 rounded-xl focus:outline-none pr-12">
+                <span class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500">ans</span>
+              </div>
+              <p class="text-gray-500 text-xs mt-1">Optionnel - peut être calculé à partir de la date de naissance</p>
+            </div>
+          </div>
+          
+          <div>
+            <label class="block text-gray-700 mb-2 font-medium" for="birthdate">
+              Date de naissance
+            </label>
+            <input type="date" id="birthdate"
+                   class="form-input w-full p-3.5 rounded-xl focus:outline-none">
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium" for="status">
+                Statut médical
+              </label>
+              <select id="status" class="form-input w-full p-3.5 rounded-xl focus:outline-none">
+                <option value="nouveau">Nouveau patient</option>
+                <option value="suivi">En suivi</option>
+                <option value="traitement">En traitement</option>
+                <option value="urgence">Urgence</option>
+                <option value="inactif">Inactif</option>
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium" for="blood-group">
+                Groupe sanguin
+              </label>
+              <select id="blood-group" class="form-input w-full p-3.5 rounded-xl focus:outline-none">
+                <option value="">Non renseigné</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+              </select>
+            </div>
+          </div>
+          
+          <div>
+            <label class="block text-gray-700 mb-2 font-medium" for="address">
+              Adresse
+            </label>
+            <textarea id="address" rows="2"
+                      class="form-input w-full p-3.5 rounded-xl focus:outline-none"
+                      placeholder="Adresse complète du patient"></textarea>
+          </div>
+          
+          <div>
+            <label class="block text-gray-700 mb-2 font-medium" for="notes">
+              Notes médicales
+            </label>
+            <textarea id="notes" rows="3"
+                      class="form-input w-full p-3.5 rounded-xl focus:outline-none"
+                      placeholder="Allergies, antécédents médicaux, traitements en cours..."></textarea>
+          </div>
+          
+          <div class="flex items-center">
+            <input type="checkbox" id="consent" class="w-4 h-4 text-[#4f8ca5] rounded focus:ring-[#4f8ca5]">
+            <label for="consent" class="ml-2 text-gray-700 text-sm">
+              Le patient a consenti au traitement de ses données médicales
+            </label>
+          </div>
+          
+          <div class="pt-6 border-t border-gray-100 flex justify-end space-x-4">
+            <button type="button" onclick="closeAddPatientModal()"
+                    class="px-6 py-3.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition duration-200">
+              Annuler
+            </button>
+            <button type="submit"
+                    class="px-6 py-3.5 btn-primary text-white rounded-xl font-medium">
+              <i class="fas fa-save mr-2"></i>Enregistrer le patient
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="fixed bottom-4 right-4 bg-[#4f8ca5] text-white p-4 rounded-xl shadow-xl z-50 transform translate-y-full transition-transform duration-300 hidden">
+    <div class="flex items-center">
+      <div class="bg-white/20 p-2 rounded-lg mr-3">
+        <i class="fas fa-check text-xl"></i>
+      </div>
+      <div>
+        <p class="font-medium" id="toast-title">Patient ajouté avec succès</p>
+        <p class="text-sm opacity-90" id="toast-message">Le patient a été enregistré dans le système</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Variables globales
+    let patientCounter = 1250; // Dernier numéro de patient
+    
+    // Ouvrir modal détails patient
+    function showDetails(nom, numero, tel, mail, visite, motif, statut, age, genre, prochainRdv, prochainMotif) {
+      document.getElementById('modal-details').classList.remove('hidden');
+      
+      let content = `
+        <div class="flex items-center mb-6">
+          <div class="w-16 h-16 ${getAvatarColor(nom)} rounded-full flex items-center justify-center text-xl font-bold text-white mr-4">
+            ${getInitials(nom)}
+          </div>
+          <div>
+            <h4 class="text-xl font-bold text-gray-800">${nom}</h4>
+            <p class="text-gray-500">${numero}</p>
+          </div>
+        </div>
+        
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-gray-500 text-sm">Téléphone</p>
+              <p class="font-medium">${tel}</p>
+            </div>
+            <div>
+              <p class="text-gray-500 text-sm">Email</p>
+              <p class="font-medium">${mail}</p>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-gray-500 text-sm">Âge</p>
+              <p class="font-medium">${age || 'Non renseigné'}</p>
+            </div>
+            <div>
+              <p class="text-gray-500 text-sm">Genre</p>
+              <p class="font-medium">${genre || 'Non renseigné'}</p>
+            </div>
+          </div>
+          
+          <div>
+            <p class="text-gray-500 text-sm">Dernière visite</p>
+            <div class="font-medium">${visite}</div>
+            <p class="text-gray-600 text-sm">${motif}</p>
+          </div>
+          
+          <div>
+            <p class="text-gray-500 text-sm">Statut</p>
+            <span class="${getStatusBadgeClass(statut)}">${statut}</span>
+          </div>
+          
+          ${prochainRdv ? `
+          <div class="mt-6 p-4 bg-[#f3f7fa] rounded-xl">
+            <p class="text-gray-500 text-sm mb-1">Prochain rendez-vous</p>
+            <p class="font-bold text-[#4f8ca5]">${prochainRdv}</p>
+            <p class="text-gray-600 text-sm">${prochainMotif}</p>
+          </div>
+          ` : ''}
+        </div>
+      `;
+      
+      document.getElementById('modal-content-details').innerHTML = content;
+    }
+    
+    // Fermer modal détails
+    function closeDetails() {
+      document.getElementById('modal-details').classList.add('hidden');
+    }
+    
+    // Ouvrir modal ajout patient
+    function openAddPatientModal() {
+      document.getElementById('modal-add-patient').classList.remove('hidden');
+      document.getElementById('first-name').focus();
+      
+      // Préremplir la date d'aujourd'hui pour un adulte de 30 ans par défaut
+      const today = new Date();
+      const defaultBirthdate = new Date();
+      defaultBirthdate.setFullYear(today.getFullYear() - 30);
+      document.getElementById('birthdate').value = defaultBirthdate.toISOString().split('T')[0];
+    }
+    
+    // Fermer modal ajout patient
+    function closeAddPatientModal() {
+      document.getElementById('modal-add-patient').classList.add('hidden');
+      document.getElementById('add-patient-form').reset();
+    }
+    
+    // Gérer la soumission du formulaire
+    document.getElementById('add-patient-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      // Récupérer les valeurs
+      const firstName = document.getElementById('first-name').value.trim();
+      const lastName = document.getElementById('last-name').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const gender = document.getElementById('gender').value;
+      const age = document.getElementById('age').value;
+      const birthdate = document.getElementById('birthdate').value;
+      const status = document.getElementById('status').value;
+      const bloodGroup = document.getElementById('blood-group').value;
+      const address = document.getElementById('address').value.trim();
+      const notes = document.getElementById('notes').value.trim();
+      const consent = document.getElementById('consent').checked;
+      
+      if (!consent) {
+        showToast('Attention', 'Le consentement est requis pour enregistrer un patient', 'warning');
+        return;
+      }
+      
+      // Incrémenter le compteur
+      patientCounter++;
+      
+      // Ajouter le patient à la table (simulation)
+      addPatientToTable(firstName, lastName, phone, email, age, gender, status);
+      
+      // Fermer la modal
+      closeAddPatientModal();
+      
+      // Afficher notification
+      showToast('Patient ajouté', `${firstName} ${lastName} a été enregistré avec succès`, 'success');
+      
+      // Mettre à jour les statistiques
+      updatePatientStats();
+    });
+    
+    // Ajouter patient à la table
+    function addPatientToTable(firstName, lastName, phone, email, age, gender, status) {
+      const tableBody = document.querySelector('tbody');
+      const initials = getInitials(firstName + ' ' + lastName);
+      
+      // Créer la nouvelle ligne
+      const newRow = document.createElement('tr');
+      newRow.className = 'patient-row';
+      newRow.innerHTML = `
+        <td class="px-6 py-5 whitespace-nowrap">
+          <div class="flex items-center">
+            <div class="avatar ${getAvatarBgClass(firstName + ' ' + lastName)} mr-4">
+              ${initials}
+            </div>
+            <div>
+              <div class="font-bold text-gray-800">${firstName} ${lastName}</div>
+              <div class="text-gray-500 text-sm">N°${patientCounter}${age ? ` • ${age} ans` : ''}</div>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-5">
+          <div class="space-y-1">
+            <div class="flex items-center">
+              <i class="fas fa-phone text-[#4f8ca5] text-sm mr-2"></i>
+              <span class="font-medium">${phone}</span>
+            </div>
+            <div class="flex items-center">
+              <i class="fas fa-envelope text-[#4f8ca5] text-sm mr-2"></i>
+              <span class="text-gray-600 text-sm">${email || 'Non renseigné'}</span>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-5">
+          <div>
+            <div class="font-medium">${new Date().toLocaleDateString('fr-FR')}</div>
+            <div class="text-gray-500 text-sm">Première consultation</div>
+          </div>
+        </td>
+        <td class="px-6 py-5">
+          ${getStatusBadge(status)}
+        </td>
+        <td class="px-6 py-5">
+          <div class="flex space-x-2">
+            <button onclick="showDetails('${firstName} ${lastName}', 'N°${patientCounter}', '${phone}', '${email}', '${new Date().toLocaleDateString('fr-FR')}', 'Première consultation', '${getStatusText(status)}', '${age || 'Non renseigné'} ans', '${getGenderText(gender)}', '', '')" 
+                    class="text-[#4f8ca5] hover:text-[#3a6a7d] p-2 rounded-lg hover:bg-[#f3f7fa] transition duration-200">
+              <i class="fas fa-eye"></i>
+            </button>
+            <button class="text-[#7bb7ae] hover:text-[#5d958e] p-2 rounded-lg hover:bg-[#f0f9f8] transition duration-200">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="text-[#7fc8a9] hover:text-[#64a68d] p-2 rounded-lg hover:bg-[#f0f9f5] transition duration-200">
+              <i class="fas fa-calendar-plus"></i>
+            </button>
+          </div>
+        </td>
+      `;
+      
+      // Ajouter en haut du tableau
+      tableBody.insertBefore(newRow, tableBody.firstChild);
+    }
+    
+    // Mettre à jour les statistiques
+    function updatePatientStats() {
+      const totalPatientsElement = document.querySelector('.bg-white.rounded-xl.shadow-md.p-6.border-l-4.border-\\[\\#4f8ca5\\] h3');
+      if (totalPatientsElement) {
+        const currentCount = parseInt(totalPatientsElement.textContent);
+        totalPatientsElement.textContent = currentCount + 1;
+      }
+    }
+    
+    // Afficher toast
+    function showToast(title, message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastTitle = document.getElementById('toast-title');
+      const toastMessage = document.getElementById('toast-message');
+      
+      // Changer la couleur selon le type
+      if (type === 'warning') {
+        toast.style.backgroundColor = '#f7b2ad';
+      } else if (type === 'error') {
+        toast.style.backgroundColor = '#d67c7c';
+      } else {
+        toast.style.backgroundColor = '#4f8ca5';
+      }
+      
+      toastTitle.textContent = title;
+      toastMessage.textContent = message;
+      
+      toast.classList.remove('hidden');
+      toast.style.transform = 'translateY(0)';
+      
+      setTimeout(() => {
+        toast.style.transform = 'translateY(100%)';
+        setTimeout(() => toast.classList.add('hidden'), 300);
+      }, 3000);
+    }
+    
+    // Fonctions utilitaires
+    function getInitials(name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    }
+    
+    function getAvatarColor(name) {
+      const colors = ['bg-[#4f8ca5]', 'bg-[#7bb7ae]', 'bg-[#7fc8a9]', 'bg-[#d4a574]'];
+      const index = name.length % colors.length;
+      return colors[index];
+    }
+    
+    function getAvatarBgClass(name) {
+      const colors = ['bg-[#e8f2f7]', 'bg-[#e8f7f3]', 'bg-[#f0f9f5]', 'bg-[#fff5e6]'];
+      const index = name.length % colors.length;
+      return colors[index];
+    }
+    
+    function getStatusBadge(status) {
+      const statusConfig = {
+        'nouveau': { bg: 'bg-blue-100', text: 'text-blue-800', dot: 'bg-blue-500', label: 'Nouveau' },
+        'suivi': { bg: 'bg-[#e8f7f0]', text: 'text-[#2e7d5f]', dot: 'bg-[#7fc8a9]', label: 'En suivi' },
+        'traitement': { bg: 'bg-[#fff5e6]', text: 'text-[#b26b00]', dot: 'bg-[#ffb347]', label: 'En traitement' },
+        'urgence': { bg: 'bg-[#fdeaea]', text: 'text-[#c53030]', dot: 'bg-[#f7b2ad]', label: 'Urgence' },
+        'inactif': { bg: 'bg-gray-100', text: 'text-gray-800', dot: 'bg-gray-500', label: 'Inactif' }
+      };
+      
+      const config = statusConfig[status] || statusConfig.nouveau;
+      return `<span class="badge ${config.bg} ${config.text}">
+                <span class="status-dot ${config.dot}"></span> ${config.label}
+              </span>`;
+    }
+    
+    function getStatusBadgeClass(status) {
+      const classes = {
+        'En suivi': 'badge bg-[#e8f7f0] text-[#2e7d5f]',
+        'En traitement': 'badge bg-[#fff5e6] text-[#b26b00]',
+        'Urgence': 'badge bg-[#fdeaea] text-[#c53030]',
+        'Nouveau patient': 'badge bg-blue-100 text-blue-800'
+      };
+      return classes[status] || 'badge bg-gray-100 text-gray-800';
+    }
+    
+    function getStatusText(status) {
+      const statusMap = {
+        'nouveau': 'Nouveau patient',
+        'suivi': 'En suivi',
+        'traitement': 'En traitement',
+        'urgence': 'Urgence',
+        'inactif': 'Inactif'
+      };
+      return statusMap[status] || 'Nouveau patient';
+    }
+    
+    function getGenderText(gender) {
+      const genderMap = {
+        'M': 'Masculin',
+        'F': 'Féminin',
+        'O': 'Autre'
+      };
+      return genderMap[gender] || 'Non renseigné';
+    }
+    
+    // Fermer modals en cliquant à l'extérieur
+    document.addEventListener('click', function(e) {
+      const detailsModal = document.getElementById('modal-details');
+      const addModal = document.getElementById('modal-add-patient');
+      
+      if (!detailsModal.classList.contains('hidden') && e.target === detailsModal) {
+        closeDetails();
+      }
+      
+      if (!addModal.classList.contains('hidden') && e.target === addModal) {
+        closeAddPatientModal();
+      }
+    });
+    
+    // Fermer avec Escape
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeDetails();
+        closeAddPatientModal();
+      }
+    });
+    
+    // Initialiser la date de naissance max/min
+    document.addEventListener('DOMContentLoaded', function() {
+      const birthdateInput = document.getElementById('birthdate');
+      if (birthdateInput) {
+        const today = new Date();
+        const maxDate = new Date();
+        maxDate.setFullYear(today.getFullYear() - 1);
+        const minDate = new Date();
+        minDate.setFullYear(today.getFullYear() - 120);
+        
+        birthdateInput.max = maxDate.toISOString().split('T')[0];
+        birthdateInput.min = minDate.toISOString().split('T')[0];
+      }
+    });
+  </script>
+</body>
+</html>
