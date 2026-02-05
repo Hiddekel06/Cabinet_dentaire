@@ -79,12 +79,60 @@ const treatmentOptions = [
   { value: 'Extraction', label: 'Extraction' }
 ];
 
+const initialForm = {
+  first_name: '',
+  last_name: '',
+  phone: '',
+  email: '',
+  date_of_birth: '',
+  gender: '',
+  address: '',
+  city: '',
+  notes: '',
+};
+
 const Patients = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedTreatment, setSelectedTreatment] = useState('all');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(initialForm);
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
+  const [formLoading, setFormLoading] = useState(false);
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleFormSubmit = async (e) => {
+    e.preventDefault();
+    setFormError("");
+    setFormSuccess("");
+    if (!form.first_name || !form.last_name || !form.phone) {
+      setFormError("Prénom, nom et téléphone sont obligatoires.");
+      return;
+    }
+    setFormLoading(true);
+    try {
+      // Remplace l'URL par celle de ton backend
+      const res = await fetch("/api/patients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error("Erreur lors de l'ajout du patient");
+      setFormSuccess("Patient ajouté avec succès !");
+      setForm(initialForm);
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setFormLoading(false);
+    }
+  };
 
   const filteredPatients = useMemo(() => {
     let results = [...fakePatients];
@@ -160,10 +208,178 @@ const Patients = () => {
 
   return (
     <Layout>
+
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Liste des patients</h1>
         <p className="text-gray-600 mt-1">Gérez et suivez tous vos patients</p>
       </div>
+
+      {/* Formulaire d'ajout de patient */}
+      {showForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+          onClick={() => setShowForm(false)}
+        >
+          <div
+            className="relative w-full max-w-3xl mx-2 sm:mx-auto bg-white rounded-xl shadow-lg border border-blue-100 animate-fadeIn"
+            style={{ maxHeight: '90vh', minHeight: '320px', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+              onClick={() => setShowForm(false)}
+              aria-label="Fermer"
+              type="button"
+            >
+              &times;
+            </button>
+            <div className="flex items-center gap-3 px-6 pt-6 pb-2 bg-gradient-to-r from-blue-50 via-white to-blue-50">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-50">
+                <svg className="w-7 h-7 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold">Ajouter un patient</h2>
+                <div className="w-full border-t border-gray-200 my-2"></div>
+
+            </div>
+            <form onSubmit={handleFormSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 px-6 pb-6">
+              <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
+                <label className="text-xs font-semibold text-gray-900 mb-1">Prénom *</label>
+                <input
+                  name="first_name"
+                  value={form.first_name}
+                  onChange={handleFormChange}
+                  placeholder="Prénom"
+                  className="bg-gray-50 rounded-lg px-3 py-2 text-left focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
+                  required
+                />
+              </div>
+              <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
+                <label className="text-xs font-semibold text-gray-900 mb-1">Nom *</label>
+                <input
+                  name="last_name"
+                  value={form.last_name}
+                  onChange={handleFormChange}
+                  placeholder="Nom"
+                  className="bg-gray-50 rounded-lg px-3 py-2 text-left focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
+                  required
+                />
+              </div>
+              <div className=" border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
+                <label className="text-xs font-semibold text-gray-900 mb-1">Téléphone *</label>
+                <input
+                  name="phone"
+                  value={form.phone}
+                  onChange={handleFormChange}
+                    placeholder="Téléphone"
+                  className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
+                  required
+                />
+              </div>
+              <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
+                <label className="text-xs font-semibold text-gray-800 mb-1">Email</label>
+                <input
+                  name="email"
+                  value={form.email}
+                  onChange={handleFormChange}
+                    placeholder="Email"
+                  className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
+                  type="email"
+                />
+              </div>
+              <div className=" border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
+                <label className="text-xs font-semibold text-gray-800 mb-1">Date de naissance</label>
+                <input
+                  name="date_of_birth"
+                  value={form.date_of_birth}
+                  onChange={handleFormChange}
+                    placeholder="Date de naissance"
+                  className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
+                  type="date"
+                />
+              </div>
+              <div className="   border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
+                <label className="text-xs font-semibold text-gray-800 mb-1">Genre</label>
+                <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 flex flex-col items-start w-fit shadow-sm">
+                  <span className="text-xs font-semibold text-blue-700 mb-1">Sexe</span>
+                  <div className="flex flex-row gap-4 items-center">
+                    <label className="inline-flex items-center cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="gender"
+                        value="M"
+                        checked={form.gender === 'M'}
+                        onChange={handleFormChange}
+                        className="form-radio text-blue-500 focus:ring-blue-400 h-3 w-3 border-gray-300 accent-blue-500"
+                      />
+                      <span className="ml-1 text-gray-700">Masculin</span>
+                    </label>
+                    <label className="inline-flex items-center cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="gender"
+                        value="F"
+                        checked={form.gender === 'F'}
+                        onChange={handleFormChange}
+                        className="form-radio text-blue-500 focus:ring-blue-400 h-3 w-3 border-gray-300 accent-blue-500"
+                      />
+                      <span className="ml-1 text-gray-700">Féminin</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col md:flex-row gap-3 md:col-span-2">
+                <div className=" border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 w-full md:w-1/2 shadow-sm">
+                  <label className="text-xs font-semibold text-gray-800 mb-1">Ville</label>
+                  <input
+                    name="city"
+                    value={form.city}
+                    onChange={handleFormChange}
+                    placeholder="Ville"
+                    className="bg-gray-50 rounded-lg px-3 py-2 text-left focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
+                  />
+                </div>
+                <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 w-full md:w-1/2 shadow-sm">
+                  <label className="text-xs font-semibold text-gray-800 mb-1">Adresse</label>
+                  <input
+                    name="address"
+                    value={form.address}
+                    onChange={handleFormChange}
+                    placeholder="Adresse"
+                    className="bg-gray-50 rounded-lg px-3 py-2 text-left focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
+                  />
+                </div>
+              </div>
+              <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 md:col-span-2 shadow-sm">
+                <label className="text-xs font-semibold text-gray-800 mb-1">Notes</label>
+                <textarea
+                  name="notes"
+                  value={form.notes}
+                  onChange={handleFormChange}
+                  placeholder="Notes"
+                  className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
+                />
+              </div>
+              {formError && <div className="text-red-600 text-sm">{formError}</div>}
+              {formSuccess && <div className="text-green-600 text-sm">{formSuccess}</div>}
+              <div className="flex justify-center mt-4 md:col-span-2">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 text-white rounded-full font-semibold bg-emerald-600 border-2 border-emerald-600 hover:bg-emerald-700 hover:border-emerald-700 focus:ring-4 focus:ring-emerald-200 flex items-center justify-center gap-2 text-sm shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed max-w-xs w-full mx-auto"
+                  disabled={formLoading}
+                >
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>{formLoading ? "Ajout en cours..." : "Ajouter le patient"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Barre de recherche et filtres */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
@@ -332,11 +548,14 @@ const Patients = () => {
             <p className="text-gray-500 text-sm mt-1">Liste complète des patients enregistrés</p>
           </div>
           <div className="mt-3 sm:mt-0 flex space-x-2">
-            <button className="inline-flex items-center gap-1.5 px-3 py-2 text-orange-500 text-sm font-medium rounded-lg bg-orange-50 hover:bg-orange-100 transition-colors cursor-pointer select-none border border-orange-100">
+            <button
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-orange-500 text-sm font-medium rounded-lg bg-orange-50 hover:bg-orange-100 transition-colors cursor-pointer select-none border border-orange-100"
+              onClick={() => setShowForm((v) => !v)}
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Nouveau patient
+              {showForm ? 'Fermer' : 'Nouveau patient'}
             </button>
           </div>
         </div>
@@ -414,24 +633,29 @@ const Patients = () => {
                           </svg>
                           {patient.phone}
                         </p>
-                        <p className="text-gray-500 text-xs truncate max-w-[160px] flex items-center mt-1">
+                        <div className="flex flex-col md:flex-row gap-3 w-full">
+                          <input
+                            name="city"
+                            value={form.city}
+                            onChange={handleFormChange}
+                            placeholder="Ville"
+                            className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400 md:w-1/2"
+                          />
+                          <input
+                            name="address"
+                            value={form.address}
+                            onChange={handleFormChange}
+                            placeholder="Adresse"
+                            className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400 md:w-1/2"
+                          />
+                        </div>
+                        <div>
                           <svg className="w-3 h-3 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89-5.42a2 2 0 012.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                          {patient.email}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{patient.date}</p>
-                        <div className="flex items-center text-gray-500 text-xs mt-0.5">
-                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                           </svg>
                           {patient.treatment}
+                          <p className="text-gray-400 text-xs mt-1">{patient.timeAgo}</p>
                         </div>
-                        <p className="text-gray-400 text-xs mt-1">{patient.timeAgo}</p>
                       </div>
                     </td>
                     <td className="py-4 px-4">

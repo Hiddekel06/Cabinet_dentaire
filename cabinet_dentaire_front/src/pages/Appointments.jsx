@@ -47,18 +47,33 @@ const motifOptions = [
 ];
 
 const Appointments = () => {
+  const [appointments, setAppointments] = useState(fakeAppointments);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedMotif, setSelectedMotif] = useState('all');
   const [openMenu, setOpenMenu] = useState(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [viewMode, setViewMode] = useState('table'); // 'table' ou 'calendar'
+  const [calendarView, setCalendarView] = useState('month'); // 'month' | 'week' | 'day'
   const [currentDate, setCurrentDate] = useState(new Date(2026, 1, 5)); // Février 2026
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickForm, setQuickForm] = useState({
+    date: '',
+    heure: '09:00',
+    patient: '',
+    motif: 'Consultation',
+    praticien: 'Dr. Ndiaye',
+    statut: 'À venir',
+  });
   const menuRef = useRef(null);
 
   // Fermer le menu quand on clique en dehors
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
+      const isInsideMenu = event.target.closest('[data-appointment-menu="true"]');
+      if (!isInsideMenu) {
         setOpenMenu(null);
       }
     };
@@ -70,8 +85,8 @@ const Appointments = () => {
   }, []);
 
   const handleViewDetails = (appointment) => {
-    console.log('Voir détails:', appointment);
-    alert(`Détails du rendez-vous:\n\nPatient: ${appointment.patient}\nDate: ${appointment.date}\nHeure: ${appointment.heure}\nMotif: ${appointment.motif}\nPraticien: ${appointment.praticien}\nStatut: ${appointment.statut}`);
+    setSelectedAppointment(appointment);
+    setShowDetailsModal(true);
   };
 
   const handleEdit = (appointment) => {
@@ -80,14 +95,17 @@ const Appointments = () => {
   };
 
   const handleDelete = (appointment) => {
-    console.log('Supprimer:', appointment);
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le rendez-vous avec ${appointment.patient}?`)) {
-      alert('Rendez-vous supprimé avec succès');
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le rendez-vous avec ${appointment.patient} ?`)) {
+      setAppointments((prev) => prev.filter((a) => a.id !== appointment.id));
+      if (selectedAppointment?.id === appointment.id) {
+        setShowDetailsModal(false);
+        setSelectedAppointment(null);
+      }
     }
   };
 
   const filteredAppointments = useMemo(() => {
-    let results = [...fakeAppointments];
+    let results = [...appointments];
 
     // Filtre par recherche
     if (searchTerm) {
@@ -110,7 +128,7 @@ const Appointments = () => {
     }
 
     return results;
-  }, [searchTerm, selectedStatus, selectedMotif]);
+  }, [appointments, searchTerm, selectedStatus, selectedMotif]);
 
   const clearFilters = () => {
     setSearchTerm('');
@@ -118,9 +136,18 @@ const Appointments = () => {
     setSelectedMotif('all');
   };
 
+  const toDateStr = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   // Fonction pour obtenir les rendez-vous d'un jour
-  const getAppointmentsForDay = (day) => {
-    const dateStr = `2026-02-${String(day).padStart(2, '0')}`;
+  const getAppointmentsForDay = (dayOrDate) => {
+    const dateStr = dayOrDate instanceof Date
+      ? toDateStr(dayOrDate)
+      : `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(dayOrDate).padStart(2, '0')}`;
     return filteredAppointments.filter(a => a.date === dateStr);
   };
 
@@ -151,8 +178,284 @@ const Appointments = () => {
 
   const { days, monthNames, dayNames, monthName, year } = generateCalendar();
 
+  const getWeekDates = (baseDate) => {
+    const start = new Date(baseDate);
+    start.setDate(baseDate.getDate() - baseDate.getDay());
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return d;
+    });
+  };
+
+  const weekDates = getWeekDates(currentDate);
+  const selectedAppointments = selectedDate ? getAppointmentsForDay(selectedDate) : [];
+
+  const addQuickAppointment = (date) => {
+    const dateStr = toDateStr(date);
+    setQuickForm({
+      date: dateStr,
+      heure: '09:00',
+      patient: '',
+      motif: 'Consultation',
+      praticien: 'Dr. Ndiaye',
+      statut: 'À venir',
+    });
+    setSelectedDate(date);
+    setShowQuickCreate(true);
+  };
+
+  const handleQuickCreateChange = (e) => {
+    const { name, value } = e.target;
+    setQuickForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleQuickCreateSubmit = (e) => {
+    e.preventDefault();
+    if (!quickForm.patient.trim()) return;
+    const newAppointment = {
+      id: Date.now(),
+      ...quickForm,
+    };
+    setAppointments((prev) => [newAppointment, ...prev]);
+    setShowQuickCreate(false);
+  };
+
+  const moveAppointment = (appointmentId, newDate) => {
+    const dateStr = toDateStr(newDate);
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? { ...a, date: dateStr } : a))
+    );
+    setSelectedDate(newDate);
+  };
+
+  const handleDragStart = (e, appointmentId) => {
+    e.dataTransfer.setData('text/plain', String(appointmentId));
+  };
+
+  const handleDropOnDay = (e, date) => {
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData('text/plain'));
+    if (!Number.isNaN(id)) {
+      moveAppointment(id, date);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (viewMode !== 'calendar') return;
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (e.key === 'ArrowLeft') {
+        handlePrev();
+      }
+      if (e.key === 'ArrowRight') {
+        handleNext();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewMode, calendarView, currentDate]);
+
+  const handlePrev = () => {
+    if (calendarView === 'month') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    } else if (calendarView === 'week') {
+      const prev = new Date(currentDate);
+      prev.setDate(currentDate.getDate() - 7);
+      setCurrentDate(prev);
+    } else {
+      const prev = new Date(currentDate);
+      prev.setDate(currentDate.getDate() - 1);
+      setCurrentDate(prev);
+    }
+  };
+
+  const handleNext = () => {
+    if (calendarView === 'month') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    } else if (calendarView === 'week') {
+      const next = new Date(currentDate);
+      next.setDate(currentDate.getDate() + 7);
+      setCurrentDate(next);
+    } else {
+      const next = new Date(currentDate);
+      next.setDate(currentDate.getDate() + 1);
+      setCurrentDate(next);
+    }
+  };
+
+  const handleToday = () => {
+    setCurrentDate(new Date());
+    setSelectedDate(new Date());
+  };
+
   return (
     <Layout>
+      {showQuickCreate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+          onClick={() => setShowQuickCreate(false)}
+        >
+          <div
+            className="relative w-full max-w-lg mx-4 bg-white rounded-xl shadow-lg border border-blue-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+              onClick={() => setShowQuickCreate(false)}
+              aria-label="Fermer"
+              type="button"
+            >
+              &times;
+            </button>
+            <div className="px-6 pt-6 pb-3 bg-gradient-to-r from-blue-50 via-white to-blue-50 rounded-t-xl">
+              <h3 className="text-lg font-bold text-gray-900">Nouveau rendez-vous</h3>
+              <p className="text-sm text-gray-500 mt-1">Saisie rapide</p>
+            </div>
+            <form onSubmit={handleQuickCreateSubmit} className="px-6 py-4 grid grid-cols-1 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Patient *</label>
+                <input
+                  name="patient"
+                  value={quickForm.patient}
+                  onChange={handleQuickCreateChange}
+                  placeholder="Nom et prénom"
+                  className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Date</label>
+                  <input
+                    type="date"
+                    name="date"
+                    value={quickForm.date}
+                    onChange={handleQuickCreateChange}
+                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Heure</label>
+                  <input
+                    type="time"
+                    name="heure"
+                    value={quickForm.heure}
+                    onChange={handleQuickCreateChange}
+                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Motif</label>
+                  <select
+                    name="motif"
+                    value={quickForm.motif}
+                    onChange={handleQuickCreateChange}
+                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                  >
+                    {motifOptions.filter(m => m.value !== 'all').map(m => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Statut</label>
+                  <select
+                    name="statut"
+                    value={quickForm.statut}
+                    onChange={handleQuickCreateChange}
+                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                  >
+                    {statusOptions.filter(s => s.value !== 'all').map(s => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Praticien</label>
+                <input
+                  name="praticien"
+                  value={quickForm.praticien}
+                  onChange={handleQuickCreateChange}
+                  className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                />
+              </div>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 transition"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {showDetailsModal && selectedAppointment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+          onClick={() => setShowDetailsModal(false)}
+        >
+          <div
+            className="relative w-full max-w-lg mx-4 bg-white rounded-xl shadow-lg border border-blue-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+              onClick={() => setShowDetailsModal(false)}
+              aria-label="Fermer"
+              type="button"
+            >
+              &times;
+            </button>
+            <div className="px-6 pt-6 pb-3 bg-gradient-to-r from-blue-50 via-white to-blue-50 rounded-t-xl">
+              <h3 className="text-lg font-bold text-gray-900">Détails du rendez-vous</h3>
+              <p className="text-sm text-gray-500 mt-1">Informations complètes</p>
+            </div>
+            <div className="px-6 py-4 grid grid-cols-1 gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Patient</span>
+                <span className="text-sm font-semibold text-gray-900">{selectedAppointment.patient}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Date</span>
+                <span className="text-sm font-semibold text-gray-900">{selectedAppointment.date}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Heure</span>
+                <span className="text-sm font-semibold text-gray-900">{selectedAppointment.heure}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Motif</span>
+                <span className="text-sm font-semibold text-gray-900">{selectedAppointment.motif}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Praticien</span>
+                <span className="text-sm font-semibold text-gray-900">{selectedAppointment.praticien}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">Statut</span>
+                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                  selectedAppointment.statut === 'À venir'
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : selectedAppointment.statut === 'Terminé'
+                      ? 'bg-gray-100 text-gray-600'
+                      : 'bg-red-100 text-red-600'
+                }`}>
+                  {selectedAppointment.statut}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestion des rendez-vous</h1>
@@ -373,7 +676,7 @@ const Appointments = () => {
                         </span>
                       </td>
                       <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">
-                        <div className="relative flex items-center" ref={menuRef}>
+                        <div className="relative flex items-center" data-appointment-menu="true">
                           {/* Menu actions rapides */}
                           <div className="relative">
                             <button
@@ -477,88 +780,250 @@ const Appointments = () => {
           <div className="p-3 sm:p-6">
             {/* En-tête du calendrier */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{monthName} {year}</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
+                {calendarView === 'month' && `${monthName} ${year}`}
+                {calendarView === 'week' && `Semaine du ${weekDates[0].toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })} - ${weekDates[6].toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}`}
+                {calendarView === 'day' && currentDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              </h2>
               <div className="flex gap-2 flex-wrap">
                 <button
-                  onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
+                  onClick={handlePrev}
                   className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium text-xs sm:text-base"
                 >
                   <span>← Précédent</span>
                 </button>
                 <button
-                  onClick={() => setCurrentDate(new Date())}
+                  onClick={handleToday}
                   className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors font-medium text-xs sm:text-base"
                 >
                   Aujourd'hui
                 </button>
                 <button
-                  onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
+                  onClick={handleNext}
                   className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium text-xs sm:text-base"
                 >
                   Suivant →
                 </button>
+                <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1 bg-white">
+                  <button
+                    onClick={() => setCalendarView('month')}
+                    className={`px-2 py-1 text-xs sm:text-sm rounded ${calendarView === 'month' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                  >
+                    Mois
+                  </button>
+                  <button
+                    onClick={() => setCalendarView('week')}
+                    className={`px-2 py-1 text-xs sm:text-sm rounded ${calendarView === 'week' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                  >
+                    Semaine
+                  </button>
+                  <button
+                    onClick={() => setCalendarView('day')}
+                    className={`px-2 py-1 text-xs sm:text-sm rounded ${calendarView === 'day' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                  >
+                    Jour
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Grille du calendrier */}
-            <div className="w-full overflow-x-auto">
-              <div className="grid grid-cols-7 gap-1 mb-4 min-w-[500px] sm:min-w-0 text-xs sm:text-sm">
-                {/* En-têtes des jours */}
-                {dayNames.map(day => (
-                  <div key={day} className="text-center py-2 font-bold text-gray-600 text-sm bg-gray-50 rounded">
-                    {day}
-                  </div>
-                ))}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+              {/* Grille du calendrier */}
+              <div className="w-full overflow-x-auto">
+                {calendarView === 'month' && (
+                  <div className="grid grid-cols-7 gap-1 mb-4 min-w-[500px] sm:min-w-0 text-xs sm:text-sm">
+                    {/* En-têtes des jours */}
+                    {dayNames.map(day => (
+                      <div key={day} className="text-center py-2 font-bold text-gray-600 text-sm bg-gray-50 rounded">
+                        {day}
+                      </div>
+                    ))}
 
-                {/* Jours du mois */}
-                {days.map((day, index) => {
-                  const appointmentsForDay = day ? getAppointmentsForDay(day) : [];
-                  const isToday = day && day === new Date().getDate() && 
-                                currentDate.getMonth() === new Date().getMonth() &&
-                                currentDate.getFullYear() === new Date().getFullYear();
-                  return (
-                    <div
-                      key={index}
-                      className={`min-h-24 p-2 rounded-lg border-2 transition-all ${
-                        day
-                          ? isToday
-                            ? 'bg-blue-50 border-blue-300'
-                            : 'bg-white border-gray-200 hover:border-blue-300'
-                          : 'bg-gray-50 border-gray-100'
-                      }`}
-                    >
-                      {day && (
-                        <>
+                    {/* Jours du mois */}
+                    {days.map((day, index) => {
+                      const appointmentsForDay = day ? getAppointmentsForDay(day) : [];
+                      const isToday = day && day === new Date().getDate() && 
+                                    currentDate.getMonth() === new Date().getMonth() &&
+                                    currentDate.getFullYear() === new Date().getFullYear();
+                      const isOverloaded = appointmentsForDay.length >= 4;
+                      const dateObj = day ? new Date(currentDate.getFullYear(), currentDate.getMonth(), day) : null;
+                      return (
+                        <div
+                          key={index}
+                          onClick={() => day && setSelectedDate(dateObj)}
+                          onDragOver={(e) => day && e.preventDefault()}
+                          onDrop={(e) => day && handleDropOnDay(e, dateObj)}
+                          className={`min-h-24 p-2 rounded-lg border-2 transition-all text-left relative cursor-pointer ${
+                            day
+                              ? isToday
+                                ? 'bg-blue-50 border-blue-300'
+                                : 'bg-white border-gray-200 hover:border-blue-300'
+                              : 'bg-gray-50 border-gray-100'
+                          }`}
+                        >
+                          {day && (
+                            <>
+                              <div className={`font-bold text-sm mb-1 ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>
+                                {day}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addQuickAppointment(dateObj);
+                                }}
+                                className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs"
+                                title="Ajouter un RDV"
+                              >
+                                +
+                              </button>
+                              {isOverloaded && (
+                                <span className="absolute bottom-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Surchargé</span>
+                              )}
+                              <div className="space-y-1">
+                                {appointmentsForDay.slice(0, 2).map((app, idx) => (
+                                  <div
+                                    key={idx}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, app.id)}
+                                    className={`text-xs px-1.5 py-0.5 rounded truncate cursor-move transition-colors font-medium ${
+                                      app.statut === 'À venir'
+                                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                        : app.statut === 'Terminé'
+                                        ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        : 'bg-red-100 text-red-600 hover:bg-red-200'
+                                    }`}
+                                    title={`${app.patient} - ${app.heure} - ${app.motif}`}
+                                  >
+                                    {app.heure} {app.patient.split(' ')[0]}
+                                  </div>
+                                ))}
+                                {appointmentsForDay.length > 2 && (
+                                  <div className="text-xs text-blue-600 font-medium px-1.5 py-0.5">
+                                    +{appointmentsForDay.length - 2} autres
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {calendarView === 'week' && (
+                  <div className="grid grid-cols-7 gap-1 mb-4 min-w-[600px] sm:min-w-0 text-xs sm:text-sm">
+                    {weekDates.map((date) => {
+                      const appointmentsForDay = getAppointmentsForDay(date);
+                      const isToday = toDateStr(date) === toDateStr(new Date());
+                      const isOverloaded = appointmentsForDay.length >= 4;
+                      return (
+                        <div
+                          key={date.toISOString()}
+                          onClick={() => setSelectedDate(date)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => handleDropOnDay(e, date)}
+                          className={`min-h-28 p-2 rounded-lg border-2 transition-all text-left relative cursor-pointer ${
+                            isToday ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'
+                          }`}
+                        >
                           <div className={`font-bold text-sm mb-1 ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>
-                            {day}
+                            {date.getDate()} {dayNames[date.getDay()]}
                           </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addQuickAppointment(date);
+                            }}
+                            className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs"
+                            title="Ajouter un RDV"
+                          >
+                            +
+                          </button>
+                          {isOverloaded && (
+                            <span className="absolute bottom-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Surchargé</span>
+                          )}
                           <div className="space-y-1">
-                            {appointmentsForDay.slice(0, 2).map((app, idx) => (
+                            {appointmentsForDay.slice(0, 3).map((app, idx) => (
                               <div
                                 key={idx}
-                                className={`text-xs px-1.5 py-0.5 rounded truncate cursor-pointer transition-colors font-medium ${
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, app.id)}
+                                className={`text-xs px-1.5 py-0.5 rounded truncate font-medium ${
                                   app.statut === 'À venir'
-                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                    ? 'bg-emerald-100 text-emerald-700'
                                     : app.statut === 'Terminé'
-                                    ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                    : 'bg-red-100 text-red-600 hover:bg-red-200'
+                                    ? 'bg-gray-100 text-gray-600'
+                                    : 'bg-red-100 text-red-600'
                                 }`}
-                                title={`${app.patient} - ${app.heure} - ${app.motif}`}
                               >
                                 {app.heure} {app.patient.split(' ')[0]}
                               </div>
                             ))}
-                            {appointmentsForDay.length > 2 && (
-                              <div className="text-xs text-blue-600 font-medium px-1.5 py-0.5">
-                                +{appointmentsForDay.length - 2} autres
-                              </div>
-                            )}
                           </div>
-                        </>
-                      )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {calendarView === 'day' && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    {getAppointmentsForDay(currentDate).length === 0 ? (
+                      <p className="text-sm text-gray-500">Aucun rendez-vous pour cette journée.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {getAppointmentsForDay(currentDate).map((app) => (
+                          <div
+                            key={app.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, app.id)}
+                            className={`p-2 rounded-lg border ${
+                              app.statut === 'À venir'
+                                ? 'bg-emerald-50 border-emerald-200'
+                                : app.statut === 'Terminé'
+                                ? 'bg-gray-50 border-gray-200'
+                                : 'bg-red-50 border-red-200'
+                            }`}
+                          >
+                            <div className="text-sm font-semibold text-gray-900">{app.heure} • {app.patient}</div>
+                            <div className="text-xs text-gray-600">{app.motif} — {app.praticien}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Panneau latéral */}
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm h-fit mt-2">
+                <h3 className="text-sm font-semibold text-gray-900">Détails du jour</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  {selectedDate ? selectedDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Sélectionnez un jour'}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {selectedDate && selectedAppointments.length === 0 && (
+                    <p className="text-sm text-gray-500">Aucun rendez-vous.</p>
+                  )}
+                  {selectedDate && selectedAppointments.map((app) => (
+                    <div key={app.id} className="p-2 rounded-lg border border-gray-200">
+                      <div className="text-sm font-semibold text-gray-900">{app.heure} • {app.patient}</div>
+                      <div className="text-xs text-gray-600">{app.motif} — {app.praticien}</div>
+                      <span className={`mt-1 inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        app.statut === 'À venir'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : app.statut === 'Terminé'
+                          ? 'bg-gray-100 text-gray-600'
+                          : 'bg-red-100 text-red-600'
+                      }`}>
+                        {app.statut}
+                      </span>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             </div>
             {/* Légende */}
