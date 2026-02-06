@@ -19,7 +19,6 @@ export const Login = () => {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
-
     const result = await login(formData.email, formData.password);
     
     if (result.success) {
@@ -47,6 +46,7 @@ export const Login = () => {
               <p className="text-red-700 text-sm font-medium">{error}</p>
             </div>
           )}
+
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">

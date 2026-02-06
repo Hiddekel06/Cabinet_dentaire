@@ -5,6 +5,8 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
+import MedicalCertificates from './pages/MedicalCertificates';
+import Statistics from './pages/Statistics';
 import './App.css';
 
 function App() {
@@ -42,7 +44,23 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/statistics"
+            element={
+              <ProtectedRoute>
+                <Statistics />
+              </ProtectedRoute>
+            }
+          />
 
+          <Route
+            path="/medical-certificates"
+            element={
+              <ProtectedRoute>
+                <MedicalCertificates />
+              </ProtectedRoute>
+            }
+          />
           {/* Redirection par défaut */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

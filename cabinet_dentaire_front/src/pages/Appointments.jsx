@@ -1,36 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Layout } from "../components/Layout";
-
-const fakeAppointments = [
-  {
-    id: 1,
-    date: '2026-02-10',
-    heure: '09:00',
-    patient: 'Awa Diop',
-    motif: 'Consultation',
-    praticien: 'Dr. Ndiaye',
-    statut: 'À venir',
-  },
-  {
-    id: 2,
-    date: '2026-02-10',
-    heure: '10:30',
-    patient: 'Moussa Fall',
-    motif: 'Détartrage',
-    praticien: 'Dr. Ndiaye',
-    statut: 'Terminé',
-  },
-  {
-    id: 3,
-    date: '2026-02-11',
-    heure: '14:00',
-    patient: 'Fatou Seck',
-    motif: 'Implant',
-    praticien: 'Dr. Ba',
-    statut: 'Annulé',
-  },
-];
+import { appointmentAPI, patientAPI } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 const statusOptions = [
   { value: 'all', label: 'Tous les statuts', color: 'gray' },
@@ -47,7 +19,12 @@ const motifOptions = [
 ];
 
 const Appointments = () => {
-  const [appointments, setAppointments] = useState(fakeAppointments);
+  const { user } = useAuth();
+  const [appointments, setAppointments] = useState([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [appointmentsError, setAppointmentsError] = useState('');
+  const [patients, setPatients] = useState([]);
+  const [patientsLoading, setPatientsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedMotif, setSelectedMotif] = useState('all');
@@ -59,17 +36,123 @@ const Appointments = () => {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 1, 5)); // Février 2026
   const [selectedDate, setSelectedDate] = useState(null);
   const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState(null);
   const [quickForm, setQuickForm] = useState({
     date: '',
     heure: '09:00',
-    patient: '',
+    patient_id: '',
     motif: 'Consultation',
     praticien: 'Dr. Ndiaye',
     statut: 'À venir',
   });
   const menuRef = useRef(null);
 
+  useEffect(() => {
+    const statusMap = {
+      pending: 'À venir',
+      confirmed: 'À venir',
+      completed: 'Terminé',
+      cancelled: 'Annulé',
+    };
+
+    const loadAppointments = async () => {
+      setAppointmentsLoading(true);
+      setAppointmentsError('');
+      try {
+        const { data } = await appointmentAPI.getAll(1);
+        const list = Array.isArray(data?.data) ? data.data : [];
+        const mapped = list.map((a) => {
+          const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
+          const date = dateObj ? dateObj.toISOString().slice(0, 10) : '';
+          const heure = dateObj
+            ? dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+            : '';
+          const patient = a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : '';
+          return {
+            apiId: a.id,
+            id: a.id,
+            date,
+            heure,
+            patient,
+            motif: a.reason || 'Consultation',
+            praticien: a.dentist?.name || 'Dentiste',
+            statut: statusMap[a.status] || 'À venir',
+          };
+        });
+        setAppointments(mapped);
+      } catch (error) {
+        console.error('Erreur chargement rendez-vous:', error);
+        setAppointmentsError('Impossible de charger les rendez-vous.');
+      }
+      finally {
+        setAppointmentsLoading(false);
+      }
+    };
+
+    loadAppointments();
+  }, []);
+
   // Fermer le menu quand on clique en dehors
+  const statusMap = {
+    pending: 'À venir',
+    confirmed: 'À venir',
+    completed: 'Terminé',
+    cancelled: 'Annulé',
+  };
+
+  const statusToApi = {
+    'À venir': 'pending',
+    'Terminé': 'completed',
+    'Annulé': 'cancelled',
+  };
+
+  const loadAppointments = async () => {
+    setAppointmentsLoading(true);
+    setAppointmentsError('');
+    try {
+      const { data } = await appointmentAPI.getAll(1);
+      const list = Array.isArray(data?.data) ? data.data : [];
+      const mapped = list.map((a) => {
+        const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
+        const date = dateObj ? dateObj.toISOString().slice(0, 10) : '';
+        const heure = dateObj
+          ? dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+          : '';
+        const patient = a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : '';
+        return {
+          apiId: a.id,
+          id: a.id,
+          date,
+          heure,
+          patient,
+          patientId: a.patient?.id,
+          motif: a.reason || 'Consultation',
+          praticien: a.dentist?.name || 'Dentiste',
+          statut: statusMap[a.status] || 'À venir',
+        };
+      });
+      setAppointments(mapped);
+    } catch (error) {
+      console.error('Erreur chargement rendez-vous:', error);
+      setAppointmentsError('Impossible de charger les rendez-vous.');
+    } finally {
+      setAppointmentsLoading(false);
+    }
+  };
+
+  const loadPatients = async () => {
+    setPatientsLoading(true);
+    try {
+      const { data } = await patientAPI.getAll(1);
+      const list = Array.isArray(data?.data) ? data.data : [];
+      setPatients(list);
+    } catch (error) {
+      console.error('Erreur chargement patients:', error);
+    } finally {
+      setPatientsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       const isInsideMenu = event.target.closest('[data-appointment-menu="true"]');
@@ -84,22 +167,43 @@ const Appointments = () => {
     };
   }, []);
 
+  useEffect(() => {
+    loadAppointments();
+    loadPatients();
+  }, []);
+
   const handleViewDetails = (appointment) => {
     setSelectedAppointment(appointment);
     setShowDetailsModal(true);
   };
 
   const handleEdit = (appointment) => {
-    console.log('Modifier:', appointment);
-    alert(`Modification du rendez-vous avec ${appointment.patient}`);
+    setEditingAppointment(appointment);
+    setQuickForm({
+      date: appointment.date,
+      heure: appointment.heure || '09:00',
+      patient_id: appointment.patientId || '',
+      motif: appointment.motif || 'Consultation',
+      praticien: appointment.praticien || (user?.name || 'Dentiste'),
+      statut: appointment.statut || 'À venir',
+    });
+    setShowQuickCreate(true);
   };
 
-  const handleDelete = (appointment) => {
+  const handleDelete = async (appointment) => {
     if (window.confirm(`Êtes-vous sûr de vouloir supprimer le rendez-vous avec ${appointment.patient} ?`)) {
-      setAppointments((prev) => prev.filter((a) => a.id !== appointment.id));
-      if (selectedAppointment?.id === appointment.id) {
-        setShowDetailsModal(false);
-        setSelectedAppointment(null);
+      try {
+        if (appointment.apiId) {
+          await appointmentAPI.delete(appointment.apiId);
+        }
+        await loadAppointments();
+        if (selectedAppointment?.id === appointment.id) {
+          setShowDetailsModal(false);
+          setSelectedAppointment(null);
+        }
+      } catch (error) {
+        console.error('Erreur suppression rendez-vous:', error);
+        setAppointmentsError('Impossible de supprimer le rendez-vous.');
       }
     }
   };
@@ -196,11 +300,12 @@ const Appointments = () => {
     setQuickForm({
       date: dateStr,
       heure: '09:00',
-      patient: '',
+      patient_id: '',
       motif: 'Consultation',
-      praticien: 'Dr. Ndiaye',
+      praticien: user?.name || 'Dentiste',
       statut: 'À venir',
     });
+    setEditingAppointment(null);
     setSelectedDate(date);
     setShowQuickCreate(true);
   };
@@ -210,15 +315,36 @@ const Appointments = () => {
     setQuickForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleQuickCreateSubmit = (e) => {
+  const handleQuickCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!quickForm.patient.trim()) return;
-    const newAppointment = {
-      id: Date.now(),
-      ...quickForm,
-    };
-    setAppointments((prev) => [newAppointment, ...prev]);
-    setShowQuickCreate(false);
+    if (!quickForm.patient_id || !quickForm.date || !quickForm.heure) return;
+    if (!user?.id) {
+      setAppointmentsError("Utilisateur non authentifié.");
+      return;
+    }
+    try {
+      const payload = {
+        patient_id: Number(quickForm.patient_id),
+        dentist_id: user?.id,
+        appointment_date: `${quickForm.date}T${quickForm.heure}:00`,
+        status: statusToApi[quickForm.statut] || 'pending',
+        reason: quickForm.motif || null,
+        notes: null,
+      };
+
+      if (editingAppointment?.apiId) {
+        await appointmentAPI.update(editingAppointment.apiId, payload);
+      } else {
+        await appointmentAPI.create(payload);
+      }
+
+      await loadAppointments();
+      setShowQuickCreate(false);
+      setEditingAppointment(null);
+    } catch (error) {
+      console.error('Erreur création/modification rendez-vous:', error);
+      setAppointmentsError("Impossible d'enregistrer le rendez-vous.");
+    }
   };
 
   const moveAppointment = (appointmentId, newDate) => {
@@ -311,20 +437,27 @@ const Appointments = () => {
               &times;
             </button>
             <div className="px-6 pt-6 pb-3 bg-gradient-to-r from-blue-50 via-white to-blue-50 rounded-t-xl">
-              <h3 className="text-lg font-bold text-gray-900">Nouveau rendez-vous</h3>
+              <h3 className="text-lg font-bold text-gray-900">{editingAppointment ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}</h3>
               <p className="text-sm text-gray-500 mt-1">Saisie rapide</p>
             </div>
             <form onSubmit={handleQuickCreateSubmit} className="px-6 py-4 grid grid-cols-1 gap-3">
               <div>
                 <label className="text-xs font-semibold text-gray-700">Patient *</label>
-                <input
-                  name="patient"
-                  value={quickForm.patient}
+                <select
+                  name="patient_id"
+                  value={quickForm.patient_id}
                   onChange={handleQuickCreateChange}
-                  placeholder="Nom et prénom"
                   className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
                   required
-                />
+                  disabled={patientsLoading}
+                >
+                  <option value="">{patientsLoading ? 'Chargement...' : 'Sélectionner un patient'}</option>
+                  {patients.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {(p.first_name || '').trim()} {(p.last_name || '').trim()}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -390,7 +523,7 @@ const Appointments = () => {
                   type="submit"
                   className="px-5 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 transition"
                 >
-                  Ajouter
+                  {editingAppointment ? 'Mettre à jour' : 'Ajouter'}
                 </button>
               </div>
             </form>
@@ -658,7 +791,19 @@ const Appointments = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredAppointments.length > 0 ? (
+                {appointmentsLoading ? (
+                  <tr>
+                    <td colSpan="7" className="py-12 text-center text-gray-500">
+                      Chargement des rendez-vous...
+                    </td>
+                  </tr>
+                ) : appointmentsError ? (
+                  <tr>
+                    <td colSpan="7" className="py-12 text-center text-red-600">
+                      {appointmentsError}
+                    </td>
+                  </tr>
+                ) : filteredAppointments.length > 0 ? (
                   filteredAppointments.map((a) => (
                     <tr key={a.id} className="hover:bg-blue-50 transition-colors duration-150 group">
                       <td className="py-2 px-2 sm:py-3 sm:px-4 font-medium text-gray-900 whitespace-nowrap">{a.date}</td>

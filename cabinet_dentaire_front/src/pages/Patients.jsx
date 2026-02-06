@@ -1,68 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Layout } from "../components/Layout";
-
-const fakePatients = [
-  {
-    initials: 'AD',
-    name: 'Awa Diop',
-    id: 'N°1248',
-    phone: '77 123 45 67',
-    email: 'awa.diop@email.com',
-    date: '12/01/2026',
-    treatment: 'Détartrage',
-    status: 'Suivi',
-    color: 'emerald',
-    timeAgo: 'Il y a 3 jours'
-  },
-  {
-    initials: 'MF',
-    name: 'Moussa Fall',
-    id: 'N°1249',
-    phone: '77 234 56 78',
-    email: 'moussa.fall@email.com',
-    date: '15/01/2026',
-    treatment: 'Consultation',
-    status: 'Nouveau',
-    color: 'blue',
-    timeAgo: "Aujourd'hui"
-  },
-  {
-    initials: 'FS',
-    name: 'Fatou Seck',
-    id: 'N°1250',
-    phone: '77 345 67 89',
-    email: 'fatou.seck@email.com',
-    date: '10/01/2026',
-    treatment: 'Implant',
-    status: 'En traitement',
-    color: 'amber',
-    timeAgo: 'Il y a 5 jours'
-  },
-  {
-    initials: 'AK',
-    name: 'Amadou Kane',
-    id: 'N°1251',
-    phone: '77 456 78 90',
-    email: 'amadou.kane@email.com',
-    date: '08/01/2026',
-    treatment: 'Extraction',
-    status: 'Suivi',
-    color: 'emerald',
-    timeAgo: 'Il y a 7 jours'
-  },
-  {
-    initials: 'ND',
-    name: 'Ndeye Diagne',
-    id: 'N°1252',
-    phone: '77 567 89 01',
-    email: 'ndeye.diagne@email.com',
-    date: '18/01/2026',
-    treatment: 'Consultation',
-    status: 'Nouveau',
-    color: 'blue',
-    timeAgo: "Aujourd'hui"
-  }
-];
+import { patientAPI } from "../services/api";
 
 const statusOptions = [
   { value: 'all', label: 'Tous les statuts', color: 'gray' },
@@ -92,16 +30,169 @@ const initialForm = {
 };
 
 const Patients = () => {
+  const [patients, setPatients] = useState([]);
+  const [patientsLoading, setPatientsLoading] = useState(true);
+  const [patientsError, setPatientsError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedTreatment, setSelectedTreatment] = useState('all');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
   const [showForm, setShowForm] = useState(false);
+  const [editingPatient, setEditingPatient] = useState(null);
+  const [openMenu, setOpenMenu] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [formLoading, setFormLoading] = useState(false);
+
+  useEffect(() => {
+    const formatDate = (value) => {
+      if (!value) return '';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return '';
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${dd}/${mm}/${yyyy}`;
+    };
+
+    const getInitials = (first, last) => {
+      const f = (first || '').trim().charAt(0).toUpperCase();
+      const l = (last || '').trim().charAt(0).toUpperCase();
+      return `${f}${l}` || 'P';
+    };
+
+    const statusToColor = (status) => {
+      if (status === 'Suivi') return 'emerald';
+      if (status === 'En traitement') return 'amber';
+      return 'blue';
+    };
+
+    const loadPatients = async () => {
+      setPatientsLoading(true);
+      setPatientsError('');
+      try {
+        const { data } = await patientAPI.getAll(1);
+        const list = Array.isArray(data?.data) ? data.data : [];
+        const mapped = list.map((p) => ({
+          apiId: p.id,
+          id: `N°${p.id}`,
+          initials: getInitials(p.first_name, p.last_name),
+          name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+          phone: p.phone || '',
+          email: p.email || '',
+          date: formatDate(p.last_appointment_date || p.created_at || p.updated_at),
+          treatment: p.last_treatment || '-',
+          status: p.status || 'Nouveau',
+          color: statusToColor(p.status),
+          timeAgo: '',
+        }));
+        setPatients(mapped);
+      } catch (error) {
+        console.error('Erreur chargement patients:', error);
+        setPatientsError('Impossible de charger les patients.');
+      } finally {
+        setPatientsLoading(false);
+      }
+    };
+
+    loadPatients();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const isInsideMenu = event.target.closest('[data-patient-menu="true"]');
+      if (!isInsideMenu) {
+        setOpenMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingPatient(null);
+    setForm(initialForm);
+    setFormError("");
+    setFormSuccess("");
+  };
+
+  const handleEdit = (patient) => {
+    setEditingPatient(patient);
+    const names = (patient.name || '').split(' ');
+    const first_name = names.slice(0, -1).join(' ') || names[0] || '';
+    const last_name = names.length > 1 ? names[names.length - 1] : '';
+    setForm((prev) => ({
+      ...prev,
+      first_name,
+      last_name,
+      phone: patient.phone || '',
+      email: patient.email || '',
+    }));
+    setShowForm(true);
+  };
+
+  const handleDelete = async (patient) => {
+    if (!patient?.apiId) return;
+    if (!window.confirm(`Supprimer le patient ${patient.name} ?`)) return;
+    try {
+      await patientAPI.delete(patient.apiId);
+      await reloadPatients();
+    } catch (error) {
+      console.error('Erreur suppression patient:', error);
+      setPatientsError('Impossible de supprimer le patient.');
+    }
+  };
+
+  const statusToColor = (status) => {
+    if (status === 'Suivi') return 'emerald';
+    if (status === 'En traitement') return 'amber';
+    return 'blue';
+  };
+
+  const reloadPatients = async () => {
+    setPatientsLoading(true);
+    setPatientsError('');
+    try {
+      const { data } = await patientAPI.getAll(1);
+      const list = Array.isArray(data?.data) ? data.data : [];
+      const formatDate = (value) => {
+        if (!value) return '';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return '';
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      };
+      const getInitials = (first, last) => {
+        const f = (first || '').trim().charAt(0).toUpperCase();
+        const l = (last || '').trim().charAt(0).toUpperCase();
+        return `${f}${l}` || 'P';
+      };
+      const mapped = list.map((p) => ({
+        apiId: p.id,
+        id: `N°${p.id}`,
+        initials: getInitials(p.first_name, p.last_name),
+        name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+        phone: p.phone || '',
+        email: p.email || '',
+        date: formatDate(p.last_appointment_date || p.created_at || p.updated_at),
+        treatment: p.last_treatment || '-',
+        status: p.status || 'Nouveau',
+        color: statusToColor(p.status),
+        timeAgo: '',
+      }));
+      setPatients(mapped);
+    } catch (error) {
+      console.error('Erreur chargement patients:', error);
+      setPatientsError('Impossible de charger les patients.');
+    } finally {
+      setPatientsLoading(false);
+    }
+  };
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -118,24 +209,24 @@ const Patients = () => {
     }
     setFormLoading(true);
     try {
-      // Remplace l'URL par celle de ton backend
-      const res = await fetch("/api/patients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error("Erreur lors de l'ajout du patient");
-      setFormSuccess("Patient ajouté avec succès !");
+      if (editingPatient?.apiId) {
+        await patientAPI.update(editingPatient.apiId, form);
+        setFormSuccess("Patient mis à jour avec succès !");
+      } else {
+        await patientAPI.create(form);
+        setFormSuccess("Patient ajouté avec succès !");
+      }
       setForm(initialForm);
+      await reloadPatients();
     } catch (err) {
-      setFormError(err.message);
+      setFormError(err.response?.data?.message || "Erreur lors de l'ajout du patient");
     } finally {
       setFormLoading(false);
     }
   };
 
   const filteredPatients = useMemo(() => {
-    let results = [...fakePatients];
+    let results = [...patients];
 
     // Filtre par recherche
     if (searchTerm) {
@@ -219,7 +310,7 @@ const Patients = () => {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
-          onClick={() => setShowForm(false)}
+          onClick={closeForm}
         >
           <div
             className="relative w-full max-w-3xl mx-2 sm:mx-auto bg-white rounded-xl shadow-lg border border-blue-100 animate-fadeIn"
@@ -228,7 +319,7 @@ const Patients = () => {
           >
             <button
               className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
-              onClick={() => setShowForm(false)}
+              onClick={closeForm}
               aria-label="Fermer"
               type="button"
             >
@@ -240,7 +331,7 @@ const Patients = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold">Ajouter un patient</h2>
+              <h2 className="text-xl font-bold">{editingPatient ? 'Modifier un patient' : 'Ajouter un patient'}</h2>
                 <div className="w-full border-t border-gray-200 my-2"></div>
 
             </div>
@@ -373,7 +464,7 @@ const Patients = () => {
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span>{formLoading ? "Ajout en cours..." : "Ajouter le patient"}</span>
+                  <span>{formLoading ? "Enregistrement..." : (editingPatient ? "Mettre à jour" : "Ajouter le patient")}</span>
                 </button>
               </div>
             </form>
@@ -601,9 +692,26 @@ const Patients = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredPatients.length > 0 ? (
+              {patientsLoading ? (
+                <tr>
+                  <td colSpan="5" className="py-10 text-center">
+                    <div className="flex items-center justify-center gap-2 text-gray-500">
+                      <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v2m0 12v2m8-8h-2M6 12H4m12.364-6.364-1.414 1.414M8.05 15.95l-1.414 1.414m0-11.314 1.414 1.414m7.9 7.9 1.414 1.414" />
+                      </svg>
+                      Chargement des patients...
+                    </div>
+                  </td>
+                </tr>
+              ) : patientsError ? (
+                <tr>
+                  <td colSpan="5" className="py-10 text-center text-red-600">
+                    {patientsError}
+                  </td>
+                </tr>
+              ) : filteredPatients.length > 0 ? (
                 filteredPatients.map((patient, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors duration-150 group">
+                  <tr key={patient.apiId || index} className="hover:bg-gray-50 transition-colors duration-150 group">
                     <td className="py-4 px-4">
                       <div className="flex items-center">
                         <div className="relative">
@@ -664,11 +772,45 @@ const Patients = () => {
                       </span>
                     </td>
                     <td className="py-4 px-4 text-right">
-                      <button className="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                        </svg>
-                      </button>
+                      <div className="relative inline-flex" data-patient-menu="true">
+                        <button
+                          className="text-gray-400 hover:text-gray-600 transition-colors"
+                          onClick={() => setOpenMenu(openMenu === patient.apiId ? null : patient.apiId)}
+                          title="Actions"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                          </svg>
+                        </button>
+                        {openMenu === patient.apiId && (
+                          <div className="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                            <button
+                              onClick={() => {
+                                handleEdit(patient);
+                                setOpenMenu(null);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Modifier
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleDelete(patient);
+                                setOpenMenu(null);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              Supprimer
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

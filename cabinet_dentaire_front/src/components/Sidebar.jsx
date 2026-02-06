@@ -53,6 +53,15 @@ export const Sidebar = () => {
       label: 'Dossiers médicaux' 
     },
     { 
+      path: '/medical-certificates', 
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 11c0-1.105.895-2 2-2s2 .895 2 2-.895 2-2 2-2-.895-2-2zm-6 8V7a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H8a2 2 0 01-2-2zm2-8h8" />
+        </svg>
+      ), 
+      label: 'Certificats médicaux' 
+    },
+    { 
       path: '/radiographies', 
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,7 +101,11 @@ export const Sidebar = () => {
               {item.icon}
             </div>
             {!isCollapsed && (
-              <span className={`text-sm ${isActive(item.path) ? 'text-blue-600' : 'text-gray-700'}`}>
+              <span
+                className={`${['/medical-certificates','/medical-records'].includes(item.path) ? 'text-xs' : 'text-sm'} ${isActive(item.path) ? 'text-blue-600' : 'text-gray-700'}`}
+                style={['/medical-certificates','/medical-records'].includes(item.path) ? { fontSize: '0.85rem', whiteSpace: 'nowrap' } : {}}
+                title={item.label}
+              >
                 {item.label}
               </span>
             )}

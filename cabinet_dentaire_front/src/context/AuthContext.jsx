@@ -36,6 +36,7 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       console.error('Erreur de connexion:', error);
+      const status = error.response?.status;
       return { success: false, message: error.response?.data?.message || 'Identifiants invalides' };
     } finally {
       setLoading(false);

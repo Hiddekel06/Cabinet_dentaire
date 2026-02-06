@@ -9,7 +9,37 @@ class PatientController extends Controller
 {
     public function index()
     {
-        return response()->json(Patient::query()->latest()->paginate(15));
+        $patients = Patient::query()
+            ->with([
+                'appointments' => function ($query) {
+                    $query->latest('appointment_date')->limit(1);
+                },
+                'medicalRecords' => function ($query) {
+                    $query->latest()->limit(1);
+                },
+            ])
+            ->latest()
+            ->paginate(15);
+
+        $patients->getCollection()->transform(function ($patient) {
+            $lastAppointment = $patient->appointments->first();
+            $lastRecord = $patient->medicalRecords->first();
+
+            $patient->last_appointment_date = $lastAppointment?->appointment_date;
+            $patient->last_appointment_status = $lastAppointment?->status;
+            $patient->last_treatment = $lastRecord?->treatment_description;
+
+            $patient->status = match ($lastAppointment?->status) {
+                'pending', 'confirmed' => 'En traitement',
+                'completed' => 'Suivi',
+                'cancelled' => 'Nouveau',
+                default => 'Nouveau',
+            };
+
+            return $patient;
+        });
+
+        return response()->json($patients);
     }
 
     public function store(Request $request)
@@ -33,6 +63,29 @@ class PatientController extends Controller
 
     public function show(Patient $patient)
     {
+        $patient->load([
+            'appointments' => function ($query) {
+                $query->latest('appointment_date')->limit(1);
+            },
+            'medicalRecords' => function ($query) {
+                $query->latest()->limit(1);
+            },
+        ]);
+
+        $lastAppointment = $patient->appointments->first();
+        $lastRecord = $patient->medicalRecords->first();
+
+        $patient->last_appointment_date = $lastAppointment?->appointment_date;
+        $patient->last_appointment_status = $lastAppointment?->status;
+        $patient->last_treatment = $lastRecord?->treatment_description;
+
+        $patient->status = match ($lastAppointment?->status) {
+            'pending', 'confirmed' => 'En traitement',
+            'completed' => 'Suivi',
+            'cancelled' => 'Nouveau',
+            default => 'Nouveau',
+        };
+
         return response()->json($patient);
     }
 
