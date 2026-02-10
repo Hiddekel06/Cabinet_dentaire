@@ -36,7 +36,7 @@ const Patients = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedTreatment, setSelectedTreatment] = useState('all');
-  const [sortBy, setSortBy] = useState('date');
+  const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('desc');
   const [showForm, setShowForm] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
@@ -45,50 +45,58 @@ const Patients = () => {
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [formLoading, setFormLoading] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const isFormBusy = formLoading || editLoading;
+
+  const formatDate = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  const getInitials = (first, last) => {
+    const f = (first || '').trim().charAt(0).toUpperCase();
+    const l = (last || '').trim().charAt(0).toUpperCase();
+    return `${f}${l}` || 'P';
+  };
+
+  const statusToColor = (status) => {
+    if (status === 'Suivi') return 'emerald';
+    if (status === 'En traitement') return 'amber';
+    return 'blue';
+  };
+
+  const mapPatient = (p) => ({
+    apiId: p.id,
+    id: `N°${p.id}`,
+    initials: getInitials(p.first_name, p.last_name),
+    name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+    phone: p.phone || '',
+    email: p.email || '',
+    city: p.city || '',
+    address: p.address || '',
+    gender: p.gender || '',
+    date_of_birth: p.date_of_birth || '',
+    notes: p.notes || '',
+    date: formatDate(p.last_appointment_date || p.created_at || p.updated_at),
+    treatment: p.last_treatment || '-',
+    status: p.status || 'Nouveau',
+    color: statusToColor(p.status),
+    timeAgo: '',
+  });
 
   useEffect(() => {
-    const formatDate = (value) => {
-      if (!value) return '';
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return '';
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      return `${dd}/${mm}/${yyyy}`;
-    };
-
-    const getInitials = (first, last) => {
-      const f = (first || '').trim().charAt(0).toUpperCase();
-      const l = (last || '').trim().charAt(0).toUpperCase();
-      return `${f}${l}` || 'P';
-    };
-
-    const statusToColor = (status) => {
-      if (status === 'Suivi') return 'emerald';
-      if (status === 'En traitement') return 'amber';
-      return 'blue';
-    };
-
     const loadPatients = async () => {
       setPatientsLoading(true);
       setPatientsError('');
       try {
         const { data } = await patientAPI.getAll(1);
         const list = Array.isArray(data?.data) ? data.data : [];
-        const mapped = list.map((p) => ({
-          apiId: p.id,
-          id: `N°${p.id}`,
-          initials: getInitials(p.first_name, p.last_name),
-          name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
-          phone: p.phone || '',
-          email: p.email || '',
-          date: formatDate(p.last_appointment_date || p.created_at || p.updated_at),
-          treatment: p.last_treatment || '-',
-          status: p.status || 'Nouveau',
-          color: statusToColor(p.status),
-          timeAgo: '',
-        }));
-        setPatients(mapped);
+        setPatients(list.map(mapPatient));
       } catch (error) {
         console.error('Erreur chargement patients:', error);
         setPatientsError('Impossible de charger les patients.');
@@ -120,18 +128,30 @@ const Patients = () => {
   };
 
   const handleEdit = (patient) => {
+    if (!patient?.apiId) return;
     setEditingPatient(patient);
-    const names = (patient.name || '').split(' ');
-    const first_name = names.slice(0, -1).join(' ') || names[0] || '';
-    const last_name = names.length > 1 ? names[names.length - 1] : '';
-    setForm((prev) => ({
-      ...prev,
-      first_name,
-      last_name,
-      phone: patient.phone || '',
-      email: patient.email || '',
-    }));
+    setEditLoading(true);
     setShowForm(true);
+    patientAPI.getById(patient.apiId)
+      .then(({ data }) => {
+        setForm((prev) => ({
+          ...prev,
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          phone: data.phone || '',
+          email: data.email || '',
+          city: data.city || '',
+          address: data.address || '',
+          gender: data.gender || '',
+          date_of_birth: data.date_of_birth || '',
+          notes: data.notes || '',
+        }));
+      })
+      .catch((error) => {
+        console.error('Erreur chargement patient:', error);
+        setFormError('Impossible de charger le patient.');
+      })
+      .finally(() => setEditLoading(false));
   };
 
   const handleDelete = async (patient) => {
@@ -146,46 +166,13 @@ const Patients = () => {
     }
   };
 
-  const statusToColor = (status) => {
-    if (status === 'Suivi') return 'emerald';
-    if (status === 'En traitement') return 'amber';
-    return 'blue';
-  };
-
   const reloadPatients = async () => {
     setPatientsLoading(true);
     setPatientsError('');
     try {
       const { data } = await patientAPI.getAll(1);
       const list = Array.isArray(data?.data) ? data.data : [];
-      const formatDate = (value) => {
-        if (!value) return '';
-        const d = new Date(value);
-        if (Number.isNaN(d.getTime())) return '';
-        const dd = String(d.getDate()).padStart(2, '0');
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const yyyy = d.getFullYear();
-        return `${dd}/${mm}/${yyyy}`;
-      };
-      const getInitials = (first, last) => {
-        const f = (first || '').trim().charAt(0).toUpperCase();
-        const l = (last || '').trim().charAt(0).toUpperCase();
-        return `${f}${l}` || 'P';
-      };
-      const mapped = list.map((p) => ({
-        apiId: p.id,
-        id: `N°${p.id}`,
-        initials: getInitials(p.first_name, p.last_name),
-        name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
-        phone: p.phone || '',
-        email: p.email || '',
-        date: formatDate(p.last_appointment_date || p.created_at || p.updated_at),
-        treatment: p.last_treatment || '-',
-        status: p.status || 'Nouveau',
-        color: statusToColor(p.status),
-        timeAgo: '',
-      }));
-      setPatients(mapped);
+      setPatients(list.map(mapPatient));
     } catch (error) {
       console.error('Erreur chargement patients:', error);
       setPatientsError('Impossible de charger les patients.');
@@ -210,14 +197,17 @@ const Patients = () => {
     setFormLoading(true);
     try {
       if (editingPatient?.apiId) {
-        await patientAPI.update(editingPatient.apiId, form);
+        const { data } = await patientAPI.update(editingPatient.apiId, form);
+        setPatients((prev) => prev.map((p) => (p.apiId === data.id ? mapPatient(data) : p)));
         setFormSuccess("Patient mis à jour avec succès !");
+        reloadPatients();
       } else {
-        await patientAPI.create(form);
+        const { data } = await patientAPI.create(form);
+        setPatients((prev) => [mapPatient(data), ...prev]);
         setFormSuccess("Patient ajouté avec succès !");
+        reloadPatients();
       }
-      setForm(initialForm);
-      await reloadPatients();
+      closeForm();
     } catch (err) {
       setFormError(err.response?.data?.message || "Erreur lors de l'ajout du patient");
     } finally {
@@ -227,15 +217,15 @@ const Patients = () => {
 
   const filteredPatients = useMemo(() => {
     let results = [...patients];
+    const normalizedSearch = searchTerm.trim().toLowerCase();
 
     // Filtre par recherche
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
+    if (normalizedSearch) {
       results = results.filter(patient =>
-        patient.name.toLowerCase().includes(term) ||
-        patient.email.toLowerCase().includes(term) ||
-        patient.phone.includes(term) ||
-        patient.id.toLowerCase().includes(term)
+        (patient.name || '').toLowerCase().includes(normalizedSearch) ||
+        (patient.email || '').toLowerCase().includes(normalizedSearch) ||
+        (patient.phone || '').includes(normalizedSearch) ||
+        (patient.id || '').toLowerCase().includes(normalizedSearch)
       );
     }
 
@@ -259,8 +249,8 @@ const Patients = () => {
           bValue = b.name.toLowerCase();
           break;
         case 'date':
-          aValue = new Date(a.date.split('/').reverse().join('-'));
-          bValue = new Date(b.date.split('/').reverse().join('-'));
+          aValue = a.date ? new Date(a.date.split('/').reverse().join('-')).getTime() : 0;
+          bValue = b.date ? new Date(b.date.split('/').reverse().join('-')).getTime() : 0;
           break;
         case 'status':
           aValue = a.status;
@@ -284,7 +274,7 @@ const Patients = () => {
     setSearchTerm('');
     setSelectedStatus('all');
     setSelectedTreatment('all');
-    setSortBy('date');
+    setSortBy('name');
     setSortOrder('desc');
   };
 
@@ -325,13 +315,16 @@ const Patients = () => {
             >
               &times;
             </button>
-            <div className="flex items-center gap-3 px-6 pt-6 pb-2 bg-gradient-to-r from-blue-50 via-white to-blue-50">
+            <div className="flex items-center gap-3 px-6 pt-6 pb-2 bg-linear-to-r from-blue-50 via-white to-blue-50">
               <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-50">
                 <svg className="w-7 h-7 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
               <h2 className="text-xl font-bold">{editingPatient ? 'Modifier un patient' : 'Ajouter un patient'}</h2>
+              {editLoading && (
+                <span className="text-xs text-gray-500">Chargement...</span>
+              )}
                 <div className="w-full border-t border-gray-200 my-2"></div>
 
             </div>
@@ -459,12 +452,12 @@ const Patients = () => {
                 <button
                   type="submit"
                   className="px-6 py-2.5 text-white rounded-full font-semibold bg-emerald-600 border-2 border-emerald-600 hover:bg-emerald-700 hover:border-emerald-700 focus:ring-4 focus:ring-emerald-200 flex items-center justify-center gap-2 text-sm shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed max-w-xs w-full mx-auto"
-                  disabled={formLoading}
+                  disabled={isFormBusy}
                 >
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span>{formLoading ? "Enregistrement..." : (editingPatient ? "Mettre à jour" : "Ajouter le patient")}</span>
+                  <span>{isFormBusy ? "Enregistrement..." : (editingPatient ? "Mettre à jour" : "Ajouter le patient")}</span>
                 </button>
               </div>
             </form>
@@ -632,7 +625,7 @@ const Patients = () => {
       </div>
 
       {/* Tableau des patients */}
-      <div className="relative overflow-hidden rounded-2xl border border-blue-100 shadow-lg bg-gradient-to-br from-white/80 via-blue-50/60 to-white/90 backdrop-blur-sm transition-all duration-300 group hover:shadow-2xl hover:border-blue-200">
+      <div className="relative overflow-hidden rounded-2xl border border-blue-100 shadow-lg bg-linear-to-br from-white/80 via-blue-50/60 to-white/90 backdrop-blur-sm transition-all duration-300 group hover:shadow-2xl hover:border-blue-200">
         <div className="px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Patients</h2>
@@ -715,7 +708,7 @@ const Patients = () => {
                     <td className="py-4 px-4">
                       <div className="flex items-center">
                         <div className="relative">
-                          <div className="w-8 h-8 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center mr-3 group-hover:scale-105 transition-transform duration-200">
+                          <div className="w-8 h-8 bg-linear-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center mr-3 group-hover:scale-105 transition-transform duration-200">
                             <span className="font-semibold text-blue-600 text-xs">{patient.initials}</span>
                           </div>
                           {patient.status === 'Nouveau' && (
@@ -723,7 +716,7 @@ const Patients = () => {
                           )}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900 text-xs truncate max-w-[140px]">{patient.name}</p>
+                          <p className="font-medium text-gray-900 text-xs truncate max-w-35">{patient.name}</p>
                           <div className="flex items-center text-gray-500 text-xs mt-0.5">
                             <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -741,21 +734,13 @@ const Patients = () => {
                           </svg>
                           {patient.phone}
                         </p>
-                        <div className="flex flex-col md:flex-row gap-3 w-full">
-                          <input
-                            name="city"
-                            value={form.city}
-                            onChange={handleFormChange}
-                            placeholder="Ville"
-                            className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400 md:w-1/2"
-                          />
-                          <input
-                            name="address"
-                            value={form.address}
-                            onChange={handleFormChange}
-                            placeholder="Adresse"
-                            className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400 md:w-1/2"
-                          />
+                        <div className="text-xs text-gray-500 mt-1">
+                          <span className="font-medium text-gray-700">Ville:</span>{' '}
+                          {patient.city || '-'}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          <span className="font-medium text-gray-700">Adresse:</span>{' '}
+                          {patient.address || '-'}
                         </div>
                         <div>
                           <svg className="w-3 h-3 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
