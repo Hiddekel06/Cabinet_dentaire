@@ -70,6 +70,12 @@ const Patients = () => {
     return 'blue';
   };
 
+  const colorClasses = {
+    blue: 'bg-blue-50 text-blue-700 border-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    amber: 'bg-amber-50 text-amber-700 border-amber-100',
+  };
+
   const mapPatient = (p) => ({
     apiId: p.id,
     id: `N°${p.id}`,
@@ -127,31 +133,31 @@ const Patients = () => {
     setFormSuccess("");
   };
 
-  const handleEdit = (patient) => {
+  const handleEdit = async (patient) => {
     if (!patient?.apiId) return;
-    setEditingPatient(patient);
     setEditLoading(true);
-    setShowForm(true);
-    patientAPI.getById(patient.apiId)
-      .then(({ data }) => {
-        setForm((prev) => ({
-          ...prev,
-          first_name: data.first_name || '',
-          last_name: data.last_name || '',
-          phone: data.phone || '',
-          email: data.email || '',
-          city: data.city || '',
-          address: data.address || '',
-          gender: data.gender || '',
-          date_of_birth: data.date_of_birth || '',
-          notes: data.notes || '',
-        }));
-      })
-      .catch((error) => {
-        console.error('Erreur chargement patient:', error);
-        setFormError('Impossible de charger le patient.');
-      })
-      .finally(() => setEditLoading(false));
+    setEditingPatient(patient);
+    setFormError('');
+    try {
+      const { data } = await patientAPI.getById(patient.apiId);
+      setForm({
+        first_name: data.first_name || '',
+        last_name: data.last_name || '',
+        phone: data.phone || '',
+        email: data.email || '',
+        city: data.city || '',
+        address: data.address || '',
+        gender: data.gender || '',
+        date_of_birth: data.date_of_birth || '',
+        notes: data.notes || '',
+      });
+      setShowForm(true);
+    } catch (error) {
+      console.error('Erreur chargement patient:', error);
+      setFormError('Impossible de charger le patient.');
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   const handleDelete = async (patient) => {
@@ -197,15 +203,13 @@ const Patients = () => {
     setFormLoading(true);
     try {
       if (editingPatient?.apiId) {
-        const { data } = await patientAPI.update(editingPatient.apiId, form);
-        setPatients((prev) => prev.map((p) => (p.apiId === data.id ? mapPatient(data) : p)));
+        await patientAPI.update(editingPatient.apiId, form);
         setFormSuccess("Patient mis à jour avec succès !");
-        reloadPatients();
+        await reloadPatients();
       } else {
-        const { data } = await patientAPI.create(form);
-        setPatients((prev) => [mapPatient(data), ...prev]);
+        await patientAPI.create(form);
         setFormSuccess("Patient ajouté avec succès !");
-        reloadPatients();
+        await reloadPatients();
       }
       closeForm();
     } catch (err) {
@@ -268,7 +272,7 @@ const Patients = () => {
     });
 
     return results;
-  }, [searchTerm, selectedStatus, selectedTreatment, sortBy, sortOrder]);
+  }, [patients, searchTerm, selectedStatus, selectedTreatment, sortBy, sortOrder]);
 
   const clearFilters = () => {
     setSearchTerm('');
@@ -752,7 +756,7 @@ const Patients = () => {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-${patient.color}-50 text-${patient.color}-700 border border-${patient.color}-100`}>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${colorClasses[patient.color] || colorClasses.blue}`}>
                         {patient.status}
                       </span>
                     </td>
