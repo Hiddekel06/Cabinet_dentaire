@@ -76,4 +76,62 @@ export const appointmentAPI = {
     api.delete(`/api/appointments/${id}`),
 };
 
+// Endpoints pour les traitements (catalogue)
+export const treatmentAPI = {
+  getAll: (page = 1) =>
+    api.get(`/api/treatments?page=${page}`),
+
+  getById: (id) =>
+    api.get(`/api/treatments/${id}`),
+
+  create: (data) =>
+    api.post('/api/treatments', data),
+
+  update: (id, data) =>
+    api.put(`/api/treatments/${id}`, data),
+
+  delete: (id) =>
+    api.delete(`/api/treatments/${id}`),
+};
+
+// Endpoints pour les suivis patients (patient-treatments)
+export const patientTreatmentAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return api.get(`/api/patient-treatments?${query}`);
+  },
+
+  getById: (id) =>
+    api.get(`/api/patient-treatments/${id}`),
+
+  create: (data) =>
+    api.post('/api/patient-treatments', data),
+
+  update: (id, data) =>
+    api.put(`/api/patient-treatments/${id}`, data),
+
+  delete: (id) =>
+    api.delete(`/api/patient-treatments/${id}`),
+};
+
+// Endpoints pour les dossiers médicaux
+export const medicalRecordAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return api.get(`/api/medical-records?${query}`);
+  },
+
+  getById: (id) =>
+    api.get(`/api/medical-records/${id}`),
+
+  create: (data) =>
+    api.post('/api/medical-records', data),
+
+  update: (id, data) =>
+    api.put(`/api/medical-records/${id}`, data),
+
+  delete: (id) =>
+    api.delete(`/api/medical-records/${id}`),
+};
+
 export default api;

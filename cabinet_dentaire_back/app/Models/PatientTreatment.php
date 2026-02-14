@@ -18,6 +18,7 @@ class PatientTreatment extends Model
         'total_sessions',
         'completed_sessions',
         'notes',
+        'next_appointment_id',
     ];
 
     protected $casts = [
@@ -41,6 +42,14 @@ class PatientTreatment extends Model
     public function treatment()
     {
         return $this->belongsTo(Treatment::class);
+    }
+
+    /**
+     * Prochain rendez-vous associé au suivi
+     */
+    public function nextAppointment()
+    {
+        return $this->belongsTo(Appointment::class, 'next_appointment_id');
     }
 
     /**

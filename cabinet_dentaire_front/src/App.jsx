@@ -7,6 +7,7 @@ import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
 import MedicalCertificates from './pages/MedicalCertificates';
 import Statistics from './pages/Statistics';
+import PatientTreatments from './pages/PatientTreatments';
 import './App.css';
 
 function App() {
@@ -41,6 +42,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Appointments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/treatments"
+            element={
+              <ProtectedRoute>
+                <PatientTreatments />
               </ProtectedRoute>
             }
           />

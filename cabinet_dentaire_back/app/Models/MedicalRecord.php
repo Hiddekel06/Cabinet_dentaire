@@ -16,6 +16,8 @@ class MedicalRecord extends Model
         'treatment_description',
         'diagnosis',
         'observations',
+        'next_action',
+        'appointment_notes',
         'created_by',
     ];
 

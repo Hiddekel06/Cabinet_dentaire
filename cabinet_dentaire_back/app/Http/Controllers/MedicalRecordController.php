@@ -40,6 +40,8 @@ class MedicalRecordController extends Controller
             'treatment_description' => ['required', 'string'],
             'diagnosis' => ['nullable', 'string'],
             'observations' => ['nullable', 'string'],
+            'next_action' => ['nullable', 'string'],
+            'appointment_notes' => ['nullable', 'string'],
         ]);
 
         // Ajouter l'utilisateur connecté comme créateur
@@ -64,6 +66,8 @@ class MedicalRecordController extends Controller
             'treatment_description' => ['sometimes', 'required', 'string'],
             'diagnosis' => ['nullable', 'string'],
             'observations' => ['nullable', 'string'],
+            'next_action' => ['nullable', 'string'],
+            'appointment_notes' => ['nullable', 'string'],
             'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
             'patient_treatment_id' => ['nullable', 'integer', 'exists:patient_treatments,id'],
         ]);

@@ -205,13 +205,14 @@ const Patients = () => {
       if (editingPatient?.apiId) {
         await patientAPI.update(editingPatient.apiId, form);
         setFormSuccess("Patient mis à jour avec succès !");
-        await reloadPatients();
+        closeForm();
+        reloadPatients();
       } else {
         await patientAPI.create(form);
         setFormSuccess("Patient ajouté avec succès !");
-        await reloadPatients();
+        closeForm();
+        reloadPatients();
       }
-      closeForm();
     } catch (err) {
       setFormError(err.response?.data?.message || "Erreur lors de l'ajout du patient");
     } finally {

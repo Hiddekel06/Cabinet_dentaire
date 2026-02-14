@@ -20,9 +20,10 @@ export const Header = () => {
           <div className="flex items-center space-x-4">
             <Link to="/dashboard" className="flex items-center space-x-3 hover:opacity-90 transition-opacity">
               <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center shadow-sm">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                </svg>
+                  {/* Icône dent pour cabinet dentaire */}
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2c2.21 0 4 1.79 4 4 0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2 0-2.21 1.79-4 4-4zm0 0c-3.31 0-6 2.69-6 6 0 4.97 3.58 9.16 8.44 9.93.36.06.56-.41.56-.93V17c0-.55-.45-1-1-1h-2c-.55 0-1 .45-1 1v.99c0 .52.2.99.56.93C14.42 17.16 18 12.97 18 8c0-3.31-2.69-6-6-6z" />
+                  </svg>
               </div>
               <div className="hidden sm:block">
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">MATLABUL SHIFAH</h1>
