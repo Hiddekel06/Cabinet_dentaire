@@ -21,6 +21,8 @@ const motifOptions = [
 const Appointments = () => {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [appointmentsError, setAppointmentsError] = useState('');
   const [patients, setPatients] = useState([]);
@@ -37,6 +39,8 @@ const Appointments = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
+  const [showMoveConfirmation, setShowMoveConfirmation] = useState(false);
+  const [moveData, setMoveData] = useState({ appointmentId: null, newDate: null, appointment: null });
   const hasLoadedRef = useRef(false);
   const [quickForm, setQuickForm] = useState({
     date: '',
@@ -66,7 +70,7 @@ const Appointments = () => {
     setAppointmentsLoading(true);
     setAppointmentsError('');
     try {
-      const { data } = await appointmentAPI.getAll(1);
+      const { data } = await appointmentAPI.getAll(page);
       const list = Array.isArray(data?.data) ? data.data : [];
       const mapped = list.map((a) => {
         const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
@@ -88,6 +92,7 @@ const Appointments = () => {
         };
       });
       setAppointments(mapped);
+      setTotalPages(data?.last_page || 1);
     } catch (error) {
       console.error('Erreur chargement rendez-vous:', error);
       setAppointmentsError('Impossible de charger les rendez-vous.');
@@ -124,11 +129,10 @@ const Appointments = () => {
   }, []);
 
   useEffect(() => {
-    if (hasLoadedRef.current) return;
-    hasLoadedRef.current = true;
     loadAppointments();
     loadPatients();
-  }, []);
+    // eslint-disable-next-line
+  }, [page]);
 
   const handleViewDetails = (appointment) => {
     setSelectedAppointment(appointment);
@@ -320,6 +324,33 @@ const Appointments = () => {
     setSelectedDate(newDate);
   };
 
+  const confirmMoveAppointment = async () => {
+    try {
+      const { appointmentId, newDate, appointment } = moveData;
+      if (!appointmentId || !appointment) return;
+      
+      // Créer le nouvel objet datetime
+      const dateStr = toDateStr(newDate);
+      const [year, month, day] = dateStr.split('-');
+      const [hours, minutes] = (appointment.heure || '09:00').split(':');
+      const newDateTime = `${year}-${month}-${day}T${hours}:${minutes}:00`;
+      
+      // Appel API pour mettre à jour le rendez-vous
+      await appointmentAPI.update(appointmentId, {
+        appointment_date: newDateTime,
+      });
+      
+      // Mettre à jour l'état local
+      moveAppointment(appointmentId, newDate);
+      setShowMoveConfirmation(false);
+      setMoveData({ appointmentId: null, newDate: null, appointment: null });
+    } catch (error) {
+      console.error('Erreur déplacement rendez-vous:', error);
+      setAppointmentsError('Impossible de déplacer le rendez-vous.');
+      setShowMoveConfirmation(false);
+    }
+  };
+
   const handleDragStart = (e, appointmentId) => {
     e.dataTransfer.setData('text/plain', String(appointmentId));
   };
@@ -328,7 +359,11 @@ const Appointments = () => {
     e.preventDefault();
     const id = Number(e.dataTransfer.getData('text/plain'));
     if (!Number.isNaN(id)) {
-      moveAppointment(id, date);
+      const appointment = appointments.find(a => a.id === id);
+      if (appointment) {
+        setMoveData({ appointmentId: id, newDate: date, appointment });
+        setShowMoveConfirmation(true);
+      }
     }
   };
 
@@ -554,6 +589,72 @@ const Appointments = () => {
           </div>
         </div>
       )}
+
+      {/* Modale de confirmation du déplacement */}
+      {showMoveConfirmation && moveData.appointment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+          onClick={() => setShowMoveConfirmation(false)}
+        >
+          <div
+            className="relative w-full max-w-sm mx-2 bg-white rounded-lg shadow-lg border border-blue-100"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+              onClick={() => setShowMoveConfirmation(false)}
+              aria-label="Fermer"
+              type="button"
+            >
+              &times;
+            </button>
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Confirmer le déplacement</h3>
+              <div className="mb-6">
+                <p className="text-sm text-gray-600 mb-4">
+                  Êtes-vous sûr de vouloir déplacer ce rendez-vous ?
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2 mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Patient :</span>
+                    <span className="text-sm font-semibold text-gray-900">{moveData.appointment.patient}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Nouvelle date :</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {moveData.newDate ? moveData.newDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Heure :</span>
+                    <span className="text-sm font-semibold text-gray-900">{moveData.appointment.heure}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Motif :</span>
+                    <span className="text-sm font-semibold text-gray-900">{moveData.appointment.motif}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  onClick={() => setShowMoveConfirmation(false)}
+                >
+                  Annuler
+                </button>
+                <button
+                  className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium transition-colors"
+                  onClick={confirmMoveAppointment}
+                >
+                  Confirmer le déplacement
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestion des rendez-vous</h1>
@@ -863,13 +964,21 @@ const Appointments = () => {
       {viewMode === 'table' && (
         <div className="flex items-center justify-between mt-6">
           <p className="text-gray-500 text-sm">
-            Affichage de {filteredAppointments.length} rendez-vous
+            Page {page} sur {totalPages} | Affichage de {appointments.length} rendez-vous
           </p>
           <div className="flex space-x-2">
-            <button className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+            <button
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
               ← Précédent
             </button>
-            <button className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 rounded-lg flex items-center gap-1">
+            <button
+              className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 rounded-lg flex items-center gap-1"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
               <span>Suivant</span>
               <svg
                 className="w-4 h-4"

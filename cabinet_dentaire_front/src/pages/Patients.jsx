@@ -31,6 +31,8 @@ const initialForm = {
 
 const Patients = () => {
   const [patients, setPatients] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [patientsLoading, setPatientsLoading] = useState(true);
   const [patientsError, setPatientsError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,14 +100,13 @@ const Patients = () => {
 
   useEffect(() => {
     const loadPatients = async () => {
-      if (hasLoadedRef.current) return;
-      hasLoadedRef.current = true;
       setPatientsLoading(true);
       setPatientsError('');
       try {
-        const { data } = await patientAPI.getAll(1);
+        const { data } = await patientAPI.getAll(page);
         const list = Array.isArray(data?.data) ? data.data : [];
         setPatients(list.map(mapPatient));
+        setTotalPages(data?.last_page || 1);
       } catch (error) {
         console.error('Erreur chargement patients:', error);
         setPatientsError('Impossible de charger les patients.');
@@ -113,9 +114,8 @@ const Patients = () => {
         setPatientsLoading(false);
       }
     };
-
     loadPatients();
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -179,9 +179,10 @@ const Patients = () => {
     setPatientsLoading(true);
     setPatientsError('');
     try {
-      const { data } = await patientAPI.getAll(1);
+      const { data } = await patientAPI.getAll(page);
       const list = Array.isArray(data?.data) ? data.data : [];
       setPatients(list.map(mapPatient));
+      setTotalPages(data?.last_page || 1);
     } catch (error) {
       console.error('Erreur chargement patients:', error);
       setPatientsError('Impossible de charger les patients.');
@@ -831,12 +832,20 @@ const Patients = () => {
         </div>
         {/* Pagination */}
         <div className="px-8 py-4 border-t border-blue-100 flex items-center justify-between mt-2">
-          <p className="text-gray-500 text-sm">Affichage de {filteredPatients.length} patient{filteredPatients.length !== 1 ? 's' : ''}</p>
+          <p className="text-gray-500 text-sm">Page {page} sur {totalPages} | Affichage de {patients.length} patient{patients.length !== 1 ? 's' : ''}</p>
           <div className="flex space-x-2">
-            <button className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+            <button
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
               ← Précédent
             </button>
-            <button className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 hover:shadow-md rounded-lg transition-all duration-200 flex items-center gap-1">
+            <button
+              className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 hover:shadow-md rounded-lg transition-all duration-200 flex items-center gap-1"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
               <span>Suivant</span>
               <svg className="w-4 h-4 text-blue-500 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
