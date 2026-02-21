@@ -9,7 +9,9 @@ class TreatmentController extends Controller
 {
     public function index()
     {
-        $treatments = Treatment::query()->orderBy('name')->get();
+        $treatments = Treatment::query()
+            ->orderBy('name')
+            ->paginate(50);
 
         return response()->json($treatments);
     }

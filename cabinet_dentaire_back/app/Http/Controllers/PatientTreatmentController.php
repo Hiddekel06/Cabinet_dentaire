@@ -10,7 +10,9 @@ class PatientTreatmentController extends Controller
 {
     public function index(Request $request)
     {
-        $query = PatientTreatment::query()->with(['patient', 'treatment']);
+        $query = PatientTreatment::query()
+            ->with(['patient', 'treatment', 'nextAppointment'])
+            ->select('patient_treatments.*');
 
         // Filtrer par patient
         if ($request->has('patient_id')) {
@@ -49,6 +51,11 @@ class PatientTreatmentController extends Controller
             'next_appointment_notes' => ['nullable', 'string'],
         ]);
 
+        // Empêcher la création d'un rendez-vous à une date passée
+        if (strtotime($validated['next_appointment_date']) < time()) {
+            return response()->json(['message' => 'Impossible de créer un rendez-vous dans le passé.'], 422);
+        }
+
         $appointment = Appointment::create([
             'patient_id' => $validated['patient_id'],
             'dentist_id' => $request->user()->id,
@@ -63,7 +70,7 @@ class PatientTreatmentController extends Controller
             'treatment_id' => $validated['treatment_id'],
             'start_date' => $validated['start_date'],
             'end_date' => $validated['end_date'] ?? null,
-            'status' => $validated['status'] ?? null,
+            'status' => $validated['status'] ?? 'planned',
             'total_sessions' => $validated['total_sessions'] ?? null,
             'completed_sessions' => $validated['completed_sessions'] ?? 0,
             'notes' => $validated['notes'] ?? null,
@@ -90,6 +97,7 @@ class PatientTreatmentController extends Controller
             'total_sessions' => ['nullable', 'integer', 'min:1'],
             'completed_sessions' => ['nullable', 'integer', 'min:0'],
             'notes' => ['nullable', 'string'],
+            'next_appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
         ]);
 
         $patientTreatment->update($validated);

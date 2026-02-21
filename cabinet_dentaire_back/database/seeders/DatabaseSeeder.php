@@ -21,5 +21,8 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        // Seeder pour les traitements
+        $this->call(TreatementSeeder::class);
     }
 }

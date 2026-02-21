@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Layout } from "../components/Layout";
 import { patientAPI } from "../services/api";
 
@@ -47,6 +47,7 @@ const Patients = () => {
   const [formLoading, setFormLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const isFormBusy = formLoading || editLoading;
+  const hasLoadedRef = useRef(false);
 
   const formatDate = (value) => {
     if (!value) return '';
@@ -97,6 +98,8 @@ const Patients = () => {
 
   useEffect(() => {
     const loadPatients = async () => {
+      if (hasLoadedRef.current) return;
+      hasLoadedRef.current = true;
       setPatientsLoading(true);
       setPatientsError('');
       try {

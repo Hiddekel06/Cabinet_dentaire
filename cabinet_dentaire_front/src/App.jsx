@@ -6,8 +6,20 @@ import { Dashboard } from './pages/Dashboard';
 import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
 import MedicalCertificates from './pages/MedicalCertificates';
+import DossierMedicaux from './pages/DossierMedicaux';
+          <Route
+            path="/medical-records"
+            element={
+              <ProtectedRoute>
+                <DossierMedicaux />
+              </ProtectedRoute>
+            }
+          />
 import Statistics from './pages/Statistics';
 import PatientTreatments from './pages/PatientTreatments';
+import PatientTreatmentsHistory from './pages/PatientTreatmentsHistory';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminTreatments from './pages/admin/AdminTreatments';
 import './App.css';
 
 function App() {
@@ -50,6 +62,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <PatientTreatments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/treatments/history"
+            element={
+              <ProtectedRoute>
+                <PatientTreatmentsHistory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/treatments"
+            element={
+              <ProtectedRoute>
+                <AdminTreatments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminDashboard />
               </ProtectedRoute>
             }
           />

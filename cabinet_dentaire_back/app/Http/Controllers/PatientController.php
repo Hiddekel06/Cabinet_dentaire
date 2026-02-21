@@ -27,7 +27,7 @@ class PatientController extends Controller
 
             $patient->last_appointment_date = $lastAppointment?->appointment_date;
             $patient->last_appointment_status = $lastAppointment?->status;
-            $patient->last_treatment = $lastRecord?->treatment_description;
+            $patient->last_treatment = $lastRecord?->treatment_performed;
 
             $patient->status = match ($lastAppointment?->status) {
                 'pending', 'confirmed' => 'En traitement',
@@ -77,7 +77,7 @@ class PatientController extends Controller
 
         $patient->last_appointment_date = $lastAppointment?->appointment_date;
         $patient->last_appointment_status = $lastAppointment?->status;
-        $patient->last_treatment = $lastRecord?->treatment_description;
+        $patient->last_treatment = $lastRecord?->treatment_performed;
 
         $patient->status = match ($lastAppointment?->status) {
             'pending', 'confirmed' => 'En traitement',

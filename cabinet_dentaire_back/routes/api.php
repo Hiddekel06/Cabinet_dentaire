@@ -35,6 +35,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des radiographies
     Route::apiResource('radiographies', RadiographyController::class);
+
+    // Gestion des certificats médicaux
+    Route::apiResource('medical-certificates', \App\Http\Controllers\MedicalCertificateController::class);
     
     // Dossier médical complet du patient
     Route::prefix('patients/{patient}')->group(function () {

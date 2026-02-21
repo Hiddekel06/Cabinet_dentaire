@@ -37,6 +37,7 @@ const Appointments = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
+  const hasLoadedRef = useRef(false);
   const [quickForm, setQuickForm] = useState({
     date: '',
     heure: '09:00',
@@ -46,51 +47,6 @@ const Appointments = () => {
     statut: 'À venir',
   });
   const menuRef = useRef(null);
-
-  useEffect(() => {
-    const statusMap = {
-      pending: 'À venir',
-      confirmed: 'À venir',
-      completed: 'Terminé',
-      cancelled: 'Annulé',
-    };
-
-    const loadAppointments = async () => {
-      setAppointmentsLoading(true);
-      setAppointmentsError('');
-      try {
-        const { data } = await appointmentAPI.getAll(1);
-        const list = Array.isArray(data?.data) ? data.data : [];
-        const mapped = list.map((a) => {
-          const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
-          const date = dateObj ? dateObj.toISOString().slice(0, 10) : '';
-          const heure = dateObj
-            ? dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-            : '';
-          const patient = a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : '';
-          return {
-            apiId: a.id,
-            id: a.id,
-            date,
-            heure,
-            patient,
-            motif: a.reason || 'Consultation',
-            praticien: a.dentist?.name || 'Dentiste',
-            statut: statusMap[a.status] || 'À venir',
-          };
-        });
-        setAppointments(mapped);
-      } catch (error) {
-        console.error('Erreur chargement rendez-vous:', error);
-        setAppointmentsError('Impossible de charger les rendez-vous.');
-      }
-      finally {
-        setAppointmentsLoading(false);
-      }
-    };
-
-    loadAppointments();
-  }, []);
 
   // Fermer le menu quand on clique en dehors
   const statusMap = {
@@ -168,6 +124,8 @@ const Appointments = () => {
   }, []);
 
   useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     loadAppointments();
     loadPatients();
   }, []);
@@ -320,6 +278,13 @@ const Appointments = () => {
     if (!quickForm.patient_id || !quickForm.date || !quickForm.heure) return;
     if (!user?.id) {
       setAppointmentsError("Utilisateur non authentifié.");
+      return;
+    }
+    // Empêcher la création à une date passée
+    const now = new Date();
+    const selectedDateTime = new Date(`${quickForm.date}T${quickForm.heure}`);
+    if (selectedDateTime < now) {
+      setAppointmentsError("Impossible de créer un rendez-vous dans le passé.");
       return;
     }
     try {

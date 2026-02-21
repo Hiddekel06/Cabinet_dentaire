@@ -26,6 +26,11 @@ class AppointmentController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
+        // Empêcher la création d'un rendez-vous à une date passée
+        if (strtotime($validated['appointment_date']) < time()) {
+            return response()->json(['message' => 'Impossible de créer un rendez-vous dans le passé.'], 422);
+        }
+
         $appointment = Appointment::create($validated);
 
         return response()->json($appointment, 201);
@@ -47,6 +52,11 @@ class AppointmentController extends Controller
             'reason' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
         ]);
+
+        // Empêcher la modification d'un rendez-vous à une date passée
+        if (isset($validated['appointment_date']) && strtotime($validated['appointment_date']) < time()) {
+            return response()->json(['message' => 'Impossible de modifier un rendez-vous à une date passée.'], 422);
+        }
 
         $appointment->update($validated);
 

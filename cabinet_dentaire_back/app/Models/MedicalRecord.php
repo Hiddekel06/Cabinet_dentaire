@@ -13,12 +13,13 @@ class MedicalRecord extends Model
         'patient_id',
         'appointment_id',
         'patient_treatment_id',
-        'treatment_description',
+        'treatment_performed',
         'diagnosis',
         'observations',
         'next_action',
         'appointment_notes',
         'created_by',
+        'date',
     ];
 
     protected $casts = [

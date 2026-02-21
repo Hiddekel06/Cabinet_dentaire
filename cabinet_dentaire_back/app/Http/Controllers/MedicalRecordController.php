@@ -37,7 +37,7 @@ class MedicalRecordController extends Controller
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
             'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
             'patient_treatment_id' => ['nullable', 'integer', 'exists:patient_treatments,id'],
-            'treatment_description' => ['required', 'string'],
+            'treatment_performed' => ['required', 'string'],
             'diagnosis' => ['nullable', 'string'],
             'observations' => ['nullable', 'string'],
             'next_action' => ['nullable', 'string'],
@@ -46,6 +46,8 @@ class MedicalRecordController extends Controller
 
         // Ajouter l'utilisateur connecté comme créateur
         $validated['created_by'] = $request->user()->id;
+        // Ajouter la date du jour si non fournie
+        $validated['date'] = now()->toDateString();
 
         $record = MedicalRecord::create($validated);
         $record->load(['patient', 'appointment', 'patientTreatment', 'creator']);
@@ -63,7 +65,7 @@ class MedicalRecordController extends Controller
     public function update(Request $request, MedicalRecord $medicalRecord)
     {
         $validated = $request->validate([
-            'treatment_description' => ['sometimes', 'required', 'string'],
+            'treatment_performed' => ['sometimes', 'required', 'string'],
             'diagnosis' => ['nullable', 'string'],
             'observations' => ['nullable', 'string'],
             'next_action' => ['nullable', 'string'],
