@@ -13,6 +13,9 @@ export const medicalCertificateAPI = {
 
   getById: (id) =>
     api.get(`/api/medical-certificates/${id}`),
+  
+  getByPatient: (patientId) =>
+    api.get(`/api/medical-certificates?patient_id=${patientId}`),
 
   create: (data) => {
     clearCache('medical-certificates');
@@ -248,6 +251,9 @@ export const medicalRecordAPI = {
 
   getById: (id) =>
     api.get(`/api/medical-records/${id}`),
+  
+  getByPatient: (patientId) =>
+    api.get(`/api/medical-records?patient_id=${patientId}`),
 
   create: (data) => {
     clearCache('medical-records');

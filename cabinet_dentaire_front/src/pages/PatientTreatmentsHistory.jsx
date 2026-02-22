@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { patientAPI, treatmentAPI, patientTreatmentAPI } from '../services/api';
+import { patientTreatmentAPI } from '../services/api';
 
 const PatientTreatmentsHistory = () => {
   const [treatments, setTreatments] = useState([]);
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('date');
@@ -70,7 +72,17 @@ const PatientTreatmentsHistory = () => {
               )}
               {filteredTreatments.map((pt) => (
                 <tr key={pt.id} className="border-b last:border-b-0">
-                  <td className="p-2">{pt.patient?.first_name} {pt.patient?.last_name}</td>
+                  <td className="p-2">
+                    <span className="font-semibold text-blue-600">{pt.patient?.first_name} {pt.patient?.last_name}</span>
+                    {pt.patient && (
+                      <button
+                        className="ml-2 px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        onClick={() => navigate(`/patients/${pt.patient.id}/dossier`)}
+                      >
+                        Voir fiche patient
+                      </button>
+                    )}
+                  </td>
                   <td className="p-2">{pt.treatment?.name}</td>
                   <td className="p-2">{pt.start_date}</td>
                   <td className="p-2">{pt.end_date}</td>

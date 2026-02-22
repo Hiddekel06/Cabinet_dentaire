@@ -10,12 +10,16 @@ class MedicalCertificateController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        // Liste paginée des certificats avec patient et issuer
-        $certificates = MedicalCertificate::with(['patient', 'issuer'])
-            ->latest('issue_date')
-            ->paginate(20);
+        $query = MedicalCertificate::with(['patient', 'issuer'])->latest('issue_date');
+        
+        // Filtrer par patient
+        if ($request->has('patient_id')) {
+            $query->where('patient_id', $request->input('patient_id'));
+        }
+        
+        $certificates = $query->paginate(20);
         return response()->json($certificates);
     }
 

@@ -15,18 +15,36 @@ const MedicalCertificates = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
+    loadCertificates();
+  }, [page]);
+
+  const loadCertificates = async () => {
     setLoading(true);
-    Promise.all([
-      medicalCertificateAPI.getAll(),
-      patientAPI.getAll()
-    ]).then(([certRes, patRes]) => {
+    try {
+      const certRes = await medicalCertificateAPI.getAll({ page });
       setCertificates(certRes.data.data || certRes.data || []);
-      setPatients(patRes.data.data || patRes.data || []);
-    }).catch(() => setError("Erreur de chargement"))
-      .finally(() => setLoading(false));
-  }, []);
+      setTotalPages(certRes.data.last_page || 1);
+    } catch {
+      setError("Erreur de chargement");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPatientsOnDemand = async () => {
+    if (patients.length === 0) {
+      try {
+        const patRes = await patientAPI.getAll(1);
+        setPatients(patRes.data.data || patRes.data || []);
+      } catch {
+        setError("Erreur de chargement des patients");
+      }
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -40,7 +58,7 @@ const MedicalCertificates = () => {
     e.preventDefault();
     try {
       const res = await medicalCertificateAPI.create(form);
-      setCertificates([res.data, ...certificates]);
+      await loadCertificates(); // Reload to get fresh data with pagination
       setShowModal(false);
       setForm({
         patient_id: "",
@@ -57,7 +75,7 @@ const MedicalCertificates = () => {
     if (window.confirm("Supprimer ce certificat ?")) {
       try {
         await medicalCertificateAPI.delete(id);
-        setCertificates(certificates.filter(c => c.id !== id));
+        await loadCertificates();
       } catch {
         alert("Erreur lors de la suppression");
       }
@@ -74,7 +92,7 @@ const MedicalCertificates = () => {
     const html = `<!DOCTYPE html>
       <html>
         <head>
-          <title>Certificat médical</title>
+          <title>Certificat médical - ${patientName}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 40px; }
             .header { text-align: center; margin-bottom: 32px; }
@@ -110,7 +128,10 @@ const MedicalCertificates = () => {
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 300);
+    setTimeout(() => {
+      win.print();
+      win.close();
+    }, 300);
   };
 
   return (
@@ -131,7 +152,10 @@ const MedicalCertificates = () => {
           </div>
           <div className="mt-3 sm:mt-0 flex space-x-2">
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => {
+                setShowModal(true);
+                loadPatientsOnDemand();
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-blue-600 text-sm font-medium rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer select-none border border-blue-100"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,6 +228,28 @@ const MedicalCertificates = () => {
             </tbody>
           </table>
         </div>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+            >
+              Précédent
+            </button>
+            <span className="text-sm text-gray-600">
+              Page {page} sur {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+            >
+              Suivant
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal d'ajout */}

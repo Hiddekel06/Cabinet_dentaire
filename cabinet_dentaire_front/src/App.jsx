@@ -7,17 +7,10 @@ import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
 import MedicalCertificates from './pages/MedicalCertificates';
 import DossierMedicaux from './pages/DossierMedicaux';
-          <Route
-            path="/medical-records"
-            element={
-              <ProtectedRoute>
-                <DossierMedicaux />
-              </ProtectedRoute>
-            }
-          />
 import Statistics from './pages/Statistics';
 import PatientTreatments from './pages/PatientTreatments';
 import PatientTreatmentsHistory from './pages/PatientTreatmentsHistory';
+import PatientDossier from './pages/PatientDossier';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
 import './App.css';
@@ -74,6 +67,14 @@ function App() {
             }
           />
           <Route
+            path="/patients/:id/dossier"
+            element={
+              <ProtectedRoute>
+                <PatientDossier />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/treatments"
             element={
               <ProtectedRoute>
@@ -103,6 +104,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <MedicalCertificates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/medical-records"
+            element={
+              <ProtectedRoute>
+                <DossierMedicaux />
               </ProtectedRoute>
             }
           />
