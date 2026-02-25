@@ -11,18 +11,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('medical_certificates', function (Blueprint $table) {
-            $table->id();
-            $table->unsignedBigInteger('patient_id');
-            $table->unsignedBigInteger('issued_by'); // user_id du praticien
-            $table->date('issue_date');
-            $table->string('certificate_type')->nullable();
-            $table->text('content');
-            $table->timestamps();
-
-            $table->foreign('patient_id')->references('id')->on('patients')->onDelete('cascade');
-            $table->foreign('issued_by')->references('id')->on('users')->onDelete('cascade');
-        });
+        // Schema::create('medical_certificates', function (Blueprint $table) {
+        //     $table->id();
+        //     $table->unsignedBigInteger('patient_id');
+        //     $table->unsignedBigInteger('issued_by'); // user_id du praticien
+        //     $table->date('issue_date');
+        //     $table->string('certificate_type')->nullable();
+        //     $table->text('content');
+        //     $table->timestamps();
+        // });
     }
 
     /**
@@ -30,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('medical_certificates');
+        // Schema::dropIfExists('medical_certificates');
     }
 };

@@ -49,6 +49,9 @@ const Patients = () => {
   const [formLoading, setFormLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const isFormBusy = formLoading || editLoading;
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const hasLoadedRef = useRef(false);
 
   const formatDate = (value) => {
@@ -163,15 +166,25 @@ const Patients = () => {
     }
   };
 
-  const handleDelete = async (patient) => {
+  const handleDelete = (patient) => {
     if (!patient?.apiId) return;
-    if (!window.confirm(`Supprimer le patient ${patient.name} ?`)) return;
+    setPatientToDelete(patient);
+    setShowDeleteConfirmation(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!patientToDelete?.apiId) return;
+    setDeleteLoading(true);
     try {
-      await patientAPI.delete(patient.apiId);
+      await patientAPI.delete(patientToDelete.apiId);
       await reloadPatients();
+      setShowDeleteConfirmation(false);
+      setPatientToDelete(null);
     } catch (error) {
       console.error('Erreur suppression patient:', error);
       setPatientsError('Impossible de supprimer le patient.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -470,6 +483,88 @@ const Patients = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de confirmation de suppression */}
+      {showDeleteConfirmation && patientToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+          onClick={() => setShowDeleteConfirmation(false)}
+        >
+          <div
+            className="relative w-full max-w-sm mx-2 bg-white rounded-lg shadow-lg border border-red-100"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+              onClick={() => setShowDeleteConfirmation(false)}
+              aria-label="Fermer"
+              type="button"
+            >
+              &times;
+            </button>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0-12a9 9 0 110 18 9 9 0 010-18z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Supprimer le patient</h3>
+              </div>
+              <div className="mb-6">
+                <p className="text-sm text-gray-600 mb-4">
+                  Êtes-vous sûr de vouloir supprimer ce patient ? Cette action est irréversible.
+                </p>
+                <div className="bg-red-50 rounded-lg p-4 space-y-2 mb-4 border border-red-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Patient :</span>
+                    <span className="text-sm font-semibold text-gray-900">{patientToDelete.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Téléphone :</span>
+                    <span className="text-sm font-semibold text-gray-900">{patientToDelete.phone || '-'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Email :</span>
+                    <span className="text-sm font-semibold text-gray-900">{patientToDelete.email || '-'}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  onClick={() => setShowDeleteConfirmation(false)}
+                  disabled={deleteLoading}
+                >
+                  Annuler
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={confirmDelete}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v2m0 12v2m8-8h-2m-12 0H4m12.364-6.364l-1.414 1.414M8.05 15.95l-1.414 1.414m0-11.314l1.414 1.414m7.9 7.9l1.414 1.414" />
+                      </svg>
+                      Suppression...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Supprimer
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

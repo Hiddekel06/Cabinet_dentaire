@@ -49,6 +49,9 @@ class PatientTreatmentController extends Controller
             'next_appointment_duration' => ['nullable', 'integer', 'min:1'],
             'next_appointment_reason' => ['nullable', 'string'],
             'next_appointment_notes' => ['nullable', 'string'],
+            'acts' => ['nullable', 'array'],
+            'acts.*.dental_act_id' => ['required_with:acts', 'integer', 'exists:dental_acts,id'],
+            'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
         ]);
 
         // Empêcher la création d'un rendez-vous à une date passée
@@ -76,8 +79,20 @@ class PatientTreatmentController extends Controller
             'notes' => $validated['notes'] ?? null,
             'next_appointment_id' => $appointment->id,
         ]);
-        $patientTreatment->load(['patient', 'treatment', 'nextAppointment']);
 
+        // Associer les actes si fournis
+        if (!empty($validated['acts'])) {
+            foreach ($validated['acts'] as $act) {
+                $dentalAct = \App\Models\DentalAct::find($act['dental_act_id']);
+                $patientTreatment->acts()->create([
+                    'dental_act_id' => $dentalAct->id,
+                    'quantity' => $act['quantity'] ?? 1,
+                    'tarif_snapshot' => $dentalAct->tarif,
+                ]);
+            }
+        }
+
+        $patientTreatment->load(['patient', 'treatment', 'nextAppointment', 'acts.dentalAct']);
         return response()->json($patientTreatment, 201);
     }
 
@@ -98,11 +113,28 @@ class PatientTreatmentController extends Controller
             'completed_sessions' => ['nullable', 'integer', 'min:0'],
             'notes' => ['nullable', 'string'],
             'next_appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
+            'acts' => ['nullable', 'array'],
+            'acts.*.dental_act_id' => ['required_with:acts', 'integer', 'exists:dental_acts,id'],
+            'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $patientTreatment->update($validated);
-        $patientTreatment->load(['patient', 'treatment', 'nextAppointment']);
 
+        // Mise à jour des actes associés si fournis
+        if ($request->has('acts')) {
+            // On supprime les anciens actes pour ce traitement
+            $patientTreatment->acts()->delete();
+            foreach ($validated['acts'] as $act) {
+                $dentalAct = \App\Models\DentalAct::find($act['dental_act_id']);
+                $patientTreatment->acts()->create([
+                    'dental_act_id' => $dentalAct->id,
+                    'quantity' => $act['quantity'] ?? 1,
+                    'tarif_snapshot' => $dentalAct->tarif,
+                ]);
+            }
+        }
+
+        $patientTreatment->load(['patient', 'treatment', 'nextAppointment', 'acts.dentalAct']);
         return response()->json($patientTreatment);
     }
 

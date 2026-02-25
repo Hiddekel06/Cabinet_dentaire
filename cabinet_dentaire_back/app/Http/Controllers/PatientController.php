@@ -19,7 +19,7 @@ class PatientController extends Controller
                 },
             ])
             ->latest()
-            ->paginate(15);
+            ->paginate(5);
 
         $patients->getCollection()->transform(function ($patient) {
             $lastAppointment = $patient->appointments->first();

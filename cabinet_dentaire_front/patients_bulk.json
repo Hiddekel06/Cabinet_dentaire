@@ -1,0 +1,25 @@
+[
+  {
+    "first_name": "Jean",
+    "last_name": "Dupont",
+    "phone": "0600000001",
+    "email": "jean.dupont1@example.com",
+    "city": "Paris",
+    "address": "1 rue de Paris",
+    "gender": "M",
+    "date_of_birth": "1980-01-01",
+    "notes": "Patient test"
+  },
+  {
+    "first_name": "Marie",
+    "last_name": "Durand",
+    "phone": "0600000002",
+    "email": "marie.durand2@example.com",
+    "city": "Lyon",
+    "address": "2 rue de Lyon",
+    "gender": "F",
+    "date_of_birth": "1982-02-02",
+    "notes": "Patient test"
+  },
+  // ... 698 autres patients générés automatiquement
+]

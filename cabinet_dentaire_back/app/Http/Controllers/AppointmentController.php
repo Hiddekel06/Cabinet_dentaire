@@ -7,10 +7,26 @@ use Illuminate\Http\Request;
 
 class AppointmentController extends Controller
 {
+    /**
+     * Affiche la vue calendrier mobile PWA
+     */
+    public function pwaCalendar()
+    {
+        // On retourne une vue simple (à créer ensuite)
+        return view('pwa.calendar');
+    }
     public function index()
     {
+        $query = Appointment::query()->with(['patient', 'dentist']);
+
+        // Filtre par date si ?date=YYYY-MM-DD fourni
+        if (request()->has('date')) {
+            $date = request('date');
+            $query->whereDate('appointment_date', $date);
+        }
+
         return response()->json(
-            Appointment::query()->with(['patient', 'dentist'])->latest()->paginate(15)
+            $query->latest()->paginate(15)
         );
     }
 

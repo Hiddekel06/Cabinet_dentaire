@@ -1,3 +1,10 @@
+    /**
+     * Les actes associés à ce traitement patient
+     */
+    public function acts()
+    {
+        return $this->hasMany(PatientTreatmentAct::class);
+    }
 <?php
 
 namespace App\Models;

@@ -1,9 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 export const Sidebar = () => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // Charger l'état depuis localStorage au montage
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebarCollapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+  
   const location = useLocation();
+  
+  // Sauvegarder l'état dans localStorage quand il change
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', JSON.stringify(isCollapsed));
+  }, [isCollapsed]);
 
   // Icônes SVG pour chaque item de menu
   const menuItems = [

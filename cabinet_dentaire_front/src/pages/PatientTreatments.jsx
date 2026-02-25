@@ -563,8 +563,8 @@ const PatientTreatments = () => {
                         Traitement: <span className="font-medium">{pt.treatment?.name}</span>
                       </p>
                       <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                        <span>Début: {pt.start_date}</span>
-                        {pt.end_date && <span>Fin: {pt.end_date}</span>}
+                        <span>Début: {pt.start_date ? new Date(pt.start_date).toLocaleDateString('fr-FR') : ''}</span>
+                        {pt.end_date && <span>Fin: {new Date(pt.end_date).toLocaleDateString('fr-FR')}</span>}
                         <span>Sessions: {pt.completed_sessions || 0}/{pt.total_sessions || '?'}</span>
                       </div>
                       {pt.notes && (
