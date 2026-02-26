@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { Layout } from '../components/Layout';
-import { appointmentAPI, patientAPI, treatmentAPI, patientTreatmentAPI, medicalRecordAPI, authAPI } from '../services/api';
+import { appointmentAPI, patientAPI, treatmentAPI, patientTreatmentAPI, medicalRecordAPI, authAPI, dentalActAPI } from '../services/api';
 
 const PatientTreatments = () => {
+    // Barre de recherche pour actes dentaires
+    const [dentalActsSearchTerm, setDentalActsSearchTerm] = useState('');
+  // États pour la recherche de traitement dans le formulaire
+  const [treatmentSearchTerm, setTreatmentSearchTerm] = useState('');
+  const [showTreatmentList, setShowTreatmentList] = useState(false);
   const [patients, setPatients] = useState([]);
   const [treatments, setTreatments] = useState([]);
   const [patientTreatments, setPatientTreatments] = useState([]);
+  const [dentalActs, setDentalActs] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedTreatment, setSelectedTreatment] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -20,11 +26,16 @@ const PatientTreatments = () => {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
+  
+  // États pour la recherche de patient dans le formulaire
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [showPatientList, setShowPatientList] = useState(false);
 
   // Formulaire pour démarrer un suivi
   const [startForm, setStartForm] = useState({
     patient_id: '',
     treatment_id: '',
+    acts: [], // [{ act_id, quantity }]
     start_date: new Date().toISOString().split('T')[0],
     next_appointment_date: '',
     next_appointment_duration: 60,
@@ -41,12 +52,28 @@ const PatientTreatments = () => {
     next_appointment_time: '',
   });
 
+  // Calcul du total des actes sélectionnés
+  const totalActs = startForm.acts.reduce((sum, a) => {
+    const act = dentalActs.find(act => act.id === a.dental_act_id);
+    return sum + (act && act.tarif ? act.tarif * a.quantity : 0);
+  }, 0);
+
+  // Filtrer les patients selon la recherche
+  const filteredPatients = patients.filter(p => {
+    const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
+    return fullName.includes(patientSearchTerm.toLowerCase()) || (p.phone && p.phone.includes(patientSearchTerm));
+  });
+
   useEffect(() => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
     loadInitialData();
     // Récupérer l'utilisateur connecté
     authAPI.getUser().then(res => setCurrentUser(res.data)).catch(() => setCurrentUser(null));
+    // Charger les actes dentaires
+    dentalActAPI.getAll().then(res => {
+      setDentalActs(res.data.data || res.data || []);
+    }).catch(() => setDentalActs([]));
   }, []);
 
   const loadInitialData = async () => {
@@ -57,9 +84,20 @@ const PatientTreatments = () => {
         treatmentAPI.getAll(),
         patientTreatmentAPI.getAll(),
       ]);
-      setPatients(patientsRes.data.data || []);
-      setTreatments(treatmentsRes.data.data || treatmentsRes.data || []);
-      setPatientTreatments(ptRes.data.data || []);
+      console.log('Patients reçus:', patientsRes);
+      console.log('Treatments reçus:', treatmentsRes);
+      console.log('PatientTreatments reçus:', ptRes);
+      
+      const patientsData = patientsRes.data?.data || patientsRes.data || [];
+      const treatmentsData = treatmentsRes.data?.data || treatmentsRes.data || [];
+      const ptData = ptRes.data?.data || ptRes.data || [];
+      
+      console.log('Patients après extraction:', patientsData);
+      console.log('Nombre de patients:', patientsData.length);
+      
+      setPatients(patientsData);
+      setTreatments(treatmentsData);
+      setPatientTreatments(ptData);
     } catch (error) {
       console.error('Erreur chargement données:', error);
     } finally {
@@ -69,7 +107,7 @@ const PatientTreatments = () => {
 
   const handleStartTreatment = async (e) => {
     e.preventDefault();
-    if (!startForm.patient_id || !startForm.treatment_id || !startForm.next_appointment_date) {
+    if (!startForm.patient_id || !startForm.treatment_id || startForm.acts.length === 0 || !startForm.next_appointment_date) {
       alert('Veuillez remplir tous les champs obligatoires');
       return;
     }
@@ -79,9 +117,12 @@ const PatientTreatments = () => {
       await patientTreatmentAPI.create(startForm);
       alert('Suivi démarré avec succès !');
       setShowStartModal(false);
+      setPatientSearchTerm('');
+      setShowPatientList(false);
       setStartForm({
         patient_id: '',
         treatment_id: '',
+        acts: [],
         start_date: new Date().toISOString().split('T')[0],
         next_appointment_date: '',
         next_appointment_duration: 60,
@@ -340,7 +381,15 @@ const PatientTreatments = () => {
             <h1 className="text-2xl font-bold text-gray-900">Suivi des patients</h1>
             <p className="text-sm text-gray-600 mt-1">Gestion des traitements et suivis médicaux</p>
           </div>
-        
+          <button
+            onClick={() => setShowStartModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-linear-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-colors font-medium shadow-lg"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nouveau suivi
+          </button>
         </div>
 
         {/* Section derniers patients enregistrés */}
@@ -380,15 +429,15 @@ const PatientTreatments = () => {
                   ))}
                 </div>
               </div>
-              <button
-                onClick={() => setShowStartModal(true)}
-                className="ml-4 inline-flex items-center gap-1 px-4 py-2 bg-linear-to-r from-blue-500 to-blue-700 text-white rounded-lg hover:from-blue-600 hover:to-blue-800 transition-colors text-sm font-medium shadow-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Nouveau suivi
-              </button>
+
+              {/* Affichage du total des actes sélectionnés */}
+              {startForm.acts.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg flex items-center justify-between">
+                  <span className="font-medium text-gray-700">Total actes sélectionnés :</span>
+                  <span className="text-lg font-bold text-blue-700">{totalActs.toFixed(2)} €</span>
+                </div>
+              )}
+
             </div>
           </div>
         )}
@@ -567,6 +616,32 @@ const PatientTreatments = () => {
                         {pt.end_date && <span>Fin: {new Date(pt.end_date).toLocaleDateString('fr-FR')}</span>}
                         <span>Sessions: {pt.completed_sessions || 0}/{pt.total_sessions || '?'}</span>
                       </div>
+                      {/* Affichage détail actes et total */}
+                      {Array.isArray(pt.acts) && pt.acts.length > 0 && (
+                        <div className="mt-2">
+                          <div className="font-semibold text-xs text-blue-700 mb-1">Actes sélectionnés :</div>
+                          <ul className="text-xs text-gray-700 space-y-1">
+                            {pt.acts.map((a, idx) => {
+                              const act = dentalActs.find(act => act.id === a.dental_act_id);
+                              return (
+                                <li key={idx} className="flex items-center gap-2">
+                                  <span className="font-medium">{act ? (act.code ? `${act.code} - ` : '') + act.label : `Acte #${a.dental_act_id}`}</span>
+                                  <span>x{a.quantity}</span>
+                                  {act && act.tarif && (
+                                    <span className="ml-2 text-gray-500">{(act.tarif * a.quantity).toFixed(2)} €</span>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                          <div className="mt-1 text-xs font-bold text-blue-800">
+                            Total actes : {pt.acts.reduce((sum, a) => {
+                              const act = dentalActs.find(act => act.id === a.dental_act_id);
+                              return sum + (act && act.tarif ? act.tarif * a.quantity : 0);
+                            }, 0).toFixed(2)} €
+                          </div>
+                        </div>
+                      )}
                       {pt.notes && (
                         <p className="text-sm text-gray-600 mt-2 italic">{pt.notes}</p>
                       )}
@@ -640,44 +715,180 @@ const PatientTreatments = () => {
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1 relative">
                 <label className="block text-sm font-medium text-gray-700">
                   Patient <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={startForm.patient_id}
-                  onChange={(e) => setStartForm({ ...startForm, patient_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors"
-                  required
-                >
-                  <option value="">Sélectionner un patient</option>
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.first_name} {p.last_name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={patientSearchTerm}
+                    onChange={(e) => {
+                      setPatientSearchTerm(e.target.value);
+                      setShowPatientList(true);
+                    }}
+                    onFocus={() => setShowPatientList(true)}
+                    placeholder="Rechercher un patient..."
+                    className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors"
+                  />
+                  {/* Affichage du patient sélectionné */}
+                  {startForm.patient_id && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                {/* Liste de suggestions */}
+                {showPatientList && patientSearchTerm && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                    {filteredPatients.length > 0 ? (
+                      filteredPatients.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setStartForm({ ...startForm, patient_id: p.id });
+                            setPatientSearchTerm(`${p.first_name} ${p.last_name}`);
+                            setShowPatientList(false);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
+                        >
+                          <div className="font-medium text-gray-900">{p.first_name} {p.last_name}</div>
+                          {p.phone && <div className="text-xs text-gray-500">{p.phone}</div>}
+                          {p.email && <div className="text-xs text-gray-500">{p.email}</div>}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-gray-500">Aucun patient trouvé</div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1 relative">
                 <label className="block text-sm font-medium text-gray-700">
                   Type de traitement <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={startForm.treatment_id}
-                  onChange={(e) => setStartForm({ ...startForm, treatment_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors"
-                  required
-                >
-                  <option value="">Sélectionner un traitement</option>
-                  {treatments.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={treatmentSearchTerm}
+                    onChange={(e) => {
+                      setTreatmentSearchTerm(e.target.value);
+                      setShowTreatmentList(true);
+                    }}
+                    onFocus={() => setShowTreatmentList(true)}
+                    placeholder="Rechercher un traitement..."
+                    className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors"
+                  />
+                  {/* Affichage du traitement sélectionné */}
+                  {startForm.treatment_id && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                {/* Liste de suggestions */}
+                {showTreatmentList && treatmentSearchTerm && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                    {treatments.filter(t => t.name.toLowerCase().includes(treatmentSearchTerm.toLowerCase())).length > 0 ? (
+                      treatments.filter(t => t.name.toLowerCase().includes(treatmentSearchTerm.toLowerCase())).map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setStartForm({ ...startForm, treatment_id: t.id });
+                            setTreatmentSearchTerm(t.name);
+                            setShowTreatmentList(false);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
+                        >
+                          <div className="font-medium text-gray-900">{t.name}</div>
+                          {t.description && <div className="text-xs text-gray-500">{t.description}</div>}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-gray-500">Aucun traitement trouvé</div>
+                    )}
+                  </div>
+                )}
               </div>
 
+              <div className="space-y-1">
+                                {/* Barre de recherche pour actes dentaires */}
+                                <input
+                                  type="text"
+                                  placeholder="Rechercher un acte..."
+                                  className="w-full px-3 py-2 border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-2"
+                                  value={dentalActsSearchTerm || ''}
+                                  onChange={e => setDentalActsSearchTerm(e.target.value)}
+                                />
+                <label className="block text-sm font-medium text-gray-700">
+                  Actes dentaires <span className="text-red-500">*</span>
+                </label>
+                <div className="space-y-2">
+                  {dentalActsSearchTerm && dentalActs.filter(act =>
+                    (act.name && act.name.toLowerCase().includes(dentalActsSearchTerm.toLowerCase())) ||
+                    (act.code && act.code.toLowerCase().includes(dentalActsSearchTerm.toLowerCase())) ||
+                    (act.description && act.description.toLowerCase().includes(dentalActsSearchTerm.toLowerCase()))
+                  ).map((act) => {
+                    const selected = startForm.acts.find(a => a.dental_act_id === act.id);
+                    return (
+                      <div key={act.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!!selected}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setStartForm(prev => ({
+                                ...prev,
+                                acts: [...prev.acts, { dental_act_id: act.id, quantity: 1 }],
+                              }));
+                            } else {
+                              setStartForm(prev => ({
+                                ...prev,
+                                acts: prev.acts.filter(a => a.dental_act_id !== act.id),
+                              }));
+                            }
+                          }}
+                        />
+                        <span className="flex-1">
+                          {act.code ? `${act.code} - ` : ''}{act.name} {act.tarif ? `(${act.tarif} €)` : ''}
+                        </span>
+                        {selected && (
+                          <input
+                            type="number"
+                            min="1"
+                            value={selected.quantity}
+                            onChange={e => {
+                              const qty = Math.max(1, parseInt(e.target.value) || 1);
+                              setStartForm(prev => ({
+                                ...prev,
+                                acts: prev.acts.map(a => a.dental_act_id === act.id ? { ...a, quantity: qty } : a),
+                              }));
+                            }}
+                            className="w-16 px-2 py-1 border border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="space-y-1 md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700">
                   Date de début
@@ -785,7 +996,11 @@ const PatientTreatments = () => {
         <div className="flex items-center justify-end space-x-3">
           <button
             type="button"
-            onClick={() => setShowStartModal(false)}
+            onClick={() => {
+              setShowStartModal(false);
+              setPatientSearchTerm('');
+              setShowPatientList(false);
+            }}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all duration-200"
           >
             Annuler

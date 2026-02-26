@@ -1,10 +1,3 @@
-    /**
-     * Les actes associés à ce traitement patient
-     */
-    public function acts()
-    {
-        return $this->hasMany(PatientTreatmentAct::class);
-    }
 <?php
 
 namespace App\Models;
@@ -65,5 +58,13 @@ class PatientTreatment extends Model
     public function medicalRecords()
     {
         return $this->hasMany(MedicalRecord::class);
+    }
+
+    /**
+     * Les actes associés à ce traitement patient
+     */
+    public function acts()
+    {
+        return $this->hasMany(PatientTreatmentAct::class);
     }
 }

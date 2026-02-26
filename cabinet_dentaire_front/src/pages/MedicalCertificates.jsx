@@ -10,8 +10,6 @@ const MedicalCertificates = () => {
   const [form, setForm] = useState({
     patient_id: "",
     issue_date: "",
-    certificate_type: "",
-    content: ""
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,8 +61,6 @@ const MedicalCertificates = () => {
       setForm({
         patient_id: "",
         issue_date: "",
-        certificate_type: "",
-        content: ""
       });
     } catch (err) {
       alert("Erreur lors de l'ajout du certificat");
@@ -82,56 +78,29 @@ const MedicalCertificates = () => {
     }
   };
 
-  // Impression d'un certificat médical
-  const handlePrint = (cert) => {
-    const win = window.open('', '', 'width=800,height=600');
-    const today = new Date();
-    const dateStr = today.toLocaleDateString('fr-FR');
-    const patientName = `${cert.patient?.first_name || ''} ${cert.patient?.last_name || ''}`;
-    const consultDate = cert.issue_date || '____ / ____ / ______';
-    const html = `<!DOCTYPE html>
-      <html>
-        <head>
-          <title>Certificat médical - ${patientName}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .header { text-align: center; margin-bottom: 32px; }
-            .cabinet { font-size: 1.3em; font-weight: bold; }
-            .address { font-size: 1em; margin-bottom: 8px; }
-            .date { font-size: 1em; margin-bottom: 16px; }
-            .content { margin: 32px 0; font-size: 1.2em; }
-            .footer { margin-top: 48px; text-align: right; }
-            .label { font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="cabinet">Cabinet Dentaire</div>
-            <div class="address">Adresse : Parcelle</div>
-            <div class="date">Date : ${dateStr}</div>
-          </div>
-          <div class="content">
-            Je soussigné(e), Dr ____________________________,<br>
-            Médecin exerçant à ____________________________,<br><br>
-            Atteste que :<br><br>
-            M./Mme ${patientName}<br>
-            est passé(e) en consultation dans notre établissement ce jour,<br>
-            le ${consultDate}.<br><br>
-            Certificat délivré à la demande de l’intéressé(e)<br>
-            pour servir et valoir ce que de droit.<br><br>
-            Fait à ____________________<br>
-            Le ____ / ____ / ______<br><br>
-            Signature et cachet du médecin
-          </div>
-        </body>
-      </html>`;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => {
-      win.print();
-      win.close();
-    }, 300);
+  // Téléchargement du certificat Word généré par le backend
+  const handleDownloadWord = async (cert) => {
+    try {
+      const res = await medicalCertificateAPI.generate({
+        'adresse': 'Parcelle', // à adapter
+        'telephone': '0600000000', // à adapter
+        'nom du docteur': cert.issuer?.name || '',
+        'MATLABUL SHIFAH': 'MATLABUL SHIFAH',
+        'nom de la personne': `${cert.patient?.first_name || ''} ${cert.patient?.last_name || ''}`,
+        'date': cert.issue_date,
+        'heure': cert.heure || '', // à adapter
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `certificat_medical_${cert.id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Erreur lors du téléchargement du certificat PDF");
+    }
   };
 
   return (
@@ -172,10 +141,7 @@ const MedicalCertificates = () => {
                 <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Patient</th>
                 <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Délivré par</th>
                 <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Date</th>
-                <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Type</th>
-                <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Contenu</th>
-                <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Fichier</th>
-                <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Notes</th>
+                {/* Champs obsolètes supprimés : Type, Contenu, Fichier, Notes */}
                 <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Actions</th>
               </tr>
             </thead>
@@ -189,22 +155,17 @@ const MedicalCertificates = () => {
                     {c.issuer?.name || '-'}
                   </td>
                   <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">{c.issue_date}</td>
-                  <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">{c.certificate_type}</td>
-                  <td className="py-2 px-2 sm:py-3 sm:px-4 max-w-60 truncate">{c.content}</td>
-                  <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">-</td>
-                  <td className="py-2 px-2 sm:py-3 sm:px-4">-</td>
+                  {/* Champs obsolètes supprimés : Type, Contenu, Fichier, Notes */}
                   <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap flex gap-2">
                     <button
                       className="text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center justify-center"
-                      onClick={() => handlePrint(c)}
-                      title="Imprimer"
-                      aria-label="Imprimer"
+                      onClick={() => handleDownloadWord(c)}
+                      title="Télécharger Word"
+                      aria-label="Télécharger Word"
                       type="button"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 9V2h12v7" />
-                        <rect width="16" height="13" x="4" y="9" rx="2" />
-                        <path d="M9 17h6" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v16h16V4H4zm4 8h8m-4-4v8" />
                       </svg>
                     </button>
                     <button
@@ -275,22 +236,7 @@ const MedicalCertificates = () => {
                 <label className="text-xs font-semibold text-gray-700">Date</label>
                 <input type="date" name="issue_date" value={form.issue_date} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" required />
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Type de certificat</label>
-                <input name="certificate_type" value={form.certificate_type} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Contenu</label>
-                <textarea name="content" value={form.content} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" required />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Fichier PDF</label>
-                <input type="file" name="file_path" accept="application/pdf" onChange={handleChange} className="mt-1 w-full" />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Notes</label>
-                <input name="notes" value={form.notes} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" />
-              </div>
+              {/* Champs obsolètes supprimés : type de certificat, contenu, fichier PDF, notes */}
               <div className="flex justify-end pt-2">
                 <button type="submit" className="px-5 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 transition">Ajouter</button>
               </div>

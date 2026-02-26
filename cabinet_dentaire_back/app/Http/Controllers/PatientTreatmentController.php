@@ -11,7 +11,7 @@ class PatientTreatmentController extends Controller
     public function index(Request $request)
     {
         $query = PatientTreatment::query()
-            ->with(['patient', 'treatment', 'nextAppointment'])
+            ->with(['patient', 'treatment', 'nextAppointment', 'acts.dentalAct'])
             ->select('patient_treatments.*');
 
         // Filtrer par patient

@@ -19,12 +19,12 @@ export const Header = () => {
           {/* Logo et titre - Côté gauche */}
           <div className="flex items-center space-x-4">
             <Link to="/dashboard" className="flex items-center space-x-3 hover:opacity-90 transition-opacity">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center shadow-sm">
-                  {/* Icône dent pour cabinet dentaire */}
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2c2.21 0 4 1.79 4 4 0 1.1-.9 2-2 2h-4c-1.1 0-2-.9-2-2 0-2.21 1.79-4 4-4zm0 0c-3.31 0-6 2.69-6 6 0 4.97 3.58 9.16 8.44 9.93.36.06.56-.41.56-.93V17c0-.55-.45-1-1-1h-2c-.55 0-1 .45-1 1v.99c0 .52.2.99.56.93C14.42 17.16 18 12.97 18 8c0-3.31-2.69-6-6-6z" />
-                  </svg>
-              </div>
+              <img
+                src="/images/logoCabinet.png"
+                alt="Logo Cabinet Dentaire"
+                className="w-12 h-12 rounded-full object-cover shadow-sm border border-gray-200 bg-white"
+                style={{ backgroundColor: '#fff' }}
+              />
               <div className="hidden sm:block">
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">MATLABUL SHIFAH</h1>
                 <p className="text-xs text-gray-500">Gestion médicale intelligente</p>

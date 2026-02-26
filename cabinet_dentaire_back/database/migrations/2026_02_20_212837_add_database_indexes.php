@@ -74,19 +74,26 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('patients', function (Blueprint $table) {
-            $table->dropIndexIfExists(['idx_patients_name', 'idx_patients_created']);
+            $table->dropIndex('idx_patients_name');
+            $table->dropIndex('idx_patients_created');
         });
         Schema::table('appointments', function (Blueprint $table) {
-            $table->dropIndexIfExists(['idx_appt_date', 'idx_appt_patient', 'idx_appt_dentist']);
+            $table->dropIndex('idx_appt_date');
+            $table->dropIndex('idx_appt_patient');
+            $table->dropIndex('idx_appt_dentist');
         });
         Schema::table('patient_treatments', function (Blueprint $table) {
-            $table->dropIndexIfExists(['idx_pt_patient', 'idx_pt_treatment', 'idx_pt_status', 'idx_pt_created']);
+            $table->dropIndex('idx_pt_patient');
+            $table->dropIndex('idx_pt_treatment');
+            $table->dropIndex('idx_pt_status');
+            $table->dropIndex('idx_pt_created');
         });
         Schema::table('medical_records', function (Blueprint $table) {
-            $table->dropIndexIfExists(['idx_mr_patient', 'idx_mr_date']);
+            $table->dropIndex('idx_mr_patient');
+            $table->dropIndex('idx_mr_date');
         });
         Schema::table('treatments', function (Blueprint $table) {
-            $table->dropIndexIfExists(['idx_treatment_name']);
+            $table->dropIndex('idx_treatment_name');
         });
     }
 };

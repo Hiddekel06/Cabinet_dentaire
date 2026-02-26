@@ -1,5 +1,19 @@
+// Endpoints pour les actes dentaires
+export const dentalActAPI = {
+  getAll: () => {
+    const cacheKey = 'dental-acts:all';
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+    return api.get('/api/dental-acts').then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+};
 // Endpoints pour les certificats médicaux
 export const medicalCertificateAPI = {
+    generate: (data) =>
+      api.post('/api/medical-certificates/generate', data, { responseType: 'blob' }),
   getAll: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     const cacheKey = `medical-certificates:${query}`;

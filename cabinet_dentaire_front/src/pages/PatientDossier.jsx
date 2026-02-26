@@ -347,6 +347,36 @@ const PatientDossier = () => {
 
         {/* Certificats médicaux */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    {/* Bouton pour générer le certificat Word */}
+                    <div className="flex justify-end p-4">
+                      <button
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded shadow"
+                        onClick={async () => {
+                          try {
+                            // Exemple de données à adapter selon ton modèle Word
+                            const data = {
+                              nom: patient ? `${patient.first_name} ${patient.last_name}` : '',
+                              date: new Date().toLocaleDateString('fr-FR'),
+                              medecin: '', // À compléter selon le contexte utilisateur
+                              motif: '', // À compléter selon le contexte
+                              date_naissance: patient?.birth_date || '',
+                            };
+                            const response = await medicalCertificateAPI.generate(data);
+                            const url = window.URL.createObjectURL(new Blob([response.data]));
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.setAttribute('download', 'certificat_medical.docx');
+                            document.body.appendChild(link);
+                            link.click();
+                            link.remove();
+                          } catch (error) {
+                            alert('Erreur lors de la génération du certificat');
+                          }
+                        }}
+                      >
+                        Générer certificat Word
+                      </button>
+                    </div>
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <CertificateIcon />
@@ -364,35 +394,27 @@ const PatientDossier = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
+                      {/* Type supprimé */}
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Date
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Praticien
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Contenu
-                      </th>
+                      {/* Contenu supprimé */}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {certificates.map((c) => (
                       <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {c.certificate_type}
-                        </td>
+                        {/* Type supprimé */}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {c.issue_date ? new Date(c.issue_date).toLocaleDateString('fr-FR') : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {c.issuer?.name || '-'}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-700 max-w-md">
-                          {c.content || '-'}
-                        </td>
+                        {/* Contenu supprimé */}
                       </tr>
                     ))}
                   </tbody>

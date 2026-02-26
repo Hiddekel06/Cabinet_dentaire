@@ -10,11 +10,14 @@ use App\Http\Controllers\RadiographyController;
 use App\Http\Controllers\MedicalFolderController;
 use Illuminate\Support\Facades\Route;
 
-// Routes publiques (login)
+// Routes publiques (sans protection)
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/dental-acts', [App\Http\Controllers\DentalActController::class, 'index']);
 
 // Routes protégées
 Route::middleware(['auth:sanctum'])->group(function () {
+        // Génération de certificat médical Word
+        Route::post('/medical-certificates/generate', [App\Http\Controllers\MedicalCertificateController::class, 'generate']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     

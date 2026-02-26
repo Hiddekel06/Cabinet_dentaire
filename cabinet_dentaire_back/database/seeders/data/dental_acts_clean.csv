@@ -1,0 +1,5 @@
+name,category,code,tarif,description
+Consultation simple,Consultations,D5,6000,Consultation au cabinet
+Visite à domicile,Consultations,Forfait,,Visite à domicile (tarif à préciser)
+Consultation jours fériés et nuit,Consultations,Forfait,,Consultation en dehors des horaires (tarif à préciser)
+Consultation et soins d'urgence,Consultations,D10,12000,Consultation et soins d'urgence
