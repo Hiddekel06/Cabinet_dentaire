@@ -6,6 +6,8 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\MedicalRecordController;
 use App\Http\Controllers\PatientTreatmentController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductTypeController;
 use App\Http\Controllers\RadiographyController;
 use App\Http\Controllers\MedicalFolderController;
 use Illuminate\Support\Facades\Route;
@@ -38,6 +40,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des radiographies
     Route::apiResource('radiographies', RadiographyController::class);
+
+    // Gestion des achats (produits)
+    Route::get('products/statistics', [ProductController::class, 'statistics']);
+    Route::apiResource('products', ProductController::class);
+
+    // Gestion des types de produits
+    Route::apiResource('product-types', ProductTypeController::class);
 
     // Gestion des certificats médicaux
     Route::apiResource('medical-certificates', \App\Http\Controllers\MedicalCertificateController::class);
