@@ -11,8 +11,10 @@ import Statistics from './pages/Statistics';
 import PatientTreatments from './pages/PatientTreatments';
 import PatientTreatmentsHistory from './pages/PatientTreatmentsHistory';
 import PatientDossier from './pages/PatientDossier';
+import Achats from './pages/Achats';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
+import ImportDentalActs from './pages/admin/ImportDentalActs';
 import './App.css';
 
 function App() {
@@ -83,6 +85,14 @@ function App() {
             }
           />
           <Route
+            path="/admin/import-dental-acts"
+            element={
+              <ProtectedRoute>
+                <ImportDentalActs />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin"
             element={
               <ProtectedRoute>
@@ -112,6 +122,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <DossierMedicaux />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/achats"
+            element={
+              <ProtectedRoute>
+                <Achats />
               </ProtectedRoute>
             }
           />

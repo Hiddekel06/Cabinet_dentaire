@@ -1,0 +1,16 @@
+code,name,category,tarif,description
+D5,Détartrage,Nettoyage,25000,Détartrage complet des dents
+D10,Détection cavité,Diagnostic,5000,Examen et détection de caries
+D15,Extraction simple,Chirurgie,15000,Extraction d'une dent simple
+D20,Plombage,Restauration,20000,Obturation composite
+D25,Consultation,Diagnostic,10000,Consultation dentaire générale
+D30,Radiographie,Imagerie,8000,Radiographie dentaire
+D35,Blanchiment,Esthétique,50000,Blanchiment dentaire professionnel
+D40,Couronne,Prothèse,80000,Pose de couronne dentaire
+D45,Bridge,Prothèse,120000,Pose de bridge
+D50,Implant,Chirurgie,150000,Pose d'implant dentaire
+D55,Détartrage profond,Nettoyage,35000,Détartrage sous-gingival
+D60,Traitement canal,Endodontie,45000,Traitement de canal radiculaire
+D65,Extraction complexe,Chirurgie,25000,Extraction dent de sagesse
+D70,Orthodontie consultation,Orthodontie,15000,Consultation orthodontique
+D75,Appareil dentaire,Orthodontie,200000,Pose appareil orthodontique complet

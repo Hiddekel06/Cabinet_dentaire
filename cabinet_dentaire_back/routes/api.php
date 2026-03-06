@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Route;
 // Routes publiques (sans protection)
 Route::post('/login', [AuthController::class, 'login']);
 Route::get('/dental-acts', [App\Http\Controllers\DentalActController::class, 'index']);
+Route::get('/dental-acts/search', [App\Http\Controllers\DentalActController::class, 'search']);
 
 // Routes protégées
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -22,6 +23,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/medical-certificates/generate', [App\Http\Controllers\MedicalCertificateController::class, 'generate']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    
+    // Gestion des actes dentaires (admin)
+    Route::post('/dental-acts/import', [App\Http\Controllers\DentalActController::class, 'import']);
+    Route::delete('/dental-acts/truncate', [App\Http\Controllers\DentalActController::class, 'truncate']);
     
     // Gestion des patients
     Route::apiResource('patients', PatientController::class);

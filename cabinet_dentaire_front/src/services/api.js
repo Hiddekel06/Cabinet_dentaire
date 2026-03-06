@@ -285,4 +285,83 @@ export const medicalRecordAPI = {
   },
 };
 
+// Endpoints pour les types de produits
+export const productTypeAPI = {
+  getAll: () => {
+    const cacheKey = 'product-types:all';
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+    
+    return api.get('/api/product-types').then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+
+  getById: (id) =>
+    api.get(`/api/product-types/${id}`),
+
+  create: (data) => {
+    clearCache('product-types');
+    return api.post('/api/product-types', data);
+  },
+
+  update: (id, data) => {
+    clearCache('product-types');
+    return api.put(`/api/product-types/${id}`, data);
+  },
+
+  delete: (id) => {
+    clearCache('product-types');
+    return api.delete(`/api/product-types/${id}`);
+  },
+};
+
+// Endpoints pour les produits (achats)
+export const productAPI = {
+  getAll: (page = 1, params = {}) => {
+    const queryParams = new URLSearchParams({
+      page,
+      ...params,
+    }).toString();
+    const cacheKey = `products:${queryParams}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+    
+    return api.get(`/api/products?${queryParams}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+
+  getById: (id) =>
+    api.get(`/api/products/${id}`),
+
+  create: (data) => {
+    clearCache('products');
+    return api.post('/api/products', data);
+  },
+
+  update: (id, data) => {
+    clearCache('products');
+    return api.put(`/api/products/${id}`, data);
+  },
+
+  delete: (id) => {
+    clearCache('products');
+    return api.delete(`/api/products/${id}`);
+  },
+
+  getStatistics: () => {
+    const cacheKey = 'products:statistics';
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+    
+    return api.get('/api/products/statistics').then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+};
+
 export default api;

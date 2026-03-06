@@ -8,8 +8,15 @@ use Illuminate\Database\Eloquent\Model;
 class DentalAct extends Model
 {
     use HasFactory;
+    
     protected $fillable = [
-        'name', 'category', 'code', 'tarif', 'description'
+        'code',
+        'name',
+        'category',
+        'subcategory',
+        'tarif_level',
+        'tarif',
+        'description'
     ];
 
     public function patientTreatmentActs()
