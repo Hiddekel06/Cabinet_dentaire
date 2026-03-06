@@ -11,12 +11,10 @@ class PatientTreatment extends Model
 
     protected $fillable = [
         'patient_id',
-        'treatment_id',
+        'name',
         'start_date',
         'end_date',
         'status',
-        'total_sessions',
-        'completed_sessions',
         'notes',
         'next_appointment_id',
     ];
@@ -24,8 +22,6 @@ class PatientTreatment extends Model
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
-        'total_sessions' => 'integer',
-        'completed_sessions' => 'integer',
     ];
 
     /**
@@ -34,14 +30,6 @@ class PatientTreatment extends Model
     public function patient()
     {
         return $this->belongsTo(Patient::class);
-    }
-
-    /**
-     * Le traitement patient référence un traitement du catalogue
-     */
-    public function treatment()
-    {
-        return $this->belongsTo(Treatment::class);
     }
 
     /**

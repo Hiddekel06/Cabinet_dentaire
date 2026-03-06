@@ -3,7 +3,6 @@
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\TreatmentController;
 use App\Http\Controllers\MedicalRecordController;
 use App\Http\Controllers\PatientTreatmentController;
 use App\Http\Controllers\ProductController;
@@ -33,9 +32,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des rendez-vous
     Route::apiResource('appointments', AppointmentController::class);
-    
-    // Gestion des traitements (catalogue)
-    Route::apiResource('treatments', TreatmentController::class);
     
     // Gestion des dossiers médicaux
     Route::apiResource('medical-records', MedicalRecordController::class);

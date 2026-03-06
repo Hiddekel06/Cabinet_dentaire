@@ -11,7 +11,7 @@ class PatientTreatmentController extends Controller
     public function index(Request $request)
     {
         $query = PatientTreatment::query()
-            ->with(['patient', 'treatment', 'nextAppointment', 'acts.dentalAct'])
+            ->with(['patient', 'nextAppointment', 'acts.dentalAct'])
             ->select('patient_treatments.*');
 
         // Filtrer par patient
@@ -24,11 +24,6 @@ class PatientTreatmentController extends Controller
             $query->where('status', $request->input('status'));
         }
 
-        // Filtrer par traitement
-        if ($request->has('treatment_id')) {
-            $query->where('treatment_id', $request->input('treatment_id'));
-        }
-
         $patientTreatments = $query->latest()->paginate(15);
 
         return response()->json($patientTreatments);
@@ -38,12 +33,10 @@ class PatientTreatmentController extends Controller
     {
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
-            'treatment_id' => ['required', 'integer', 'exists:treatments,id'],
+            'name' => ['required', 'string', 'max:255'],
             'start_date' => ['required', 'date'],
             'end_date' => ['nullable', 'date', 'after:start_date'],
             'status' => ['nullable', 'in:planned,in_progress,completed,cancelled'],
-            'total_sessions' => ['nullable', 'integer', 'min:1'],
-            'completed_sessions' => ['nullable', 'integer', 'min:0'],
             'notes' => ['nullable', 'string'],
             'next_appointment_date' => ['required', 'date'],
             'next_appointment_duration' => ['nullable', 'integer', 'min:1'],
@@ -70,12 +63,10 @@ class PatientTreatmentController extends Controller
 
         $patientTreatment = PatientTreatment::create([
             'patient_id' => $validated['patient_id'],
-            'treatment_id' => $validated['treatment_id'],
+            'name' => $validated['name'],
             'start_date' => $validated['start_date'],
             'end_date' => $validated['end_date'] ?? null,
             'status' => $validated['status'] ?? 'planned',
-            'total_sessions' => $validated['total_sessions'] ?? null,
-            'completed_sessions' => $validated['completed_sessions'] ?? 0,
             'notes' => $validated['notes'] ?? null,
             'next_appointment_id' => $appointment->id,
         ]);
@@ -92,13 +83,13 @@ class PatientTreatmentController extends Controller
             }
         }
 
-        $patientTreatment->load(['patient', 'treatment', 'nextAppointment', 'acts.dentalAct']);
+        $patientTreatment->load(['patient', 'nextAppointment', 'acts.dentalAct']);
         return response()->json($patientTreatment, 201);
     }
 
     public function show(PatientTreatment $patientTreatment)
     {
-        $patientTreatment->load(['patient', 'treatment', 'medicalRecords', 'nextAppointment']);
+        $patientTreatment->load(['patient', 'medicalRecords', 'nextAppointment', 'acts.dentalAct']);
 
         return response()->json($patientTreatment);
     }
@@ -106,11 +97,10 @@ class PatientTreatmentController extends Controller
     public function update(Request $request, PatientTreatment $patientTreatment)
     {
         $validated = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
             'start_date' => ['sometimes', 'required', 'date'],
             'end_date' => ['nullable', 'date', 'after:start_date'],
             'status' => ['nullable', 'in:planned,in_progress,completed,cancelled'],
-            'total_sessions' => ['nullable', 'integer', 'min:1'],
-            'completed_sessions' => ['nullable', 'integer', 'min:0'],
             'notes' => ['nullable', 'string'],
             'next_appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
             'acts' => ['nullable', 'array'],
@@ -134,7 +124,7 @@ class PatientTreatmentController extends Controller
             }
         }
 
-        $patientTreatment->load(['patient', 'treatment', 'nextAppointment', 'acts.dentalAct']);
+        $patientTreatment->load(['patient', 'nextAppointment', 'acts.dentalAct']);
         return response()->json($patientTreatment);
     }
 
