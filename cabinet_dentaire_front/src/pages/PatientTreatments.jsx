@@ -1,19 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Layout } from '../components/Layout';
-import { appointmentAPI, patientAPI, treatmentAPI, patientTreatmentAPI, medicalRecordAPI, authAPI, dentalActAPI } from '../services/api';
+import { appointmentAPI, patientAPI, patientTreatmentAPI, medicalRecordAPI, authAPI, dentalActAPI } from '../services/api';
 
 const PatientTreatments = () => {
     // Barre de recherche pour actes dentaires
     const [dentalActsSearchTerm, setDentalActsSearchTerm] = useState('');
-  // États pour la recherche de traitement dans le formulaire
-  const [treatmentSearchTerm, setTreatmentSearchTerm] = useState('');
-  const [showTreatmentList, setShowTreatmentList] = useState(false);
   const [patients, setPatients] = useState([]);
-  const [treatments, setTreatments] = useState([]);
   const [patientTreatments, setPatientTreatments] = useState([]);
   const [dentalActs, setDentalActs] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [selectedTreatment, setSelectedTreatment] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showStartModal, setShowStartModal] = useState(false);
   const [showSessionModal, setShowSessionModal] = useState(false);
@@ -34,8 +29,8 @@ const PatientTreatments = () => {
   // Formulaire pour démarrer un suivi
   const [startForm, setStartForm] = useState({
     patient_id: '',
-    treatment_id: '',
-    acts: [], // [{ act_id, quantity }]
+    name: '',
+    acts: [], // [{ dental_act_id, quantity }]
     start_date: new Date().toISOString().split('T')[0],
     next_appointment_date: '',
     next_appointment_duration: 60,
@@ -79,24 +74,20 @@ const PatientTreatments = () => {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [patientsRes, treatmentsRes, ptRes] = await Promise.all([
+      const [patientsRes, ptRes] = await Promise.all([
         patientAPI.getAll(),
-        treatmentAPI.getAll(),
         patientTreatmentAPI.getAll(),
       ]);
       console.log('Patients reçus:', patientsRes);
-      console.log('Treatments reçus:', treatmentsRes);
       console.log('PatientTreatments reçus:', ptRes);
       
       const patientsData = patientsRes.data?.data || patientsRes.data || [];
-      const treatmentsData = treatmentsRes.data?.data || treatmentsRes.data || [];
       const ptData = ptRes.data?.data || ptRes.data || [];
       
       console.log('Patients après extraction:', patientsData);
       console.log('Nombre de patients:', patientsData.length);
       
       setPatients(patientsData);
-      setTreatments(treatmentsData);
       setPatientTreatments(ptData);
     } catch (error) {
       console.error('Erreur chargement données:', error);
@@ -107,7 +98,7 @@ const PatientTreatments = () => {
 
   const handleStartTreatment = async (e) => {
     e.preventDefault();
-    if (!startForm.patient_id || !startForm.treatment_id || startForm.acts.length === 0 || !startForm.next_appointment_date) {
+    if (!startForm.patient_id || !startForm.name || startForm.acts.length === 0 || !startForm.next_appointment_date) {
       alert('Veuillez remplir tous les champs obligatoires');
       return;
     }
@@ -121,7 +112,7 @@ const PatientTreatments = () => {
       setShowPatientList(false);
       setStartForm({
         patient_id: '',
-        treatment_id: '',
+        name: '',
         acts: [],
         start_date: new Date().toISOString().split('T')[0],
         next_appointment_date: '',
@@ -311,7 +302,7 @@ const PatientTreatments = () => {
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
         const patientName = `${pt.patient?.first_name || ''} ${pt.patient?.last_name || ''}`.toLowerCase();
-        const treatmentName = (pt.treatment?.name || '').toLowerCase();
+        const treatmentName = (pt.name || '').toLowerCase();
         if (!patientName.includes(search) && !treatmentName.includes(search)) {
           return false;
         }
@@ -609,12 +600,11 @@ const PatientTreatments = () => {
                         {getStatusBadge(pt.status)}
                       </div>
                       <p className="text-sm text-gray-600 mt-1">
-                        Traitement: <span className="font-medium">{pt.treatment?.name}</span>
+                        Suivi: <span className="font-medium">{pt.name}</span>
                       </p>
                       <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
                         <span>Début: {pt.start_date ? new Date(pt.start_date).toLocaleDateString('fr-FR') : ''}</span>
                         {pt.end_date && <span>Fin: {new Date(pt.end_date).toLocaleDateString('fr-FR')}</span>}
-                        <span>Sessions: {pt.completed_sessions || 0}/{pt.total_sessions || '?'}</span>
                       </div>
                       {/* Affichage détail actes et total */}
                       {Array.isArray(pt.acts) && pt.acts.length > 0 && (
@@ -772,60 +762,17 @@ const PatientTreatments = () => {
                 )}
               </div>
 
-              <div className="space-y-1 relative">
+              <div className="space-y-1">
                 <label className="block text-sm font-medium text-gray-700">
-                  Type de traitement <span className="text-red-500">*</span>
+                  Nom du suivi <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    value={treatmentSearchTerm}
-                    onChange={(e) => {
-                      setTreatmentSearchTerm(e.target.value);
-                      setShowTreatmentList(true);
-                    }}
-                    onFocus={() => setShowTreatmentList(true)}
-                    placeholder="Rechercher un traitement..."
-                    className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors"
-                  />
-                  {/* Affichage du traitement sélectionné */}
-                  {startForm.treatment_id && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  )}
-                </div>
-                {/* Liste de suggestions */}
-                {showTreatmentList && treatmentSearchTerm && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
-                    {treatments.filter(t => t.name.toLowerCase().includes(treatmentSearchTerm.toLowerCase())).length > 0 ? (
-                      treatments.filter(t => t.name.toLowerCase().includes(treatmentSearchTerm.toLowerCase())).map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => {
-                            setStartForm({ ...startForm, treatment_id: t.id });
-                            setTreatmentSearchTerm(t.name);
-                            setShowTreatmentList(false);
-                          }}
-                          className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
-                        >
-                          <div className="font-medium text-gray-900">{t.name}</div>
-                          {t.description && <div className="text-xs text-gray-500">{t.description}</div>}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-2 text-sm text-gray-500">Aucun traitement trouvé</div>
-                    )}
-                  </div>
-                )}
+                <input
+                  type="text"
+                  value={startForm.name}
+                  onChange={(e) => setStartForm({ ...startForm, name: e.target.value })}
+                  placeholder="Ex: Détartrage + Nettoyage, Dévitalisation dent 36, etc."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors"
+                />
               </div>
 
               <div className="space-y-1">
@@ -1070,7 +1017,7 @@ const PatientTreatments = () => {
                     </label>
                     <input
                       type="text"
-                      value={currentTreatmentForSession?.treatment?.name || ''}
+                      value={currentTreatmentForSession?.name || ''}
                       readOnly
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-700"
                     />

@@ -34,7 +34,7 @@ const PatientTreatmentsHistory = () => {
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       const patientName = `${pt.patient?.first_name || ''} ${pt.patient?.last_name || ''}`.toLowerCase();
-      const treatmentName = (pt.treatment?.name || '').toLowerCase();
+      const treatmentName = (pt.name || '').toLowerCase();
       if (!patientName.includes(search) && !treatmentName.includes(search)) {
         return false;
       }
@@ -84,10 +84,9 @@ const PatientTreatmentsHistory = () => {
             <thead>
               <tr className="bg-gray-50">
                 <th className="p-2 text-left">Patient</th>
-                <th className="p-2 text-left">Traitement</th>
+                <th className="p-2 text-left">Suivi</th>
                 <th className="p-2 text-left">Début</th>
                 <th className="p-2 text-left">Fin</th>
-                <th className="p-2 text-left">Sessions</th>
               </tr>
             </thead>
             <tbody>
@@ -111,12 +110,11 @@ const PatientTreatmentsHistory = () => {
                       </button>
                     )}
                   </td>
-                  <td className="p-2">{pt.treatment?.name}</td>
+                  <td className="p-2">{pt.name}</td>
                   <td className="p-2">{pt.start_date ? new Date(pt.start_date).toLocaleDateString('fr-FR') : ''}</td>
                   <td className="p-2">{pt.end_date ? new Date(pt.end_date).toLocaleDateString('fr-FR') : ''}</td>
-                  <td className="p-2">{pt.completed_sessions}</td>
                 </tr>
-              ))}
+              ))}}
             </tbody>
           </table>
         </div>
