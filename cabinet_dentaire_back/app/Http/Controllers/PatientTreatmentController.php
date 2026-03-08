@@ -47,6 +47,25 @@ class PatientTreatmentController extends Controller
             'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
         ]);
 
+        // Vérifier si le patient a déjà un suivi en cours
+        $existingTreatment = PatientTreatment::where('patient_id', $validated['patient_id'])
+            ->whereIn('status', ['planned', 'in_progress'])
+            ->with('patient')
+            ->first();
+
+        if ($existingTreatment) {
+            return response()->json([
+                'message' => 'Ce patient a déjà un suivi en cours.',
+                'error' => 'PATIENT_HAS_ACTIVE_TREATMENT',
+                'existing_treatment' => [
+                    'id' => $existingTreatment->id,
+                    'name' => $existingTreatment->name,
+                    'status' => $existingTreatment->status,
+                    'start_date' => $existingTreatment->start_date,
+                ]
+            ], 422);
+        }
+
         // Empêcher la création d'un rendez-vous à une date passée
         if (strtotime($validated['next_appointment_date']) < time()) {
             return response()->json(['message' => 'Impossible de créer un rendez-vous dans le passé.'], 422);
@@ -126,6 +145,34 @@ class PatientTreatmentController extends Controller
 
         $patientTreatment->load(['patient', 'nextAppointment', 'acts.dentalAct']);
         return response()->json($patientTreatment);
+    }
+
+    /**
+     * Ajouter des actes à un traitement existant
+     */
+    public function addActs(Request $request, PatientTreatment $patientTreatment)
+    {
+        $validated = $request->validate([
+            'acts' => ['required', 'array'],
+            'acts.*.dental_act_id' => ['required', 'integer', 'exists:dental_acts,id'],
+            'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        // Ajouter les nouveaux actes sans supprimer les anciens
+        foreach ($validated['acts'] as $act) {
+            $dentalAct = \App\Models\DentalAct::find($act['dental_act_id']);
+            $patientTreatment->acts()->create([
+                'dental_act_id' => $dentalAct->id,
+                'quantity' => $act['quantity'] ?? 1,
+                'tarif_snapshot' => $dentalAct->tarif,
+            ]);
+        }
+
+        $patientTreatment->load(['patient', 'nextAppointment', 'acts.dentalAct']);
+        return response()->json([
+            'message' => 'Actes ajoutés avec succès',
+            'patient_treatment' => $patientTreatment
+        ]);
     }
 
     public function destroy(PatientTreatment $patientTreatment)

@@ -247,6 +247,12 @@ export const patientTreatmentAPI = {
     clearCache('patient-treatments');
     return api.delete(`/api/patient-treatments/${id}`);
   },
+
+  // Ajouter des actes à un traitement existant
+  addActs: (id, acts) => {
+    clearCache('patient-treatments');
+    return api.post(`/api/patient-treatments/${id}/acts`, { acts });
+  },
 };
 
 // Endpoints pour les dossiers médicaux

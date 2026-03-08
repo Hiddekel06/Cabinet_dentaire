@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Layout } from '../../components/Layout';
 import api from '../../services/api';
 
@@ -8,6 +8,11 @@ const ImportDentalActs = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [dentalActs, setDentalActs] = useState([]);
+
+  // Charger les actes au montage du composant
+  useEffect(() => {
+    loadDentalActs();
+  }, []);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -52,9 +57,13 @@ const ImportDentalActs = () => {
   const loadDentalActs = async () => {
     try {
       const response = await api.get('/api/dental-acts');
-      setDentalActs(response.data);
+      // Gérer à la fois les retours paginés et directs
+      const acts = Array.isArray(response.data) ? response.data : (response.data.data || []);
+      console.log('Actes chargés:', acts.length);
+      setDentalActs(acts);
     } catch (err) {
       console.error('Erreur chargement:', err);
+      setError('Erreur lors du chargement des actes');
     }
   };
 

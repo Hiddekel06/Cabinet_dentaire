@@ -5,6 +5,7 @@ import { appointmentAPI, patientAPI, patientTreatmentAPI, medicalRecordAPI, auth
 const PatientTreatments = () => {
     // Barre de recherche pour actes dentaires
     const [dentalActsSearchTerm, setDentalActsSearchTerm] = useState('');
+    const [sessionActsSearchTerm, setSessionActsSearchTerm] = useState('');
   const [patients, setPatients] = useState([]);
   const [patientTreatments, setPatientTreatments] = useState([]);
   const [dentalActs, setDentalActs] = useState([]);
@@ -12,6 +13,8 @@ const PatientTreatments = () => {
   const [loading, setLoading] = useState(false);
   const [showStartModal, setShowStartModal] = useState(false);
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [showFinishConfirmModal, setShowFinishConfirmModal] = useState(false);
+  const [treatmentToFinish, setTreatmentToFinish] = useState(null);
   const [currentTreatmentForSession, setCurrentTreatmentForSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const hasLoadedRef = useRef(false);
@@ -45,6 +48,7 @@ const PatientTreatments = () => {
     next_action: '',
     next_appointment_date: '',
     next_appointment_time: '',
+    acts: [], // Nouveaux actes à ajouter
   });
 
   // Calcul du total des actes sélectionnés
@@ -124,7 +128,24 @@ const PatientTreatments = () => {
       loadInitialData();
     } catch (error) {
       console.error('Erreur démarrage suivi:', error);
-      alert('Erreur lors du démarrage du suivi');
+      
+      // Vérifier si c'est une erreur de suivi existant
+      if (error.response?.data?.error === 'PATIENT_HAS_ACTIVE_TREATMENT') {
+        const existing = error.response.data.existing_treatment;
+        const patientName = patients.find(p => p.id === startForm.patient_id);
+        const fullName = patientName ? `${patientName.first_name} ${patientName.last_name}` : 'Ce patient';
+        
+        const message = `⚠️ ${fullName} a déjà un suivi en cours:\n\n` +
+                       `📋 Nom: ${existing.name}\n` +
+                       `📅 Démarré le: ${new Date(existing.start_date).toLocaleDateString('fr-FR')}\n` +
+                       `🔄 Statut: ${existing.status === 'planned' ? 'Planifié' : 'En cours'}\n\n` +
+                       `Veuillez terminer ou annuler ce suivi avant d'en créer un nouveau.`;
+        
+        alert(message);
+      } else {
+        const errorMsg = error.response?.data?.message || 'Erreur lors du démarrage du suivi';
+        alert(errorMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -188,6 +209,11 @@ const PatientTreatments = () => {
         next_appointment_id: newNextAppointmentId,
       });
 
+      // Ajouter les nouveaux actes si présents
+      if (sessionForm.acts.length > 0) {
+        await patientTreatmentAPI.addActs(currentTreatmentForSession.id, sessionForm.acts);
+      }
+
       alert('Session ajoutée avec succès !');
       setShowSessionModal(false);
       setSessionForm({
@@ -195,7 +221,9 @@ const PatientTreatments = () => {
         next_action: '',
         next_appointment_date: '',
         next_appointment_time: '',
+        acts: [],
       });
+      setSessionActsSearchTerm('');
       setCurrentTreatmentForSession(null);
       loadInitialData();
     } catch (error) {
@@ -243,16 +271,18 @@ const PatientTreatments = () => {
     }
   };
 
-  const handleFinishTreatment = async (treatment) => {
-    if (!confirm('Êtes-vous sûr de vouloir terminer ce suivi ?')) return;
+  const handleFinishTreatment = async () => {
+    if (!treatmentToFinish) return;
 
     setLoading(true);
     try {
-      await patientTreatmentAPI.update(treatment.id, {
+      await patientTreatmentAPI.update(treatmentToFinish.id, {
         status: 'completed',
         end_date: new Date().toISOString().split('T')[0],
       });
       alert('Suivi terminé avec succès !');
+      setShowFinishConfirmModal(false);
+      setTreatmentToFinish(null);
       loadInitialData();
     } catch (error) {
       console.error('Erreur fin suivi:', error);
@@ -649,7 +679,10 @@ const PatientTreatments = () => {
                             Ajouter séance
                           </button>
                           <button
-                            onClick={() => handleFinishTreatment(pt)}
+                            onClick={() => {
+                              setTreatmentToFinish(pt);
+                              setShowFinishConfirmModal(true);
+                            }}
                             className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 rounded-md hover:bg-rose-100 transition-colors"
                           >
                             Terminer
@@ -663,6 +696,56 @@ const PatientTreatments = () => {
             )}
           </div>
         </div>
+
+        {/* Modal confirmation fin de suivi */}
+        {showFinishConfirmModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+              <div className="px-6 py-4 border-b border-gray-100 bg-linear-to-r from-rose-50 to-orange-50">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-rose-100 rounded-lg">
+                    <svg className="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Confirmer la fin du suivi</h3>
+                </div>
+              </div>
+
+              <div className="px-6 py-5 space-y-3">
+                <p className="text-sm text-gray-700">Voulez-vous vraiment terminer ce suivi ?</p>
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-sm text-gray-900 font-medium">{treatmentToFinish?.name || 'Suivi'}</p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Patient: {treatmentToFinish?.patient?.first_name} {treatmentToFinish?.patient?.last_name}
+                  </p>
+                </div>
+                <p className="text-xs text-gray-500">Cette action marquera le suivi comme terminé à la date du jour.</p>
+              </div>
+
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFinishConfirmModal(false);
+                    setTreatmentToFinish(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFinishTreatment}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-rose-600 rounded-lg hover:bg-rose-700 disabled:opacity-50"
+                >
+                  {loading ? 'En cours...' : 'Oui, terminer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal démarrer suivi */}
 {showStartModal && (
@@ -739,28 +822,84 @@ const PatientTreatments = () => {
                 {showPatientList && patientSearchTerm && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
                     {filteredPatients.length > 0 ? (
-                      filteredPatients.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setStartForm({ ...startForm, patient_id: p.id });
-                            setPatientSearchTerm(`${p.first_name} ${p.last_name}`);
-                            setShowPatientList(false);
-                          }}
-                          className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
-                        >
-                          <div className="font-medium text-gray-900">{p.first_name} {p.last_name}</div>
-                          {p.phone && <div className="text-xs text-gray-500">{p.phone}</div>}
-                          {p.email && <div className="text-xs text-gray-500">{p.email}</div>}
-                        </button>
-                      ))
+                      filteredPatients.map((p) => {
+                        // Vérifier si le patient a un suivi actif
+                        const activePatientTreatment = patientTreatments.find(
+                          pt => pt.patient_id === p.id && ['planned', 'in_progress'].includes(pt.status)
+                        );
+                        
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setStartForm({ ...startForm, patient_id: p.id });
+                              setPatientSearchTerm(`${p.first_name} ${p.last_name}`);
+                              setShowPatientList(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 transition-colors border-b border-gray-100 last:border-b-0 ${
+                              activePatientTreatment ? 'bg-orange-50 hover:bg-orange-100' : 'hover:bg-blue-50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-medium text-gray-900">{p.first_name} {p.last_name}</div>
+                                {p.phone && <div className="text-xs text-gray-500">{p.phone}</div>}
+                                {p.email && <div className="text-xs text-gray-500">{p.email}</div>}
+                              </div>
+                              {activePatientTreatment && (
+                                <div className="flex items-center gap-1 px-2 py-1 bg-orange-200 text-orange-900 rounded-full text-xs font-medium">
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                  Suivi actif
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
                     ) : (
                       <div className="px-3 py-2 text-sm text-gray-500">Aucun patient trouvé</div>
                     )}
                   </div>
                 )}
               </div>
+
+              {/* Avertissement si le patient a déjà un suivi actif */}
+              {startForm.patient_id && (() => {
+                const activePatientTreatment = patientTreatments.find(
+                  pt => pt.patient_id === startForm.patient_id && ['planned', 'in_progress'].includes(pt.status)
+                );
+                if (activePatientTreatment) {
+                  return (
+                    <div className="p-4 bg-orange-50 border-l-4 border-orange-400 rounded-lg">
+                      <div className="flex items-start">
+                        <div className="flex-shrink-0">
+                          <svg className="w-5 h-5 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <h3 className="text-sm font-medium text-orange-800">⚠️ Suivi déjà en cours</h3>
+                          <div className="mt-2 text-sm text-orange-700">
+                            <p>Ce patient a déjà un suivi actif:</p>
+                            <p className="mt-1 font-semibold">📋 {activePatientTreatment.name}</p>
+                            <p className="text-xs mt-1">
+                              Démarré le {new Date(activePatientTreatment.start_date).toLocaleDateString('fr-FR')} •&nbsp;
+                              Statut: {activePatientTreatment.status === 'planned' ? 'Planifié' : 'En cours'}
+                            </p>
+                            <p className="mt-2 text-xs font-medium">
+                              ❌ Vous ne pourrez pas créer ce nouveau suivi tant que le suivi actuel n'est pas terminé ou annulé.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div className="space-y-1">
                 <label className="block text-sm font-medium text-gray-700">
@@ -835,6 +974,30 @@ const PatientTreatments = () => {
                     );
                   })}
                 </div>
+                
+                {/* Récapitulatif des actes sélectionnés */}
+                {startForm.acts.length > 0 && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-2">📋 Actes sélectionnés ({startForm.acts.length})</h4>
+                    <ul className="space-y-1">
+                      {startForm.acts.map((selectedAct) => {
+                        const act = dentalActs.find(a => a.id === selectedAct.dental_act_id);
+                        return act ? (
+                          <li key={act.id} className="text-sm text-blue-800 flex justify-between">
+                            <span>• {act.code ? `${act.code} - ` : ''}{act.name}</span>
+                            <span className="font-medium">x{selectedAct.quantity} = {(act.tarif * selectedAct.quantity).toLocaleString()} FCFA</span>
+                          </li>
+                        ) : null;
+                      })}
+                    </ul>
+                    <div className="mt-2 pt-2 border-t border-blue-300">
+                      <div className="flex justify-between text-sm font-bold text-blue-900">
+                        <span>Total estimé:</span>
+                        <span>{totalActs.toLocaleString()} FCFA</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="space-y-1 md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700">
@@ -955,7 +1118,9 @@ const PatientTreatments = () => {
           <button
             type="submit"
             onClick={handleStartTreatment}
-            disabled={loading}
+            disabled={loading || (startForm.patient_id && patientTreatments.some(
+              pt => pt.patient_id === startForm.patient_id && ['planned', 'in_progress'].includes(pt.status)
+            ))}
             className="px-4 py-2 text-sm font-medium text-white bg-linear-to-r from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200"
           >
             {loading ? (
@@ -966,7 +1131,9 @@ const PatientTreatments = () => {
                 </svg>
                 <span>En cours...</span>
               </span>
-            ) : 'Démarrer le suivi'}
+            ) : (startForm.patient_id && patientTreatments.some(
+              pt => pt.patient_id === startForm.patient_id && ['planned', 'in_progress'].includes(pt.status)
+            )) ? '⚠️ Suivi déjà actif' : 'Démarrer le suivi'}
           </button>
         </div>
       </div>
@@ -1036,6 +1203,95 @@ const PatientTreatments = () => {
                       placeholder="Décrivez précisément ce qui a été fait pendant la séance..."
                       required
                     />
+                  </div>
+
+                  {/* Section pour ajouter des actes supplémentaires */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-1.5 bg-amber-100 rounded-lg">
+                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                      </div>
+                      <h3 className="text-sm font-semibold text-amber-900">Ajouter de nouveaux actes (optionnel)</h3>
+                    </div>
+                    
+                    <input
+                      type="text"
+                      placeholder="Rechercher un acte à ajouter..."
+                      className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                      value={sessionActsSearchTerm}
+                      onChange={e => setSessionActsSearchTerm(e.target.value)}
+                    />
+                    
+                    {sessionActsSearchTerm && (
+                      <div className="max-h-48 overflow-y-auto space-y-2 border border-amber-200 rounded-lg p-2 bg-white">
+                        {dentalActs.filter(act =>
+                          (act.name && act.name.toLowerCase().includes(sessionActsSearchTerm.toLowerCase())) ||
+                          (act.code && act.code.toLowerCase().includes(sessionActsSearchTerm.toLowerCase()))
+                        ).map((act) => {
+                          const selected = sessionForm.acts.find(a => a.dental_act_id === act.id);
+                          return (
+                            <div key={act.id} className="flex items-center gap-2 p-2 hover:bg-amber-50 rounded">
+                              <input
+                                type="checkbox"
+                                checked={!!selected}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSessionForm(prev => ({
+                                      ...prev,
+                                      acts: [...prev.acts, { dental_act_id: act.id, quantity: 1 }],
+                                    }));
+                                  } else {
+                                    setSessionForm(prev => ({
+                                      ...prev,
+                                      acts: prev.acts.filter(a => a.dental_act_id !== act.id),
+                                    }));
+                                  }
+                                }}
+                                className="rounded"
+                              />
+                              <span className="flex-1 text-sm">
+                                {act.code ? `${act.code} - ` : ''}{act.name} {act.tarif ? `(${act.tarif.toLocaleString()} FCFA)` : ''}
+                              </span>
+                              {selected && (
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={selected.quantity}
+                                  onChange={e => {
+                                    const qty = Math.max(1, parseInt(e.target.value) || 1);
+                                    setSessionForm(prev => ({
+                                      ...prev,
+                                      acts: prev.acts.map(a => a.dental_act_id === act.id ? { ...a, quantity: qty } : a),
+                                    }));
+                                  }}
+                                  className="w-16 px-2 py-1 border border-amber-200 rounded focus:ring-2 focus:ring-amber-500"
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    
+                    {/* Récapitulatif des actes ajoutés */}
+                    {sessionForm.acts.length > 0 && (
+                      <div className="mt-2 p-2 bg-white border border-amber-200 rounded-lg">
+                        <h4 className="text-xs font-semibold text-amber-900 mb-1">Nouveaux actes à ajouter:</h4>
+                        <ul className="space-y-1">
+                          {sessionForm.acts.map((selectedAct) => {
+                            const act = dentalActs.find(a => a.id === selectedAct.dental_act_id);
+                            return act ? (
+                              <li key={act.id} className="text-xs text-amber-800 flex justify-between">
+                                <span>• {act.name}</span>
+                                <span>x{selectedAct.quantity}</span>
+                              </li>
+                            ) : null;
+                          })}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-linear-to-br from-blue-50 to-indigo-50/30 rounded-xl p-4 space-y-4">

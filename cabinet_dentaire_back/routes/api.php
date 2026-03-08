@@ -38,6 +38,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des traitements patients (suivi)
     Route::apiResource('patient-treatments', PatientTreatmentController::class);
+    Route::post('patient-treatments/{patientTreatment}/acts', [PatientTreatmentController::class, 'addActs']);
     
     // Gestion des radiographies
     Route::apiResource('radiographies', RadiographyController::class);
