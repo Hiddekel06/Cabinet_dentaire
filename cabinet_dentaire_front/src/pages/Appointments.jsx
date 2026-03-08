@@ -835,7 +835,9 @@ const Appointments = () => {
               <p className="text-gray-500 text-sm mt-1">Liste des rendez-vous du cabinet</p>
             </div>
             <div className="mt-3 sm:mt-0 flex space-x-2">
-              <button className="inline-flex items-center gap-1.5 px-3 py-2 text-blue-600 text-sm font-medium rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer select-none border border-blue-100">
+              <button 
+                onClick={() => setShowQuickCreate(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-blue-600 text-sm font-medium rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer select-none border border-blue-100">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>

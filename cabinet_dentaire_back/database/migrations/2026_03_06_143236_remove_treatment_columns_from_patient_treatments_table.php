@@ -31,8 +31,8 @@ return new class extends Migration
             $table->integer('total_sessions')->nullable()->after('notes');
             $table->integer('completed_sessions')->default(0)->after('total_sessions');
             
-            // Recréer la foreign key
-            $table->foreign('treatment_id')->references('id')->on('treatments')->onDelete('restrict');
+            // Note: Ne pas recréer la foreign key car la table treatments 
+            // pourrait avoir été supprimée par une migration ultérieure
         });
     }
 };

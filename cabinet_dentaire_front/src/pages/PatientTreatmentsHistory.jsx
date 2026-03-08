@@ -114,7 +114,7 @@ const PatientTreatmentsHistory = () => {
                   <td className="p-2">{pt.start_date ? new Date(pt.start_date).toLocaleDateString('fr-FR') : ''}</td>
                   <td className="p-2">{pt.end_date ? new Date(pt.end_date).toLocaleDateString('fr-FR') : ''}</td>
                 </tr>
-              ))}}
+              ))}
             </tbody>
           </table>
         </div>

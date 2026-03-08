@@ -16,11 +16,11 @@ return new class extends Migration
             $table->dropForeign(['treatment_id']);
             $table->dropColumn('treatment_id');
             
-            // Ajouter la référence vers patient_treatment_act
+            // Ajouter la référence vers patient_treatment_acts
             $table->unsignedBigInteger('patient_treatment_act_id')->after('invoice_id');
             $table->foreign('patient_treatment_act_id')
                   ->references('id')
-                  ->on('patient_treatment_act')
+                  ->on('patient_treatment_acts')
                   ->onDelete('cascade');
         });
     }
