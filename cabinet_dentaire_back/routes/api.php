@@ -3,7 +3,9 @@
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\MedicationController;
 use App\Http\Controllers\MedicalRecordController;
+use App\Http\Controllers\OrdonnanceController;
 use App\Http\Controllers\PatientTreatmentController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductTypeController;
@@ -52,6 +54,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Gestion des certificats médicaux
     Route::apiResource('medical-certificates', \App\Http\Controllers\MedicalCertificateController::class);
+
+    // Gestion des ordonnances
+    Route::apiResource('ordonnances', OrdonnanceController::class)->only(['index', 'store', 'show', 'destroy']);
+    Route::post('ordonnances/{ordonnance}/generate', [OrdonnanceController::class, 'generate']);
+    Route::get('medications/suggestions', [MedicationController::class, 'suggestions']);
     
     // Dossier médical complet du patient
     Route::prefix('patients/{patient}')->group(function () {

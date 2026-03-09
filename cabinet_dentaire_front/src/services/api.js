@@ -46,6 +46,43 @@ export const medicalCertificateAPI = {
     return api.delete(`/api/medical-certificates/${id}`);
   },
 };
+
+// Endpoints pour les ordonnances
+export const ordonnanceAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `ordonnances:${query}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    return api.get(`/api/ordonnances?${query}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+
+  getById: (id) =>
+    api.get(`/api/ordonnances/${id}`),
+
+  create: (data) => {
+    clearCache('ordonnances');
+    return api.post('/api/ordonnances', data);
+  },
+
+  delete: (id) => {
+    clearCache('ordonnances');
+    return api.delete(`/api/ordonnances/${id}`);
+  },
+
+  generate: (id, data = {}) =>
+    api.post(`/api/ordonnances/${id}/generate`, data, { responseType: 'blob' }),
+};
+
+// Endpoints pour les suggestions de médicaments
+export const medicationAPI = {
+  suggestions: (query = '') =>
+    api.get(`/api/medications/suggestions?query=${encodeURIComponent(query)}`),
+};
 import axios from 'axios';
 
 const api = axios.create({

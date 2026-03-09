@@ -93,6 +93,16 @@ const PatientDossier = () => {
     return acc;
   }, {});
 
+  const ptActsById = patientTreatments.reduce((acc, pt) => {
+    const acts = Array.isArray(pt.acts) ? pt.acts : [];
+    acc[pt.id] = acts.map((a) => {
+      const actName = a?.dental_act?.name || a?.dentalAct?.name || (a?.dental_act_id ? `Acte #${a.dental_act_id}` : 'Acte');
+      const qty = a?.quantity || 1;
+      return `${actName} x${qty}`;
+    });
+    return acc;
+  }, {});
+
   // Fonction pour afficher les initiales du patient
   const getInitials = () => {
     if (!patient) return '';
@@ -311,6 +321,9 @@ const PatientDossier = () => {
                         Acte réalisé
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actes choisis
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Prochain acte
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -322,13 +335,29 @@ const PatientDossier = () => {
                     {records.map((r) => (
                       <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {treatmentNameById[r.patient_treatment_id] || 'Traitement'}
+                          {ptNameById[r.patient_treatment_id] || 'Traitement'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {r.treatment_performed || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {ptActsById[r.patient_treatment_id]?.length ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {ptActsById[r.patient_treatment_id].map((label, idx) => (
+                                <span
+                                  key={`${r.id}-act-${idx}`}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-100"
+                                >
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            '-'
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {r.next_action || '-'}

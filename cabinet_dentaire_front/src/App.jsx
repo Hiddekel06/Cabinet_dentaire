@@ -7,6 +7,7 @@ import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
 import MedicalCertificates from './pages/MedicalCertificates';
 import DossierMedicaux from './pages/DossierMedicaux';
+import Ordonnances from './pages/Ordonnances';
 import Statistics from './pages/Statistics';
 import PatientTreatments from './pages/PatientTreatments';
 import PatientTreatmentsHistory from './pages/PatientTreatmentsHistory';
@@ -109,6 +110,14 @@ function App() {
             }
           />
 
+          <Route
+            path="/ordonnances"
+            element={
+              <ProtectedRoute>
+                <Ordonnances />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/medical-certificates"
             element={
