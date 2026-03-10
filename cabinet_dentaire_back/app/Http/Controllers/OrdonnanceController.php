@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Ordonnance;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
 
 class OrdonnanceController extends Controller
@@ -100,6 +101,9 @@ class OrdonnanceController extends Controller
 
         $templatePath = resource_path('template/template_ordonnance.docx');
         if (!file_exists($templatePath)) {
+            $templatePath = resource_path('template/Template_Ordonnance.docx');
+        }
+        if (!file_exists($templatePath)) {
             return response()->json(['error' => 'Le modele Word ordonnance est introuvable.'], 500);
         }
 
@@ -151,18 +155,27 @@ class OrdonnanceController extends Controller
 
             // Conversion en PDF via LibreOffice (soffice)
             $outputPdf = storage_path('app/' . $baseName . '.pdf');
-            $cmd = 'soffice --headless --convert-to pdf --outdir "' . dirname($outputWord) . '" "' . $outputWord . '"';
-            $result = null;
+            $cmd = sprintf(
+                'soffice --headless --convert-to pdf --outdir %s %s 2>&1',
+                escapeshellarg(dirname($outputWord)),
+                escapeshellarg($outputWord)
+            );
+            $result = [];
             $retval = null;
             exec($cmd, $result, $retval);
 
-            if (!file_exists($outputPdf)) {
-                return response()->json(['error' => 'Erreur lors de la conversion PDF.'], 500);
+            if ($retval !== 0 || !file_exists($outputPdf)) {
+                if (file_exists($outputWord)) {
+                    File::delete($outputWord);
+                }
+
+                return response()->json([
+                    'error' => 'Erreur lors de la conversion PDF.',
+                    'details' => implode(PHP_EOL, $result),
+                ], 500);
             }
 
-            $ordonnance->update(['file_path' => $outputPdf]);
-
-            return response()->download($outputPdf);
+            return response()->download($outputPdf)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Erreur lors de la generation de l\'ordonnance : ' . $e->getMessage()], 500);
         }
