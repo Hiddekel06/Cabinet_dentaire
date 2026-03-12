@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceController extends Controller
 {
@@ -170,6 +171,37 @@ class InvoiceController extends Controller
             return response()->json(['error' => 'Le modele Word facture est introuvable.'], 500);
         }
 
+        // Cache PDF: evite de reconvertir via LibreOffice tant que la facture n'a pas change.
+        $itemsSignature = $invoice->items
+            ->map(function ($item) {
+                return implode(':', [
+                    (string) $item->id,
+                    (string) $item->quantity,
+                    (string) $item->unit_price,
+                    (string) $item->subtotal,
+                    (string) ($item->updated_at?->timestamp ?? ''),
+                ]);
+            })
+            ->implode('|');
+
+        $versionKey = md5(implode('|', [
+            (string) $invoice->invoice_number,
+            (string) $invoice->issue_date,
+            (string) ($invoice->due_date ?? ''),
+            (string) $invoice->total_amount,
+            (string) $invoice->paid_amount,
+            (string) ($invoice->updated_at?->timestamp ?? ''),
+            $itemsSignature,
+        ]));
+
+        $cacheDir = storage_path('app/generated/invoices');
+        File::ensureDirectoryExists($cacheDir);
+        $cachedPdfPath = $cacheDir . DIRECTORY_SEPARATOR . 'facture_' . $invoice->id . '_' . $versionKey . '.pdf';
+
+        if (file_exists($cachedPdfPath)) {
+            return response()->download($cachedPdfPath, 'facture_' . $invoice->invoice_number . '.pdf');
+        }
+
         try {
             $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor($templatePath);
 
@@ -216,19 +248,30 @@ class InvoiceController extends Controller
                 }
             }
 
+            $tmpDir = storage_path('app/generated/tmp');
+            File::ensureDirectoryExists($tmpDir);
+
             $baseName   = 'facture_' . $invoice->id . '_' . time();
-            $outputWord = storage_path('app/' . $baseName . '.docx');
+            $outputWord = $tmpDir . DIRECTORY_SEPARATOR . $baseName . '.docx';
             $templateProcessor->saveAs($outputWord);
 
-            $outputPdf = storage_path('app/' . $baseName . '.pdf');
+            $outputPdf = $tmpDir . DIRECTORY_SEPARATOR . $baseName . '.pdf';
             $cmd = sprintf(
-                'soffice --headless --convert-to pdf --outdir %s %s 2>&1',
-                escapeshellarg(dirname($outputWord)),
+                'soffice --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to pdf --outdir %s %s 2>&1',
+                escapeshellarg($tmpDir),
                 escapeshellarg($outputWord)
             );
+
+            $start = microtime(true);
             $result = [];
             $retval = null;
             exec($cmd, $result, $retval);
+            $durationMs = (int) round((microtime(true) - $start) * 1000);
+            Log::info('Invoice PDF generation timing', [
+                'invoice_id' => $invoice->id,
+                'duration_ms' => $durationMs,
+                'retval' => $retval,
+            ]);
 
             if (file_exists($outputWord)) {
                 File::delete($outputWord);
@@ -241,8 +284,16 @@ class InvoiceController extends Controller
                 ], 500);
             }
 
-            return response()->download($outputPdf, 'facture_' . $invoice->invoice_number . '.pdf')
-                ->deleteFileAfterSend(true);
+            // Remplace les anciennes versions en cache de cette facture.
+            foreach (File::glob($cacheDir . DIRECTORY_SEPARATOR . 'facture_' . $invoice->id . '_*.pdf') as $oldCacheFile) {
+                if ($oldCacheFile !== $cachedPdfPath) {
+                    File::delete($oldCacheFile);
+                }
+            }
+
+            File::move($outputPdf, $cachedPdfPath);
+
+            return response()->download($cachedPdfPath, 'facture_' . $invoice->invoice_number . '.pdf');
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Erreur lors de la generation de la facture : ' . $e->getMessage(),
