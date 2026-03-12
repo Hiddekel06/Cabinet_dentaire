@@ -27,6 +27,7 @@ const Factures = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -105,6 +106,14 @@ const Factures = () => {
     }, 0);
   }, [billableActs, selectedActs]);
 
+  const getStatusLabel = (status) => {
+    if (status === 'pending') return 'Facture non traitee';
+    if (status === 'paid') return 'Payee';
+    if (status === 'partial') return 'Partiellement payee';
+    if (status === 'cancelled') return 'Annulee';
+    return status || '-';
+  };
+
   const toggleAct = (actId) => {
     setSelectedActs((prev) => ({ ...prev, [actId]: !prev[actId] }));
   };
@@ -153,6 +162,20 @@ const Factures = () => {
       alert('Erreur lors de la generation du PDF');
     } finally {
       setPdfLoading(false);
+    }
+  };
+
+  const markAsPaid = async (invoice) => {
+    if (!invoice?.id || invoice?.status === 'paid') return;
+    setPaymentLoading(true);
+    try {
+      const res = await invoiceAPI.markAsPaid(invoice.id);
+      setSelectedInvoice(res.data || null);
+      await loadInvoices();
+    } catch {
+      alert('Erreur lors de la validation de la facture');
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -265,10 +288,8 @@ const Factures = () => {
               className="w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
             >
               <option value="">Tous les statuts</option>
-              <option value="pending">pending</option>
-              <option value="partial">partial</option>
-              <option value="paid">paid</option>
-              <option value="cancelled">cancelled</option>
+              <option value="pending">Facture non traitee</option>
+              <option value="paid">Payee</option>
             </select>
 
             <input
@@ -334,7 +355,7 @@ const Factures = () => {
                       <td className="py-3 px-4 whitespace-nowrap">{inv.issue_date}</td>
                       <td className="py-3 px-4 whitespace-nowrap">{inv.total_amount}</td>
                       <td className="py-3 px-4 whitespace-nowrap">{inv.paid_amount}</td>
-                      <td className="py-3 px-4 whitespace-nowrap">{inv.status}</td>
+                      <td className="py-3 px-4 whitespace-nowrap">{getStatusLabel(inv.status)}</td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <button
                           type="button"
@@ -508,29 +529,40 @@ const Factures = () => {
 
             <div className="px-4 pt-6 pb-3 bg-linear-to-r from-blue-50 via-white to-blue-50 rounded-t-xl flex items-center justify-between">
               <h3 className="text-lg font-bold text-gray-900">Detail facture</h3>
-              {selectedInvoice && (
-                <button
-                  onClick={() => downloadPdf(selectedInvoice)}
-                  disabled={pdfLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  {pdfLoading ? (
-                    <>
-                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v2m0 12v2m8-8h-2m-12 0H4" />
-                      </svg>
-                      Generation...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                      </svg>
-                      Télécharger PDF
-                    </>
-                  )}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {selectedInvoice?.status === 'pending' && (
+                  <button
+                    onClick={() => markAsPaid(selectedInvoice)}
+                    disabled={paymentLoading}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                  >
+                    {paymentLoading ? 'Validation...' : 'Valider comme payee'}
+                  </button>
+                )}
+                {selectedInvoice && (
+                  <button
+                    onClick={() => downloadPdf(selectedInvoice)}
+                    disabled={pdfLoading}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {pdfLoading ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v2m0 12v2m8-8h-2m-12 0H4" />
+                        </svg>
+                        Generation...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        </svg>
+                        Télécharger PDF
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="px-4 py-4 overflow-y-auto max-h-[70vh]">
@@ -542,7 +574,7 @@ const Factures = () => {
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                     <div><span className="text-gray-500">Numero:</span> <span className="font-semibold">{selectedInvoice.invoice_number}</span></div>
-                    <div><span className="text-gray-500">Statut:</span> <span className="font-semibold">{selectedInvoice.status}</span></div>
+                    <div><span className="text-gray-500">Statut:</span> <span className="font-semibold">{getStatusLabel(selectedInvoice.status)}</span></div>
                     <div><span className="text-gray-500">Patient:</span> <span className="font-semibold">{selectedInvoice.patient ? `${selectedInvoice.patient.first_name || ''} ${selectedInvoice.patient.last_name || ''}`.trim() : '-'}</span></div>
                     <div><span className="text-gray-500">Date:</span> <span className="font-semibold">{selectedInvoice.issue_date}</span></div>
                     <div><span className="text-gray-500">Total:</span> <span className="font-semibold">{selectedInvoice.total_amount}</span></div>

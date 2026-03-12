@@ -103,6 +103,11 @@ export const invoiceAPI = {
     return api.post('/api/invoices', data);
   },
 
+  markAsPaid: (id) => {
+    clearCache('invoices');
+    return api.post(`/api/invoices/${id}/mark-paid`);
+  },
+
   generate: (id) =>
     api.post(`/api/invoices/${id}/generate`, {}, { responseType: 'blob' }),
 };

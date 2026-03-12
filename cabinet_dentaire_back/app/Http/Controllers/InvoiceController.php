@@ -157,6 +157,25 @@ class InvoiceController extends Controller
     }
 
     /**
+     * Valide une facture comme totalement payee.
+     */
+    public function markAsPaid(Invoice $invoice)
+    {
+        if ($invoice->status === 'paid' && (float) $invoice->paid_amount >= (float) $invoice->total_amount) {
+            $invoice->load(['patient', 'items.patientTreatmentAct.dentalAct']);
+            return response()->json($invoice);
+        }
+
+        $invoice->update([
+            'paid_amount' => $invoice->total_amount,
+            'status' => 'paid',
+        ]);
+
+        $invoice->load(['patient', 'items.patientTreatmentAct.dentalAct']);
+        return response()->json($invoice);
+    }
+
+    /**
      * Genere un PDF de la facture a partir du template Word.
      */
     public function generate(Invoice $invoice)
