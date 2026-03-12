@@ -441,4 +441,18 @@ export const productAPI = {
   },
 };
 
+// Endpoint pour le tableau de bord statistiques
+export const statisticsAPI = {
+  getOverview: (period = 'month') => {
+    const cacheKey = `statistics:overview:${period}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    return api.get(`/api/statistics/overview?period=${encodeURIComponent(period)}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+};
+
 export default api;

@@ -11,6 +11,7 @@ use App\Http\Controllers\PatientTreatmentController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductTypeController;
 use App\Http\Controllers\RadiographyController;
+use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\MedicalFolderController;
 use Illuminate\Support\Facades\Route;
 
@@ -69,6 +70,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('invoices', [InvoiceController::class, 'store']);
     Route::post('invoices/{invoice}/generate', [InvoiceController::class, 'generate']);
     Route::post('invoices/{invoice}/mark-paid', [InvoiceController::class, 'markAsPaid']);
+
+    // Statistiques consolidees
+    Route::get('statistics/overview', [StatisticsController::class, 'overview']);
     
     // Dossier médical complet du patient
     Route::prefix('patients/{patient}')->group(function () {
