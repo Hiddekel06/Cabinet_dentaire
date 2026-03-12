@@ -433,6 +433,8 @@ const PatientTreatments = () => {
                       key={patient.id}
                       onClick={() => {
                         setStartForm(prev => ({ ...prev, patient_id: patient.id }));
+                        setPatientSearchTerm(`${patient.first_name || ''} ${patient.last_name || ''}`.trim());
+                        setShowPatientList(false);
                         setShowStartModal(true);
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all text-sm group"

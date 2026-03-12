@@ -13,6 +13,7 @@ import PatientTreatments from './pages/PatientTreatments';
 import PatientTreatmentsHistory from './pages/PatientTreatmentsHistory';
 import PatientDossier from './pages/PatientDossier';
 import Achats from './pages/Achats';
+import Factures from './pages/Factures';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
 import ImportDentalActs from './pages/admin/ImportDentalActs';
@@ -139,6 +140,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Achats />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/factures"
+            element={
+              <ProtectedRoute>
+                <Factures />
               </ProtectedRoute>
             }
           />

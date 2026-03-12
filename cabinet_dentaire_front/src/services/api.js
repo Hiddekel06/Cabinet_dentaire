@@ -78,6 +78,32 @@ export const ordonnanceAPI = {
     api.post(`/api/ordonnances/${id}/generate`, data, { responseType: 'blob' }),
 };
 
+// Endpoints pour les factures
+export const invoiceAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `invoices:${query}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    return api.get(`/api/invoices?${query}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+
+  getById: (id) =>
+    api.get(`/api/invoices/${id}`),
+
+  getBillableActs: (patientId) =>
+    api.get(`/api/patients/${patientId}/billable-acts`),
+
+  create: (data) => {
+    clearCache('invoices');
+    return api.post('/api/invoices', data);
+  },
+};
+
 // Endpoints pour les suggestions de médicaments
 export const medicationAPI = {
   suggestions: (query = '') =>

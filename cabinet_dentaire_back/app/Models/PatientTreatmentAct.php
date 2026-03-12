@@ -21,4 +21,9 @@ class PatientTreatmentAct extends Model
     {
         return $this->belongsTo(PatientTreatment::class);
     }
+
+    public function invoiceItems()
+    {
+        return $this->hasMany(InvoiceItem::class);
+    }
 }

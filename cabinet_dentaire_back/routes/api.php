@@ -5,6 +5,7 @@ use App\Http\Controllers\PatientController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\MedicationController;
 use App\Http\Controllers\MedicalRecordController;
+use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\OrdonnanceController;
 use App\Http\Controllers\PatientTreatmentController;
 use App\Http\Controllers\ProductController;
@@ -32,6 +33,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des patients
     Route::apiResource('patients', PatientController::class);
+    Route::get('patients/{patient}/billable-acts', [PatientController::class, 'billableActs']);
     
     // Gestion des rendez-vous
     Route::apiResource('appointments', AppointmentController::class);
@@ -60,6 +62,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::apiResource('ordonnances', OrdonnanceController::class)->only(['index', 'store', 'show', 'destroy']);
     Route::post('ordonnances/{ordonnance}/generate', [OrdonnanceController::class, 'generate']);
     Route::get('medications/suggestions', [MedicationController::class, 'suggestions']);
+
+    // Facturation (MVP etape 1)
+    Route::get('invoices', [InvoiceController::class, 'index']);
+    Route::get('invoices/{invoice}', [InvoiceController::class, 'show']);
+    Route::post('invoices', [InvoiceController::class, 'store']);
     
     // Dossier médical complet du patient
     Route::prefix('patients/{patient}')->group(function () {

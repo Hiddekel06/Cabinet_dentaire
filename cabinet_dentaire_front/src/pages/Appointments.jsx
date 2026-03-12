@@ -209,6 +209,13 @@ const Appointments = () => {
     return `${y}-${m}-${d}`;
   };
 
+  const todayDateStr = toDateStr(new Date());
+
+  const isDateInPast = (date) => {
+    const checkDate = date instanceof Date ? date : new Date(date);
+    return toDateStr(checkDate) < todayDateStr;
+  };
+
   // Fonction pour obtenir les rendez-vous d'un jour
   const getAppointmentsForDay = (dayOrDate) => {
     const dateStr = dayOrDate instanceof Date
@@ -258,6 +265,11 @@ const Appointments = () => {
   const selectedAppointments = selectedDate ? getAppointmentsForDay(selectedDate) : [];
 
   const addQuickAppointment = (date) => {
+    if (isDateInPast(date)) {
+      setAppointmentsError("Impossible de créer un rendez-vous sur une date passée.");
+      return;
+    }
+
     const dateStr = toDateStr(date);
     setQuickForm({
       date: dateStr,
@@ -328,6 +340,12 @@ const Appointments = () => {
     try {
       const { appointmentId, newDate, appointment } = moveData;
       if (!appointmentId || !appointment) return;
+
+      if (isDateInPast(newDate)) {
+        setAppointmentsError('Impossible de déplacer le rendez-vous vers une date passée.');
+        setShowMoveConfirmation(false);
+        return;
+      }
       
       // Créer le nouvel objet datetime
       const dateStr = toDateStr(newDate);
@@ -467,6 +485,7 @@ const Appointments = () => {
                     name="date"
                     value={quickForm.date}
                     onChange={handleQuickCreateChange}
+                    min={todayDateStr}
                     className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
                   />
                 </div>
@@ -1068,16 +1087,19 @@ const Appointments = () => {
                                     currentDate.getFullYear() === new Date().getFullYear();
                       const isOverloaded = appointmentsForDay.length >= 4;
                       const dateObj = day ? new Date(currentDate.getFullYear(), currentDate.getMonth(), day) : null;
+                      const isPastDay = dateObj ? isDateInPast(dateObj) : false;
                       return (
                         <div
                           key={index}
                           onClick={() => day && setSelectedDate(dateObj)}
                           onDragOver={(e) => day && e.preventDefault()}
-                          onDrop={(e) => day && handleDropOnDay(e, dateObj)}
+                          onDrop={(e) => day && !isPastDay && handleDropOnDay(e, dateObj)}
                           className={`min-h-24 p-2 rounded-lg border-2 transition-all text-left relative cursor-pointer ${
                             day
                               ? isToday
                                 ? 'bg-blue-50 border-blue-300'
+                                : isPastDay
+                                ? 'bg-gray-50 border-gray-200 opacity-80'
                                 : 'bg-white border-gray-200 hover:border-blue-300'
                               : 'bg-gray-50 border-gray-100'
                           }`}
@@ -1093,7 +1115,8 @@ const Appointments = () => {
                                   e.stopPropagation();
                                   addQuickAppointment(dateObj);
                                 }}
-                                className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs"
+                                disabled={isPastDay}
+                                className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
                                 title="Ajouter un RDV"
                               >
                                 +
@@ -1138,15 +1161,20 @@ const Appointments = () => {
                     {weekDates.map((date) => {
                       const appointmentsForDay = getAppointmentsForDay(date);
                       const isToday = toDateStr(date) === toDateStr(new Date());
+                      const isPastDay = isDateInPast(date);
                       const isOverloaded = appointmentsForDay.length >= 4;
                       return (
                         <div
                           key={date.toISOString()}
                           onClick={() => setSelectedDate(date)}
                           onDragOver={(e) => e.preventDefault()}
-                          onDrop={(e) => handleDropOnDay(e, date)}
+                          onDrop={(e) => !isPastDay && handleDropOnDay(e, date)}
                           className={`min-h-28 p-2 rounded-lg border-2 transition-all text-left relative cursor-pointer ${
-                            isToday ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-blue-300'
+                            isToday
+                              ? 'bg-blue-50 border-blue-300'
+                              : isPastDay
+                              ? 'bg-gray-50 border-gray-200 opacity-80'
+                              : 'bg-white border-gray-200 hover:border-blue-300'
                           }`}
                         >
                           <div className={`font-bold text-sm mb-1 ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>
@@ -1158,7 +1186,8 @@ const Appointments = () => {
                               e.stopPropagation();
                               addQuickAppointment(date);
                             }}
-                            className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs"
+                            disabled={isPastDay}
+                            className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Ajouter un RDV"
                           >
                             +

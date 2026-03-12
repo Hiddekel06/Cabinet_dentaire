@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Patient;
+use App\Models\PatientTreatmentAct;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PatientController extends Controller
 {
@@ -113,5 +115,50 @@ class PatientController extends Controller
         $patient->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Retourne les actes realises d'un patient qui ne sont pas encore factures.
+     */
+    public function billableActs(Patient $patient)
+    {
+        $acts = PatientTreatmentAct::query()
+            ->with([
+                'dentalAct:id,code,name,tarif',
+                'patientTreatment:id,patient_id,name,start_date,status',
+            ])
+            ->whereHas('patientTreatment', function ($query) use ($patient) {
+                $query->where('patient_id', $patient->id);
+            })
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('invoice_items')
+                    ->whereColumn('invoice_items.patient_treatment_act_id', 'patient_treatment_acts.id');
+            })
+            ->latest('id')
+            ->get()
+            ->map(function (PatientTreatmentAct $act) {
+                $unitPrice = $act->tarif_snapshot ?? $act->dentalAct?->tarif ?? 0;
+                $quantity = (int) ($act->quantity ?? 1);
+
+                return [
+                    'id' => $act->id,
+                    'patient_treatment_id' => $act->patient_treatment_id,
+                    'patient_treatment_name' => $act->patientTreatment?->name,
+                    'patient_treatment_status' => $act->patientTreatment?->status,
+                    'dental_act_id' => $act->dental_act_id,
+                    'dental_act_code' => $act->dentalAct?->code,
+                    'dental_act_name' => $act->dentalAct?->name,
+                    'quantity' => $quantity,
+                    'unit_price' => (float) $unitPrice,
+                    'subtotal' => (float) ($unitPrice * $quantity),
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'patient_id' => $patient->id,
+            'billable_acts' => $acts,
+        ]);
     }
 }
