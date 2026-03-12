@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\MedicationController;
 use App\Http\Controllers\MedicalRecordController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OrdonnanceController;
 use App\Http\Controllers\PatientTreatmentController;
 use App\Http\Controllers\ProductController;
@@ -73,6 +74,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Statistiques consolidees
     Route::get('statistics/overview', [StatisticsController::class, 'overview']);
+
+    // Dashboard consolide
+    Route::get('dashboard/overview', [DashboardController::class, 'overview']);
     
     // Dossier médical complet du patient
     Route::prefix('patients/{patient}')->group(function () {

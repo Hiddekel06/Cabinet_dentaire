@@ -100,11 +100,15 @@ export const invoiceAPI = {
 
   create: (data) => {
     clearCache('invoices');
+    clearCache('statistics:overview');
+    clearCache('dashboard:overview');
     return api.post('/api/invoices', data);
   },
 
   markAsPaid: (id) => {
     clearCache('invoices');
+    clearCache('statistics:overview');
+    clearCache('dashboard:overview');
     return api.post(`/api/invoices/${id}/mark-paid`);
   },
 
@@ -416,16 +420,22 @@ export const productAPI = {
 
   create: (data) => {
     clearCache('products');
+    clearCache('statistics:overview');
+    clearCache('dashboard:overview');
     return api.post('/api/products', data);
   },
 
   update: (id, data) => {
     clearCache('products');
+    clearCache('statistics:overview');
+    clearCache('dashboard:overview');
     return api.put(`/api/products/${id}`, data);
   },
 
   delete: (id) => {
     clearCache('products');
+    clearCache('statistics:overview');
+    clearCache('dashboard:overview');
     return api.delete(`/api/products/${id}`);
   },
 
@@ -449,6 +459,20 @@ export const statisticsAPI = {
     if (cached) return Promise.resolve(cached);
 
     return api.get(`/api/statistics/overview?period=${encodeURIComponent(period)}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+};
+
+// Endpoint pour la vue dashboard
+export const dashboardAPI = {
+  getOverview: (period = 'month') => {
+    const cacheKey = `dashboard:overview:${period}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    return api.get(`/api/dashboard/overview?period=${encodeURIComponent(period)}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Layout } from "../components/Layout";
 import { statisticsAPI } from "../services/api";
 import {
@@ -39,10 +39,14 @@ const formatMoney = (amount) => {
 };
 
 const defaultStats = {
+  meta: {
+    generated_at: null,
+  },
   kpis: {
     revenue_collected: 0,
     expenses_total: 0,
     net_result: 0,
+    receivable_amount: 0,
     invoices_paid: 0,
     invoices_pending: 0,
     new_patients: 0,
@@ -50,12 +54,28 @@ const defaultStats = {
     appointments_cancelled: 0,
   },
   invoice_status: [
-    { label: "Payees", value: 0 },
-    { label: "Non traitees", value: 0 },
+    { key: "paid", label: "Payées", value: 0, color: "emerald" },
+    { key: "pending", label: "Non traitées", value: 0, color: "amber" },
   ],
+  trends: {
+    revenue_collected_percent: 0,
+    expenses_total_percent: 0,
+    net_result_percent: 0,
+    invoices_paid_percent: 0,
+    invoices_pending_percent: 0,
+    new_patients_percent: 0,
+    appointments_total_percent: 0,
+    appointments_cancelled_percent: 0,
+  },
   top_acts: [],
   appointments_by_day: [],
   finance_by_month: [],
+};
+
+const formatTrend = (value) => {
+  const n = Number(value || 0);
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${n}%`;
 };
 
 const Statistics = () => {
@@ -64,20 +84,20 @@ const Statistics = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const loadOverview = async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const { data } = await statisticsAPI.getOverview(selectedPeriod);
-        setStats({ ...defaultStats, ...(data || {}) });
-      } catch (e) {
-        setError("Impossible de charger les statistiques.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadOverview = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await statisticsAPI.getOverview(selectedPeriod);
+      setStats({ ...defaultStats, ...(data || {}) });
+    } catch (e) {
+      setError("Impossible de charger les statistiques.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadOverview();
   }, [selectedPeriod]);
 
@@ -86,67 +106,69 @@ const Statistics = () => {
   const invoiceStatus = Array.isArray(stats.invoice_status) ? stats.invoice_status : [];
   const topActs = Array.isArray(stats.top_acts) ? stats.top_acts : [];
   const appointmentsByDay = Array.isArray(stats.appointments_by_day) ? stats.appointments_by_day : [];
+  const trends = stats.trends || defaultStats.trends;
 
   const totalRevenue = Number(kpiData.revenue_collected || 0);
   const totalExpenses = Number(kpiData.expenses_total || 0);
   const netResult = Number(kpiData.net_result || 0);
+  const receivableAmount = Number(kpiData.receivable_amount || 0);
   const paidInvoices = Number(kpiData.invoices_paid || 0);
   const pendingInvoices = Number(kpiData.invoices_pending || 0);
 
   const kpis = [
     {
-      label: "Recettes encaissees",
+      label: "Recettes encaissées",
       value: formatMoney(totalRevenue),
-      trend: "-",
+      trend: formatTrend(trends.revenue_collected_percent),
       color: "emerald",
       icon: BanknotesIcon,
     },
     {
-      label: "Depenses achats",
+      label: "Dépenses achats",
       value: formatMoney(totalExpenses),
-      trend: "-",
+      trend: formatTrend(trends.expenses_total_percent),
       color: "red",
       icon: ShoppingCartIcon,
     },
     {
-      label: "Resultat net",
+      label: "Résultat net",
       value: formatMoney(netResult),
-      trend: "-",
+      trend: formatTrend(trends.net_result_percent),
       color: netResult >= 0 ? "blue" : "amber",
       icon: ScaleIcon,
     },
     {
-      label: "Factures payees",
+      label: "Factures payées",
       value: String(paidInvoices),
-      trend: "-",
+      trend: formatTrend(trends.invoices_paid_percent),
       color: "indigo",
       icon: DocumentCheckIcon,
     },
     {
-      label: "Factures non traitees",
+      label: "Factures non traitées",
       value: String(pendingInvoices),
-      trend: "-",
+      trend: formatTrend(trends.invoices_pending_percent),
       color: "amber",
       icon: DocumentTextIcon,
     },
     {
       label: "Nouveaux patients",
       value: String(kpiData.new_patients || 0),
-      trend: "-",
+      trend: formatTrend(trends.new_patients_percent),
       color: "blue",
       icon: UserPlusIcon,
     },
     {
-      label: "RDV periode",
+      label: "RDV période",
       value: String(kpiData.appointments_total || 0),
-      trend: "-",
+      trend: formatTrend(trends.appointments_total_percent),
       color: "emerald",
       icon: CalendarIcon,
     },
     {
-      label: "RDV annules",
+      label: "RDV annulés",
       value: String(kpiData.appointments_cancelled || 0),
-      trend: "-",
+      trend: formatTrend(trends.appointments_cancelled_percent),
       color: "slate",
       icon: XCircleIcon,
     },
@@ -159,21 +181,16 @@ const Statistics = () => {
   const maxDayValue = Math.max(1, ...appointmentsByDay.map((d) => Number(d.value || 0)));
   const maxActCount = Math.max(1, ...topActs.map((a) => Number(a.count || 0)));
 
-  const receivableAmount = useMemo(() => {
-    const pendingRatio = (pendingInvoices || 0) / Math.max((pendingInvoices || 0) + (paidInvoices || 0), 1);
-    return Math.round((totalRevenue + totalExpenses) * pendingRatio * 0.5);
-  }, [pendingInvoices, paidInvoices, totalRevenue, totalExpenses]);
-
   return (
     <Layout>
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Statistiques</h1>
-          <p className="text-gray-600 mt-1">Vue consolidee achats + factures + activite</p>
+          <p className="text-gray-600 mt-1">Vue consolidée achats + factures + activité</p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Periode :</span>
+          <span className="text-sm text-gray-500">Période :</span>
           <div className="relative">
             <select
               value={selectedPeriod}
@@ -191,12 +208,40 @@ const Statistics = () => {
         </div>
       </div>
 
+      {stats?.meta?.generated_at && !loading && (
+        <div className="mb-3 text-xs text-gray-500">
+          Dernière mise à jour: {new Date(stats.meta.generated_at).toLocaleString('fr-FR')}
+        </div>
+      )}
+
       {error && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={loadOverview}
+            className="px-3 py-1 rounded-lg bg-white border border-red-200 hover:bg-red-50 text-red-700 text-xs font-semibold"
+          >
+            Réessayer
+          </button>
+        </div>
       )}
 
       {loading ? (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-gray-600">Chargement des statistiques...</div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <div key={idx} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 animate-pulse">
+                <div className="h-4 w-32 bg-gray-200 rounded mb-3" />
+                <div className="h-8 w-24 bg-gray-200 rounded mb-3" />
+                <div className="h-4 w-16 bg-gray-200 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 animate-pulse h-80" />
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 animate-pulse h-80" />
+          </div>
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -239,7 +284,7 @@ const Statistics = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Recettes vs depenses (6 mois)</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Recettes vs dépenses (6 mois)</h2>
               <div className="flex items-end gap-2 h-56">
                 {financeByMonth.map((m) => (
                   <div key={m.month} className="flex-1 flex flex-col items-center gap-2">
@@ -252,7 +297,7 @@ const Statistics = () => {
                       <div
                         className="w-1/3 rounded-t bg-red-400"
                         style={{ height: `${(Number(m.expenses || 0) / maxFinance) * 85}%` }}
-                        title={`Depenses: ${formatMoney(m.expenses)}`}
+                        title={`Dépenses: ${formatMoney(m.expenses)}`}
                       />
                     </div>
                     <span className="text-xs text-gray-600">{m.month}</span>
@@ -266,24 +311,20 @@ const Statistics = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded bg-red-400" />
-                  <span>Depenses</span>
+                  <span>Dépenses</span>
                 </div>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Etat des factures</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4">État des factures</h2>
               <div className="space-y-4">
                 {invoiceStatus.map((s) => {
                   const total = paidInvoices + pendingInvoices || 1;
                   const percent = Math.round((Number(s.value || 0) / total) * 100);
-                  const colorClass =
-                    s.label === "Payees"
-                      ? "from-emerald-500 to-emerald-300"
-                      : "from-amber-500 to-amber-300";
 
                   return (
-                    <div key={s.label}>
+                    <div key={s.key || s.label}>
                       <div className="flex items-center justify-between text-sm mb-1">
                         <span className="font-medium text-gray-700">{s.label}</span>
                         <span className="text-gray-900 font-semibold">
@@ -292,7 +333,11 @@ const Statistics = () => {
                       </div>
                       <div className="w-full h-2 bg-gray-100 rounded-full">
                         <div
-                          className={`h-2 rounded-full bg-gradient-to-r ${colorClass}`}
+                          className={`h-2 rounded-full bg-gradient-to-r ${
+                            s.color === "emerald"
+                              ? "from-emerald-500 to-emerald-300"
+                              : "from-amber-500 to-amber-300"
+                          }`}
                           style={{ width: `${percent}%` }}
                         />
                       </div>
@@ -307,7 +352,7 @@ const Statistics = () => {
                   <p className="text-sm font-bold text-gray-900 mt-1">{formatMoney(totalRevenue)}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
-                  <p className="text-xs text-amber-700">A encaisser</p>
+                  <p className="text-xs text-amber-700">À encaisser</p>
                   <p className="text-sm font-bold text-gray-900 mt-1">{formatMoney(receivableAmount)}</p>
                 </div>
               </div>
@@ -316,10 +361,10 @@ const Statistics = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Top actes factures</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Top actes facturés</h2>
               <div className="space-y-3">
                 {topActs.length === 0 ? (
-                  <p className="text-sm text-gray-500">Aucune donnee d'actes sur cette periode.</p>
+                  <p className="text-sm text-gray-500">Aucune donnée d'actes sur cette période.</p>
                 ) : (
                   topActs.map((act) => (
                     <div
@@ -346,7 +391,7 @@ const Statistics = () => {
             </div>
 
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Activite RDV (7 jours)</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Activité RDV (7 jours)</h2>
               <div className="flex items-end gap-3 h-44 mb-3">
                 {appointmentsByDay.map((d, index) => (
                   <div key={`${d.day}-${index}`} className="flex-1 flex flex-col items-center gap-2">
@@ -363,18 +408,18 @@ const Statistics = () => {
           </div>
 
           <div className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Synthese metier</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Synthèse métier</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
-                <p className="text-gray-500 text-sm">Recettes encaissees</p>
+                <p className="text-gray-500 text-sm">Recettes encaissées</p>
                 <p className="text-xl font-bold text-gray-900 mt-1">{formatMoney(totalRevenue)}</p>
               </div>
               <div className="p-4 rounded-xl bg-gradient-to-br from-red-50 to-white border border-red-100">
-                <p className="text-gray-500 text-sm">Depenses achats</p>
+                <p className="text-gray-500 text-sm">Dépenses achats</p>
                 <p className="text-xl font-bold text-gray-900 mt-1">{formatMoney(totalExpenses)}</p>
               </div>
               <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
-                <p className="text-gray-500 text-sm">Resultat net</p>
+                <p className="text-gray-500 text-sm">Résultat net</p>
                 <p className="text-xl font-bold text-gray-900 mt-1">{formatMoney(netResult)}</p>
               </div>
             </div>

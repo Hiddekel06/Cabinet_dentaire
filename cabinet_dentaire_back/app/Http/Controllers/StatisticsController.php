@@ -8,6 +8,7 @@ use App\Models\Patient;
 use App\Models\Product;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class StatisticsController extends Controller
@@ -17,70 +18,131 @@ class StatisticsController extends Controller
      */
     public function overview(Request $request)
     {
-        [$periodKey, $periodLabel, $startDate, $endDate] = $this->resolvePeriodRange($request->input('period'));
+        [$periodKey, $periodLabel, $startDate, $endDate, $prevStartDate, $prevEndDate] = $this->resolvePeriodRange(
+            $request->input('period')
+        );
 
-        $revenueCollected = (float) Invoice::query()
-            ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->sum('paid_amount');
+        $cacheKey = sprintf(
+            'statistics:overview:%s:%s:%s',
+            $periodKey,
+            $startDate->toDateString(),
+            $endDate->toDateString()
+        );
 
-        $expensesTotal = (float) Product::query()
-            ->whereBetween('purchase_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->sum('total_amount');
+        $payload = Cache::remember($cacheKey, now()->addMinutes(2), function () use (
+            $periodKey,
+            $periodLabel,
+            $startDate,
+            $endDate,
+            $prevStartDate,
+            $prevEndDate
+        ) {
+            $revenueCollected = $this->sumRevenue($startDate, $endDate);
+            $expensesTotal = $this->sumExpenses($startDate, $endDate);
+            $netResult = $revenueCollected - $expensesTotal;
 
-        $netResult = $revenueCollected - $expensesTotal;
+            $prevRevenue = $this->sumRevenue($prevStartDate, $prevEndDate);
+            $prevExpenses = $this->sumExpenses($prevStartDate, $prevEndDate);
+            $prevNet = $prevRevenue - $prevExpenses;
 
-        $invoicesPaid = Invoice::query()
-            ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->where('status', 'paid')
-            ->count();
+            $receivableAmount = (float) Invoice::query()
+                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->where('status', '!=', 'cancelled')
+                ->sum(DB::raw('GREATEST(total_amount - paid_amount, 0)'));
 
-        $invoicesPending = Invoice::query()
-            ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->where('status', 'pending')
-            ->count();
+            $invoicesPaid = Invoice::query()
+                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->where('status', 'paid')
+                ->count();
 
-        $newPatients = Patient::query()
-            ->whereBetween('created_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
-            ->count();
+            $invoicesPending = Invoice::query()
+                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->where('status', 'pending')
+                ->count();
 
-        $appointmentsTotal = Appointment::query()
-            ->whereBetween('appointment_date', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
-            ->count();
+            $prevInvoicesPaid = Invoice::query()
+                ->whereBetween('issue_date', [$prevStartDate->toDateString(), $prevEndDate->toDateString()])
+                ->where('status', 'paid')
+                ->count();
 
-        $appointmentsCancelled = Appointment::query()
-            ->whereBetween('appointment_date', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
-            ->where('status', 'cancelled')
-            ->count();
+            $prevInvoicesPending = Invoice::query()
+                ->whereBetween('issue_date', [$prevStartDate->toDateString(), $prevEndDate->toDateString()])
+                ->where('status', 'pending')
+                ->count();
 
-        $financeByMonth = $this->buildFinanceByMonthSeries();
-        $appointmentsByDay = $this->buildAppointmentsByDaySeries();
-        $topActs = $this->buildTopActsSeries($startDate, $endDate);
+            $newPatients = Patient::query()
+                ->whereBetween('created_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
+                ->count();
 
-        return response()->json([
-            'period' => [
-                'key' => $periodKey,
-                'label' => $periodLabel,
-                'from' => $startDate->toDateString(),
-                'to' => $endDate->toDateString(),
-            ],
-            'kpis' => [
-                'revenue_collected' => $revenueCollected,
-                'expenses_total' => $expensesTotal,
-                'net_result' => $netResult,
-                'invoices_paid' => $invoicesPaid,
-                'invoices_pending' => $invoicesPending,
-                'new_patients' => $newPatients,
-                'appointments_total' => $appointmentsTotal,
-                'appointments_cancelled' => $appointmentsCancelled,
-            ],
-            'invoice_status' => [
-                ['label' => 'Payees', 'value' => $invoicesPaid],
-                ['label' => 'Non traitees', 'value' => $invoicesPending],
-            ],
-            'top_acts' => $topActs,
-            'appointments_by_day' => $appointmentsByDay,
-            'finance_by_month' => $financeByMonth,
-        ]);
+            $prevNewPatients = Patient::query()
+                ->whereBetween('created_at', [$prevStartDate->copy()->startOfDay(), $prevEndDate->copy()->endOfDay()])
+                ->count();
+
+            $appointmentsTotal = Appointment::query()
+                ->whereBetween('appointment_date', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
+                ->count();
+
+            $appointmentsCancelled = Appointment::query()
+                ->whereBetween('appointment_date', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
+                ->where('status', 'cancelled')
+                ->count();
+
+            $prevAppointmentsTotal = Appointment::query()
+                ->whereBetween('appointment_date', [$prevStartDate->copy()->startOfDay(), $prevEndDate->copy()->endOfDay()])
+                ->count();
+
+            $prevAppointmentsCancelled = Appointment::query()
+                ->whereBetween('appointment_date', [$prevStartDate->copy()->startOfDay(), $prevEndDate->copy()->endOfDay()])
+                ->where('status', 'cancelled')
+                ->count();
+
+            return [
+                'period' => [
+                    'key' => $periodKey,
+                    'label' => $periodLabel,
+                    'from' => $startDate->toDateString(),
+                    'to' => $endDate->toDateString(),
+                ],
+                'meta' => [
+                    'generated_at' => now()->toIso8601String(),
+                    'cache_ttl_seconds' => 120,
+                    'series_window' => [
+                        'finance_by_month' => '6_months',
+                        'appointments_by_day' => '7_days',
+                    ],
+                ],
+                'kpis' => [
+                    'revenue_collected' => $revenueCollected,
+                    'expenses_total' => $expensesTotal,
+                    'net_result' => $netResult,
+                    'receivable_amount' => $receivableAmount,
+                    'invoices_paid' => $invoicesPaid,
+                    'invoices_pending' => $invoicesPending,
+                    'new_patients' => $newPatients,
+                    'appointments_total' => $appointmentsTotal,
+                    'appointments_cancelled' => $appointmentsCancelled,
+                ],
+                'trends' => [
+                    'revenue_collected_percent' => $this->calculatePercentChange($revenueCollected, $prevRevenue),
+                    'expenses_total_percent' => $this->calculatePercentChange($expensesTotal, $prevExpenses),
+                    'net_result_percent' => $this->calculatePercentChange($netResult, $prevNet),
+                    'invoices_paid_percent' => $this->calculatePercentChange($invoicesPaid, $prevInvoicesPaid),
+                    'invoices_pending_percent' => $this->calculatePercentChange($invoicesPending, $prevInvoicesPending),
+                    'new_patients_percent' => $this->calculatePercentChange($newPatients, $prevNewPatients),
+                    'appointments_total_percent' => $this->calculatePercentChange($appointmentsTotal, $prevAppointmentsTotal),
+                    'appointments_cancelled_percent' => $this->calculatePercentChange($appointmentsCancelled, $prevAppointmentsCancelled),
+                ],
+                'invoice_status' => [
+                    ['key' => 'paid', 'label' => 'Payees', 'value' => $invoicesPaid, 'color' => 'emerald'],
+                    ['key' => 'pending', 'label' => 'Non traitees', 'value' => $invoicesPending, 'color' => 'amber'],
+                ],
+                'top_acts' => $this->buildTopActsSeries($startDate, $endDate),
+                'appointments_by_day' => $this->buildAppointmentsByDaySeries(),
+                'finance_by_month' => $this->buildFinanceByMonthSeries(),
+            ];
+        });
+
+        return response()->json($payload);
     }
 
     private function resolvePeriodRange(?string $rawPeriod): array
@@ -104,7 +166,37 @@ class StatisticsController extends Controller
 
         $end = $now->copy()->endOfDay();
 
-        return [$key, $label, $start, $end];
+        $durationDays = max($start->diffInDays($end), 1);
+        $prevEnd = $start->copy()->subDay()->endOfDay();
+        $prevStart = $prevEnd->copy()->subDays($durationDays)->startOfDay();
+
+        return [$key, $label, $start, $end, $prevStart, $prevEnd];
+    }
+
+    private function sumRevenue(Carbon $from, Carbon $to): float
+    {
+        return (float) Invoice::query()
+            ->whereBetween('issue_date', [$from->toDateString(), $to->toDateString()])
+            ->sum('paid_amount');
+    }
+
+    private function sumExpenses(Carbon $from, Carbon $to): float
+    {
+        return (float) Product::query()
+            ->whereBetween('purchase_date', [$from->toDateString(), $to->toDateString()])
+            ->sum('total_amount');
+    }
+
+    private function calculatePercentChange(float|int $current, float|int $previous): int
+    {
+        $curr = (float) $current;
+        $prev = (float) $previous;
+
+        if ($prev <= 0.0) {
+            return $curr > 0.0 ? 100 : 0;
+        }
+
+        return (int) round((($curr - $prev) / $prev) * 100);
     }
 
     private function buildFinanceByMonthSeries(): array
