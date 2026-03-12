@@ -26,6 +26,7 @@ const Factures = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -135,6 +136,26 @@ const Factures = () => {
     }
   };
 
+  const downloadPdf = async (invoice) => {
+    if (!invoice?.id) return;
+    setPdfLoading(true);
+    try {
+      const res = await invoiceAPI.generate(invoice.id);
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `facture_${invoice.invoice_number}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Erreur lors de la generation du PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const closeCreateModal = () => {
     setShowCreateModal(false);
     setCreateForm({
@@ -194,7 +215,7 @@ const Factures = () => {
           }}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-blue-600 text-sm font-medium rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-100"
         >
-          Nouvelle facture
+          + Nouvelle facture
         </button>
       </div>
 
@@ -485,8 +506,31 @@ const Factures = () => {
               &times;
             </button>
 
-            <div className="px-4 pt-6 pb-3 bg-linear-to-r from-blue-50 via-white to-blue-50 rounded-t-xl">
+            <div className="px-4 pt-6 pb-3 bg-linear-to-r from-blue-50 via-white to-blue-50 rounded-t-xl flex items-center justify-between">
               <h3 className="text-lg font-bold text-gray-900">Detail facture</h3>
+              {selectedInvoice && (
+                <button
+                  onClick={() => downloadPdf(selectedInvoice)}
+                  disabled={pdfLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {pdfLoading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v2m0 12v2m8-8h-2m-12 0H4" />
+                      </svg>
+                      Generation...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                      </svg>
+                      Télécharger PDF
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             <div className="px-4 py-4 overflow-y-auto max-h-[70vh]">
@@ -521,7 +565,7 @@ const Factures = () => {
                           {(selectedInvoice.items || []).map((item) => {
                             const act = item.patient_treatment_act;
                             const dental = act?.dental_act;
-                            const label = [dental?.code, dental?.nom].filter(Boolean).join(' - ') || 'Acte';
+                            const label = [dental?.code, dental?.name].filter(Boolean).join(' - ') || 'Acte';
                             return (
                               <tr key={item.id} className="border-t border-gray-100">
                                 <td className="py-2 px-2">{label}</td>

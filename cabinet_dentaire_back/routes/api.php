@@ -67,6 +67,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('invoices', [InvoiceController::class, 'index']);
     Route::get('invoices/{invoice}', [InvoiceController::class, 'show']);
     Route::post('invoices', [InvoiceController::class, 'store']);
+    Route::post('invoices/{invoice}/generate', [InvoiceController::class, 'generate']);
     
     // Dossier médical complet du patient
     Route::prefix('patients/{patient}')->group(function () {

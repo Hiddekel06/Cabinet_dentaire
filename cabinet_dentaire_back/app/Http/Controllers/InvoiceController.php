@@ -7,6 +7,7 @@ use App\Models\PatientTreatmentAct;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 
 class InvoiceController extends Controller
 {
@@ -152,5 +153,100 @@ class InvoiceController extends Controller
         });
 
         return response()->json($invoice, 201);
+    }
+
+    /**
+     * Genere un PDF de la facture a partir du template Word.
+     */
+    public function generate(Invoice $invoice)
+    {
+        $invoice->load([
+            'patient',
+            'items.patientTreatmentAct.dentalAct',
+        ]);
+
+        $templatePath = resource_path('template/template_facture.docx');
+        if (!file_exists($templatePath)) {
+            return response()->json(['error' => 'Le modele Word facture est introuvable.'], 500);
+        }
+
+        try {
+            $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor($templatePath);
+
+            $patientName = trim(
+                ($invoice->patient->first_name ?? '') . ' ' . ($invoice->patient->last_name ?? '')
+            );
+            $patientPhone = (string) ($invoice->patient->phone ?? '');
+            $issueDate    = (string) $invoice->issue_date;
+            $dueDate      = (string) ($invoice->due_date ?? $issueDate);
+            $resteAPayer  = (float) $invoice->total_amount - (float) $invoice->paid_amount;
+
+            // Variables globales (en-tete + section patient)
+            $templateProcessor->setValue('adresse cabinet',   (string) config('app.cabinet_address', ''));
+            $templateProcessor->setValue('telephone cabinet', (string) config('app.cabinet_phone', ''));
+            $templateProcessor->setValue('numero facture',    (string) $invoice->invoice_number);
+            $templateProcessor->setValue('date facture',      $issueDate);
+            $templateProcessor->setValue('date echeance',     $dueDate);
+            $templateProcessor->setValue('nom patient',       $patientName);
+            $templateProcessor->setValue('téléphone patient', $patientPhone);
+
+            // Totaux
+            $templateProcessor->setValue('total',         number_format((float) $invoice->total_amount, 2, '.', ' '));
+            $templateProcessor->setValue('montant paye',  number_format((float) $invoice->paid_amount, 2, '.', ' '));
+            $templateProcessor->setValue('reste a payer', number_format($resteAPayer, 2, '.', ' '));
+
+            // Lignes d'actes (cloneRow)
+            $items      = $invoice->items;
+            $itemsCount = $items->count();
+
+            if ($itemsCount > 0) {
+                try {
+                    $templateProcessor->cloneRow('nom acte', $itemsCount);
+                    foreach ($items as $index => $item) {
+                        $i      = $index + 1;
+                        $dental = $item->patientTreatmentAct?->dentalAct;
+                        $templateProcessor->setValue("nom patient#{$i}",  $patientName);
+                        $templateProcessor->setValue("date facture#{$i}", $issueDate);
+                        $templateProcessor->setValue("nom acte#{$i}",     (string) ($dental?->name ?? 'Acte'));
+                        $templateProcessor->setValue("indice#{$i}",       (string) ($dental?->code ?? ''));
+                        $templateProcessor->setValue("montant#{$i}",      number_format((float) $item->subtotal, 2, '.', ' '));
+                    }
+                } catch (\Throwable $e) {
+                    // Template sans placeholder cloneRow, on continue.
+                }
+            }
+
+            $baseName   = 'facture_' . $invoice->id . '_' . time();
+            $outputWord = storage_path('app/' . $baseName . '.docx');
+            $templateProcessor->saveAs($outputWord);
+
+            $outputPdf = storage_path('app/' . $baseName . '.pdf');
+            $cmd = sprintf(
+                'soffice --headless --convert-to pdf --outdir %s %s 2>&1',
+                escapeshellarg(dirname($outputWord)),
+                escapeshellarg($outputWord)
+            );
+            $result = [];
+            $retval = null;
+            exec($cmd, $result, $retval);
+
+            if (file_exists($outputWord)) {
+                File::delete($outputWord);
+            }
+
+            if ($retval !== 0 || !file_exists($outputPdf)) {
+                return response()->json([
+                    'error'   => 'Erreur lors de la conversion PDF.',
+                    'details' => implode(PHP_EOL, $result),
+                ], 500);
+            }
+
+            return response()->download($outputPdf, 'facture_' . $invoice->invoice_number . '.pdf')
+                ->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Erreur lors de la generation de la facture : ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

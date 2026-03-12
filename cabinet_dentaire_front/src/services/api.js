@@ -102,6 +102,9 @@ export const invoiceAPI = {
     clearCache('invoices');
     return api.post('/api/invoices', data);
   },
+
+  generate: (id) =>
+    api.post(`/api/invoices/${id}/generate`, {}, { responseType: 'blob' }),
 };
 
 // Endpoints pour les suggestions de médicaments
