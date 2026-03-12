@@ -3,15 +3,32 @@ import { Layout } from "../components/Layout";
 import { medicalCertificateAPI } from '../services/api';
 import { patientAPI } from '../services/api';
 
+const getTodayLocalDate = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getCurrentHourTime = () => {
+  const hours = String(new Date().getHours()).padStart(2, '0');
+  return `${hours}:00`;
+};
+
 const MedicalCertificates = () => {
   const [certificates, setCertificates] = useState([]);
   const [patients, setPatients] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     patient_id: "",
-    issue_date: "",
+    issue_date: getTodayLocalDate(),
+    consultation_time: getCurrentHourTime(),
+    rest_days: "",
+    rest_start_date: getTodayLocalDate(),
   });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -20,8 +37,10 @@ const MedicalCertificates = () => {
     loadCertificates();
   }, [page]);
 
-  const loadCertificates = async () => {
-    setLoading(true);
+  const loadCertificates = async (withLoader = true) => {
+    if (withLoader) {
+      setLoading(true);
+    }
     try {
       const certRes = await medicalCertificateAPI.getAll({ page });
       setCertificates(certRes.data.data || certRes.data || []);
@@ -29,7 +48,9 @@ const MedicalCertificates = () => {
     } catch {
       setError("Erreur de chargement");
     } finally {
-      setLoading(false);
+      if (withLoader) {
+        setLoading(false);
+      }
     }
   };
 
@@ -54,16 +75,35 @@ const MedicalCertificates = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSaving(true);
     try {
       const res = await medicalCertificateAPI.create(form);
-      await loadCertificates(); // Reload to get fresh data with pagination
+      const created = res.data?.data || res.data;
+
+      // Optimistic update to avoid an extra fetch and make the UI feel faster.
+      if (created) {
+        setCertificates((prev) => [created, ...prev].slice(0, Math.max(prev.length, 1)));
+      }
+
+      if (page !== 1) {
+        setPage(1);
+      } else {
+        // Silent sync with backend to avoid stale pagination/ordering states.
+        void loadCertificates(false);
+      }
+
       setShowModal(false);
       setForm({
         patient_id: "",
-        issue_date: "",
+        issue_date: getTodayLocalDate(),
+        consultation_time: getCurrentHourTime(),
+        rest_days: "",
+        rest_start_date: getTodayLocalDate(),
       });
     } catch (err) {
       alert("Erreur lors de l'ajout du certificat");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -81,15 +121,7 @@ const MedicalCertificates = () => {
   // Téléchargement du certificat Word généré par le backend
   const handleDownloadWord = async (cert) => {
     try {
-      const res = await medicalCertificateAPI.generate({
-        'adresse': 'Parcelle', // à adapter
-        'telephone': '0600000000', // à adapter
-        'nom du docteur': cert.issuer?.name || '',
-        'MATLABUL SHIFAH': 'MATLABUL SHIFAH',
-        'nom de la personne': `${cert.patient?.first_name || ''} ${cert.patient?.last_name || ''}`,
-        'date': cert.issue_date,
-        'heure': cert.heure || '', // à adapter
-      });
+      const res = await medicalCertificateAPI.generate(cert.id);
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
@@ -141,7 +173,8 @@ const MedicalCertificates = () => {
                 <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Patient</th>
                 <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Délivré par</th>
                 <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Date</th>
-                {/* Champs obsolètes supprimés : Type, Contenu, Fichier, Notes */}
+                <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Heure</th>
+                <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Repos</th>
                 <th className="text-left py-2 px-2 sm:py-3 sm:px-4 text-gray-600 font-medium text-xs uppercase tracking-wider whitespace-nowrap">Actions</th>
               </tr>
             </thead>
@@ -155,7 +188,10 @@ const MedicalCertificates = () => {
                     {c.issuer?.name || '-'}
                   </td>
                   <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">{c.issue_date}</td>
-                  {/* Champs obsolètes supprimés : Type, Contenu, Fichier, Notes */}
+                  <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">{c.consultation_time || '-'}</td>
+                  <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">
+                    {c.rest_days ? `${c.rest_days} j dès ${c.rest_start_date || '-'}` : '-'}
+                  </td>
                   <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap flex gap-2">
                     <button
                       className="text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center justify-center"
@@ -183,7 +219,7 @@ const MedicalCertificates = () => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-gray-400">Aucun certificat médical</td>
+                  <td colSpan="6" className="py-12 text-center text-gray-400">Aucun certificat médical</td>
                 </tr>
               )}
             </tbody>
@@ -236,9 +272,32 @@ const MedicalCertificates = () => {
                 <label className="text-xs font-semibold text-gray-700">Date</label>
                 <input type="date" name="issue_date" value={form.issue_date} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" required />
               </div>
-              {/* Champs obsolètes supprimés : type de certificat, contenu, fichier PDF, notes */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Heure de consultation</label>
+                <input type="time" step="3600" name="consultation_time" value={form.consultation_time} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Nombre de jours de repos</label>
+                <input type="number" min="1" max="365" name="rest_days" value={form.rest_days} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" placeholder="Ex: 3" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700">Date de début du repos</label>
+                <input type="date" name="rest_start_date" value={form.rest_start_date} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" />
+              </div>
               <div className="flex justify-end pt-2">
-                <button type="submit" className="px-5 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 transition">Ajouter</button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-5 py-2 text-sm font-semibold rounded-full bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {saving && (
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
+                      <path className="opacity-90" fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-3a7 7 0 0 0-7-7V2z"></path>
+                    </svg>
+                  )}
+                  {saving ? 'Ajout en cours...' : 'Ajouter'}
+                </button>
               </div>
             </form>
           </div>

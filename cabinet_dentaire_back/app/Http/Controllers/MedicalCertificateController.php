@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MedicalCertificate;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 
 class MedicalCertificateController extends Controller {
     /**
@@ -11,35 +12,32 @@ class MedicalCertificateController extends Controller {
      */
     public function generate(Request $request)
     {
-        $templatePath = resource_path('template/template_certificat.docx');
-        if (!file_exists($templatePath)) {
-            return response()->json(['error' => 'Le modèle Word est introuvable.'], 500);
-        }
         try {
-            $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor($templatePath);
-            // Remplace les variables du Word selon ton modèle
-            $templateProcessor->setValue('adresse', $request->input('adresse', ''));
-            $templateProcessor->setValue('telephone', $request->input('telephone', ''));
-            $templateProcessor->setValue('nom du docteur', $request->input('nom du docteur', ''));
-            $templateProcessor->setValue('MATLABUL SHIFAH', $request->input('MATLABUL SHIFAH', ''));
-            $templateProcessor->setValue('nom de la personne', $request->input('nom de la personne', ''));
-            $templateProcessor->setValue('date', $request->input('date', ''));
-            $templateProcessor->setValue('heure', $request->input('heure', ''));
-            // Sauvegarde le fichier Word généré
-            $outputWord = storage_path('app/certificat_medical_' . time() . '.docx');
-            $templateProcessor->saveAs($outputWord);
+            return $this->generatePdfFromVariables([
+                'adresse' => (string) $request->input('adresse', ''),
+                'telephone' => (string) $request->input('telephone', ''),
+                'nom du docteur' => (string) $request->input('nom du docteur', ''),
+                'MATLABUL SHIFAH' => (string) $request->input('MATLABUL SHIFAH', ''),
+                'nom de la personne' => (string) $request->input('nom de la personne', ''),
+                'date' => (string) $request->input('date', ''),
+                'heure' => (string) $request->input('heure', ''),
+                'nombre de jours' => (string) $request->input('nombre de jours', ''),
+                'date début' => (string) $request->input('date début', ''),
+            ], 'certificat_medical_' . time());
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Erreur lors de la génération du certificat : ' . $e->getMessage()], 500);
+        }
+    }
 
-            // Conversion en PDF via LibreOffice (soffice)
-            $outputPdf = preg_replace('/\.docx$/', '.pdf', $outputWord);
-            $cmd = 'soffice --headless --convert-to pdf --outdir "' . dirname($outputWord) . '" "' . $outputWord . '"';
-            $result = null;
-            $retval = null;
-            exec($cmd, $result, $retval);
-            if (!file_exists($outputPdf)) {
-                return response()->json(['error' => 'Erreur lors de la conversion PDF.'], 500);
-            }
-            // Retourne le PDF à télécharger
-            return response()->download($outputPdf)->deleteFileAfterSend(true);
+    /**
+     * Génère un certificat médical PDF à partir d'un certificat stocké en base.
+     */
+    public function generateFromStored(MedicalCertificate $medicalCertificate)
+    {
+        $medicalCertificate->load(['patient', 'issuer']);
+
+        try {
+            return $this->generatePdfFromVariables($this->buildTemplateVariablesFromCertificate($medicalCertificate), 'certificat_medical_' . $medicalCertificate->id . '_' . time());
         } catch (\Exception $e) {
             return response()->json(['error' => 'Erreur lors de la génération du certificat : ' . $e->getMessage()], 500);
         }
@@ -76,8 +74,15 @@ class MedicalCertificateController extends Controller {
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
             'issue_date' => ['required', 'date'],
+            'consultation_time' => ['nullable', 'date_format:H:i'],
+            'rest_days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'rest_start_date' => ['nullable', 'date'],
         ]);
+
         $validated['issued_by'] = $request->user()->id;
+        $validated['certificate_type'] = 'certificat_medical';
+        $validated['content'] = $this->buildStoredContent($validated);
+
         $certificate = MedicalCertificate::create($validated);
         $certificate->load(['patient', 'issuer']);
         return response()->json($certificate, 201);
@@ -114,5 +119,82 @@ class MedicalCertificateController extends Controller {
     public function destroy(MedicalCertificate $medicalCertificate)
     {
         //
+    }
+
+    private function buildStoredContent(array $validated): string
+    {
+        $parts = [
+            'Certificat medical du ' . $validated['issue_date'],
+        ];
+
+        if (!empty($validated['consultation_time'])) {
+            $parts[] = 'heure: ' . $validated['consultation_time'];
+        }
+
+        if (!empty($validated['rest_days'])) {
+            $parts[] = 'repos: ' . $validated['rest_days'] . ' jour(s)';
+        }
+
+        if (!empty($validated['rest_start_date'])) {
+            $parts[] = 'debut: ' . $validated['rest_start_date'];
+        }
+
+        return implode(' | ', $parts);
+    }
+
+    private function buildTemplateVariablesFromCertificate(MedicalCertificate $medicalCertificate): array
+    {
+        $patientFullName = trim(($medicalCertificate->patient->first_name ?? '') . ' ' . ($medicalCertificate->patient->last_name ?? ''));
+
+        return [
+            'adresse' => config('app.cabinet_address', 'Parcelle'),
+            'telephone' => config('app.cabinet_phone', '0600000000'),
+            'nom du docteur' => (string) ($medicalCertificate->issuer->name ?? ''),
+            'MATLABUL SHIFAH' => config('app.cabinet_name', 'MATLABUL SHIFAH'),
+            'nom de la personne' => $patientFullName,
+            'date' => (string) $medicalCertificate->issue_date,
+            'heure' => (string) ($medicalCertificate->consultation_time ?? ''),
+            'nombre de jours' => (string) ($medicalCertificate->rest_days ?? ''),
+            'date début' => (string) ($medicalCertificate->rest_start_date ?? ''),
+        ];
+    }
+
+    private function generatePdfFromVariables(array $variables, string $baseName)
+    {
+        $templatePath = resource_path('template/template_certificat.docx');
+        if (!file_exists($templatePath)) {
+            return response()->json(['error' => 'Le modèle Word est introuvable.'], 500);
+        }
+
+        $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor($templatePath);
+        foreach ($variables as $key => $value) {
+            $templateProcessor->setValue($key, (string) ($value ?? ''));
+        }
+
+        $outputWord = storage_path('app/' . $baseName . '.docx');
+        $templateProcessor->saveAs($outputWord);
+
+        $outputPdf = storage_path('app/' . $baseName . '.pdf');
+        $cmd = sprintf(
+            'soffice --headless --convert-to pdf --outdir %s %s 2>&1',
+            escapeshellarg(dirname($outputWord)),
+            escapeshellarg($outputWord)
+        );
+        $result = [];
+        $retval = null;
+        exec($cmd, $result, $retval);
+
+        if ($retval !== 0 || !file_exists($outputPdf)) {
+            if (file_exists($outputWord)) {
+                File::delete($outputWord);
+            }
+
+            return response()->json([
+                'error' => 'Erreur lors de la conversion PDF.',
+                'details' => implode(PHP_EOL, $result),
+            ], 500);
+        }
+
+        return response()->download($outputPdf)->deleteFileAfterSend(true);
     }
 }

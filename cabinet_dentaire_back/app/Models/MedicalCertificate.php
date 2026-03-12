@@ -10,6 +10,13 @@ class MedicalCertificate extends Model
         'patient_id',
         'issued_by',
         'issue_date',
+        'consultation_time',
+        'rest_days',
+        'rest_start_date',
+        'certificate_type',
+        'content',
+        'file_path',
+        'notes',
     ];
 
     public function patient()

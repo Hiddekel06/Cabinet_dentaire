@@ -22,6 +22,7 @@ Route::get('/dental-acts/search', [App\Http\Controllers\DentalActController::cla
 Route::middleware(['auth:sanctum'])->group(function () {
         // Génération de certificat médical Word
         Route::post('/medical-certificates/generate', [App\Http\Controllers\MedicalCertificateController::class, 'generate']);
+    Route::post('/medical-certificates/{medicalCertificate}/generate', [App\Http\Controllers\MedicalCertificateController::class, 'generateFromStored']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     

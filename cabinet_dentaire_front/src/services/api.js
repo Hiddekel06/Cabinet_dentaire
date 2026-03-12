@@ -12,8 +12,8 @@ export const dentalActAPI = {
 };
 // Endpoints pour les certificats médicaux
 export const medicalCertificateAPI = {
-    generate: (data) =>
-      api.post('/api/medical-certificates/generate', data, { responseType: 'blob' }),
+    generate: (id) =>
+      api.post(`/api/medical-certificates/${id}/generate`, {}, { responseType: 'blob' }),
   getAll: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     const cacheKey = `medical-certificates:${query}`;

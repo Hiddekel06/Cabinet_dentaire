@@ -165,9 +165,12 @@ const DossierMedicaux = () => {
                         <ul>
                           {patientCertificates.length === 0 ? (<li className="text-gray-400">Aucun certificat</li>) : patientCertificates.map(c => (
                             <li key={c.id} className="mb-2 border-b pb-2">
-                              <div className="font-medium">{c.certificate_type}</div>
+                              <div className="font-medium">Certificat médical</div>
                               <div className="text-xs text-gray-500">Date : {c.issue_date} | Praticien : {c.issuer?.name || '-'}</div>
-                              <div className="text-xs text-gray-500">Contenu : {c.content}</div>
+                              <div className="text-xs text-gray-500">Heure : {c.consultation_time || '-'}</div>
+                              <div className="text-xs text-gray-500">
+                                Repos : {c.rest_days ? `${c.rest_days} jour(s) à compter du ${c.rest_start_date || '-'}` : '-'}
+                              </div>
                             </li>
                           ))}
                         </ul>
