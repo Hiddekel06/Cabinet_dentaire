@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/Layout';
 import { dashboardAPI } from '../services/api';
@@ -90,22 +90,22 @@ export const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const loadDashboard = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await dashboardAPI.getOverview('month');
-        setData({ ...initialData, ...(res.data || {}) });
-      } catch (e) {
-        setError('Impossible de charger les données du dashboard.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDashboard();
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await dashboardAPI.getOverview('month');
+      setData({ ...initialData, ...(res.data || {}) });
+    } catch (e) {
+      setError('Impossible de charger les données du dashboard.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   const cards = data.cards || initialData.cards;
   const recentPatients = Array.isArray(data.recent_patients) ? data.recent_patients : [];
@@ -181,11 +181,55 @@ export const Dashboard = () => {
         </div>
 
         {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 flex items-center justify-between">
+            <span className="text-sm text-red-700">{error}</span>
+            <button
+              onClick={loadDashboard}
+              className="ml-4 px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 bg-white hover:bg-red-50 rounded-lg transition-all duration-200"
+            >
+              Réessayer
+            </button>
+          </div>
         )}
 
         {loading ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-gray-600">Chargement du dashboard...</div>
+          <div className="animate-pulse">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="h-3 w-24 bg-gray-200 rounded mb-4" />
+                  <div className="h-8 w-16 bg-gray-200 rounded mb-2" />
+                  <div className="h-3 w-32 bg-gray-100 rounded mt-2" />
+                  <div className="h-1.5 w-full bg-gray-100 rounded-full mt-6" />
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-6">
+                <div className="h-5 w-36 bg-gray-200 rounded mb-6" />
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <div className="w-8 h-8 bg-gray-200 rounded-lg flex-shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 w-32 bg-gray-200 rounded" />
+                        <div className="h-3 w-48 bg-gray-100 rounded" />
+                      </div>
+                      <div className="h-6 w-20 bg-gray-100 rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-white p-6">
+                <div className="h-5 w-40 bg-gray-200 rounded mb-6" />
+                <div className="space-y-4">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-16 bg-gray-100 rounded-lg" />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
