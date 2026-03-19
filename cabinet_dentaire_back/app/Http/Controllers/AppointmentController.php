@@ -36,11 +36,17 @@ class AppointmentController extends Controller
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
             'dentist_id' => ['required', 'integer', 'exists:users,id'],
             'appointment_date' => ['required', 'date'],
+            'appointment_time_specified' => ['nullable', 'boolean'],
             'duration' => ['nullable', 'integer', 'min:1'],
             'status' => ['nullable', 'in:pending,confirmed,completed,cancelled'],
             'reason' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
         ]);
+
+        $validated['appointment_time_specified'] = $this->resolveTimeSpecified(
+            $request->input('appointment_date'),
+            $request->input('appointment_time_specified')
+        );
 
         // Empêcher la création d'un rendez-vous à une date passée
         if (strtotime($validated['appointment_date']) < time()) {
@@ -63,11 +69,19 @@ class AppointmentController extends Controller
             'patient_id' => ['sometimes', 'required', 'integer', 'exists:patients,id'],
             'dentist_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
             'appointment_date' => ['sometimes', 'required', 'date'],
+            'appointment_time_specified' => ['nullable', 'boolean'],
             'duration' => ['nullable', 'integer', 'min:1'],
             'status' => ['nullable', 'in:pending,confirmed,completed,cancelled'],
             'reason' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
         ]);
+
+        if ($request->has('appointment_date') || $request->has('appointment_time_specified')) {
+            $validated['appointment_time_specified'] = $this->resolveTimeSpecified(
+                $request->input('appointment_date', $appointment->appointment_date?->format('Y-m-d H:i:s')),
+                $request->input('appointment_time_specified')
+            );
+        }
 
         // Empêcher la modification d'un rendez-vous à une date passée
         if (isset($validated['appointment_date']) && strtotime($validated['appointment_date']) < time()) {
@@ -84,5 +98,20 @@ class AppointmentController extends Controller
         $appointment->delete();
 
         return response()->noContent();
+    }
+
+    private function resolveTimeSpecified(?string $rawDate, $explicitFlag = null): bool
+    {
+        if (!is_null($explicitFlag)) {
+            return filter_var($explicitFlag, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        // Date pure (YYYY-MM-DD): heure non précisée.
+        if ($rawDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($rawDate))) {
+            return false;
+        }
+
+        // DateTime fourni: heure précisée.
+        return true;
     }
 }

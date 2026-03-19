@@ -13,6 +13,7 @@ class Appointment extends Model
         'patient_id',
         'dentist_id',
         'appointment_date',
+        'appointment_time_specified',
         'duration',
         'status',
         'reason',
@@ -21,6 +22,7 @@ class Appointment extends Model
 
     protected $casts = [
         'appointment_date' => 'datetime',
+        'appointment_time_specified' => 'boolean',
     ];
 
     public function patient()

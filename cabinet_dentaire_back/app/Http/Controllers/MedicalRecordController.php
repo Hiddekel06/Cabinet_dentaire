@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MedicalRecord;
+use App\Models\PatientTreatment;
 use Illuminate\Http\Request;
 
 class MedicalRecordController extends Controller
@@ -51,6 +52,39 @@ class MedicalRecordController extends Controller
                 'message' => 'Le rendez-vous ne correspond pas au patient.',
                 'errors' => ['appointment_id' => ['Le rendez-vous doit appartenir au patient sélectionné.']]
             ], 422);
+        }
+
+        // Verrou serveur: impossible d'ajouter une seance avant la date du rendez-vous courant du traitement.
+        if (!empty($validated['patient_treatment_id'])) {
+            $patientTreatment = PatientTreatment::with('nextAppointment')->findOrFail($validated['patient_treatment_id']);
+
+            if ((int) $patientTreatment->patient_id !== (int) $validated['patient_id']) {
+                return response()->json([
+                    'message' => 'Le traitement ne correspond pas au patient.',
+                    'errors' => ['patient_treatment_id' => ['Le traitement doit appartenir au patient sélectionné.']]
+                ], 422);
+            }
+
+            $currentNextAppointment = $patientTreatment->nextAppointment;
+            if ($currentNextAppointment && $currentNextAppointment->appointment_date && $currentNextAppointment->appointment_date->isFuture()) {
+                $appointmentDateLabel = $currentNextAppointment->appointment_date->format('d/m/Y H:i');
+                $timeSpecified = (bool) ($currentNextAppointment->appointment_time_specified ?? true);
+                if (!$timeSpecified) {
+                    $appointmentDateLabel = $currentNextAppointment->appointment_date->format('d/m/Y') . ' (heure non précisée)';
+                }
+
+                return response()->json([
+                    'message' => 'Séance non autorisée: le prochain rendez-vous du traitement n\'est pas encore atteint.',
+                    'errors' => [
+                        'patient_treatment_id' => [
+                            sprintf(
+                                'Vous pourrez ajouter une séance à partir du %s.',
+                                $appointmentDateLabel
+                            )
+                        ]
+                    ]
+                ], 422);
+            }
         }
 
         // Ajouter l'utilisateur connecté comme créateur

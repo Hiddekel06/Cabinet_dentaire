@@ -127,6 +127,7 @@ class PatientTreatmentController extends Controller
             'patient_id' => $validated['patient_id'],
             'dentist_id' => $request->user()->id,
             'appointment_date' => $validated['next_appointment_date'],
+            'appointment_time_specified' => false,
             'duration' => $validated['next_appointment_duration'] ?? null,
             'reason' => $validated['next_appointment_reason'] ?? null,
             'notes' => $validated['next_appointment_notes'] ?? null,
