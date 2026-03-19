@@ -10,6 +10,8 @@ import DossierMedicaux from './pages/DossierMedicaux';
 import Ordonnances from './pages/Ordonnances';
 import Statistics from './pages/Statistics';
 import PatientTreatments from './pages/PatientTreatments';
+import StartTreatmentWorkspace from './pages/StartTreatmentWorkspace';
+import StartSessionWorkspace from './pages/StartSessionWorkspace';
 import PatientTreatmentsHistory from './pages/PatientTreatmentsHistory';
 import PatientDossier from './pages/PatientDossier';
 import Achats from './pages/Achats';
@@ -59,6 +61,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <PatientTreatments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/treatments/new"
+            element={
+              <ProtectedRoute>
+                <StartTreatmentWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/treatments/:treatmentId/session"
+            element={
+              <ProtectedRoute>
+                <StartSessionWorkspace />
               </ProtectedRoute>
             }
           />
