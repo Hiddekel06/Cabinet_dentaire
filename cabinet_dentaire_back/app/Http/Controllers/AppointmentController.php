@@ -3,7 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Models\PatientTreatment;
+use App\Models\MedicalRecord;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class AppointmentController extends Controller
 {
@@ -98,6 +102,121 @@ class AppointmentController extends Controller
         $appointment->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Reschedule an appointment with optional treatment synchronization
+     * PATCH /api/appointments/{id}/reschedule-with-sync
+     */
+    public function rescheduleWithSync(Request $request, Appointment $appointment)
+    {
+        $validated = $request->validate([
+            'appointment_date' => ['required', 'date'],
+            'appointment_time_specified' => ['nullable', 'boolean'],
+            'sync_treatments' => ['nullable', 'boolean'],
+        ]);
+
+        // Prevent past date changes
+        if (strtotime($validated['appointment_date']) < time()) {
+            return response()->json(['message' => 'Impossible de modifier un rendez-vous à une date passée.'], 422);
+        }
+
+        $syncTreatments = boolval($validated['sync_treatments'] ?? false);
+        $linkedTreatment = null;
+
+        return DB::transaction(function () use ($appointment, $validated, $syncTreatments, &$linkedTreatment) {
+            // Resolve time specification flag
+            $validated['appointment_time_specified'] = $this->resolveTimeSpecified(
+                $validated['appointment_date'],
+                $validated['appointment_time_specified'] ?? null
+            );
+
+            // Check for linked treatment
+            $linkedTreatment = PatientTreatment::where('next_appointment_id', $appointment->id)
+                ->first();
+
+            // If sync requested but no treatment link, just update appointment
+            if ($syncTreatments && !$linkedTreatment) {
+                $appointment->update($validated);
+                return response()->json([
+                    'appointment' => $appointment,
+                    'treatments_updated' => 0,
+                    'status' => 'success',
+                    'message' => 'Rendez-vous déplacé (aucun traitement lié)',
+                ]);
+            }
+
+            // If sync requested AND treatment linked
+            if ($syncTreatments && $linkedTreatment) {
+                // Verify no medical records exist for this appointment
+                $medicalRecordCount = MedicalRecord::where('appointment_id', $appointment->id)->count();
+                if ($medicalRecordCount > 0) {
+                    throw new \Exception('Impossible de synchroniser : des séances médicales existent déjà pour ce rendez-vous');
+                }
+
+                // Update appointment date
+                $appointment->update($validated);
+
+                // Update treatment start_date if appointment date changed
+                if ($linkedTreatment->start_date !== $validated['appointment_date']) {
+                    $linkedTreatment->update([
+                        'start_date' => $validated['appointment_date'],
+                    ]);
+                }
+
+                // Log sync action
+                \Illuminate\Support\Facades\Log::info('Appointment rescheduled with treatment sync', [
+                    'appointment_id' => $appointment->id,
+                    'treatment_id' => $linkedTreatment->id,
+                    'old_date' => $appointment->getOriginal('appointment_date'),
+                    'new_date' => $validated['appointment_date'],
+                    'user_id' => Auth::id(),
+                ]);
+
+                return response()->json([
+                    'appointment' => $appointment,
+                    'treatment' => $linkedTreatment->fresh(),
+                    'treatments_updated' => 1,
+                    'status' => 'success',
+                    'message' => 'Rendez-vous et traitement synchronisés',
+                ]);
+            }
+
+            // If NO sync requested, just update appointment (simple update)
+            $appointment->update($validated);
+
+            return response()->json([
+                'appointment' => $appointment,
+                'treatments_updated' => 0,
+                'status' => 'success',
+                'message' => 'Rendez-vous déplacé (traitement non synchronisé)',
+                'warning' => $linkedTreatment ? 'Le traitement associé n\'a pas été mis à jour' : null,
+            ]);
+        });
+    }
+
+    /**
+     * Check if appointment is linked to a treatment
+     * GET /api/appointments/{id}/treatment-link
+     */
+    public function getLinkedTreatment(Appointment $appointment)
+    {
+        $treatment = PatientTreatment::where('next_appointment_id', $appointment->id)
+            ->with(['acts', 'medicalRecords'])
+            ->first();
+
+        if (!$treatment) {
+            return response()->json(['linked' => false]);
+        }
+
+        $medicalRecordCount = MedicalRecord::where('patient_treatment_id', $treatment->id)->count();
+
+        return response()->json([
+            'linked' => true,
+            'treatment' => $treatment,
+            'medical_records_count' => $medicalRecordCount,
+            'can_sync' => $medicalRecordCount === 0, // Can only sync if no medical records yet
+        ]);
     }
 
     private function resolveTimeSpecified(?string $rawDate, $explicitFlag = null): bool

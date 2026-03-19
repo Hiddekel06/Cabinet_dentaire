@@ -39,6 +39,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des rendez-vous
     Route::apiResource('appointments', AppointmentController::class);
+    Route::patch('appointments/{appointment}/reschedule-with-sync', [AppointmentController::class, 'rescheduleWithSync']);
+    Route::get('appointments/{appointment}/treatment-link', [AppointmentController::class, 'getLinkedTreatment']);
     
     // Gestion des dossiers médicaux
     Route::apiResource('medical-records', MedicalRecordController::class);

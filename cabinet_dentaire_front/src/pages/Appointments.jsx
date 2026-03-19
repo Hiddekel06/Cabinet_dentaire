@@ -35,16 +35,26 @@ const Appointments = () => {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [viewMode, setViewMode] = useState('table'); // 'table' ou 'calendar'
   const [calendarView, setCalendarView] = useState('month'); // 'month' | 'week' | 'day'
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 1, 5)); // Février 2026
+  const [currentDate, setCurrentDate] = useState(new Date()); // Aujourd'hui
   const [selectedDate, setSelectedDate] = useState(null);
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [showMoveConfirmation, setShowMoveConfirmation] = useState(false);
   const [moveData, setMoveData] = useState({ appointmentId: null, newDate: null, appointment: null });
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deleteData, setDeleteData] = useState({ appointment: null });
+  const [isMoving, setIsMoving] = useState(false);
+  const [showSyncChoice, setShowSyncChoice] = useState(false);
+  const [syncChoiceData, setSyncChoiceData] = useState({ 
+    appointment: null, 
+    linkedTreatment: null, 
+    medicalRecordsCount: 0,
+    canSync: false 
+  });
   const hasLoadedRef = useRef(false);
   const [quickForm, setQuickForm] = useState({
     date: '',
-    heure: '09:00',
+    heure: '',
     patient_id: '',
     motif: 'Consultation',
     praticien: 'Dr. Ndiaye',
@@ -75,15 +85,23 @@ const Appointments = () => {
       const mapped = list.map((a) => {
         const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
         const date = dateObj ? dateObj.toISOString().slice(0, 10) : '';
-        const heure = dateObj
-          ? dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        const timeSpecified = typeof a.appointment_time_specified === 'boolean'
+          ? a.appointment_time_specified
+          : true;
+        const heureValue = dateObj
+          ? `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`
           : '';
+        const heure = timeSpecified && heureValue
+          ? heureValue
+          : '–';
         const patient = a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : '';
         return {
           apiId: a.id,
           id: a.id,
           date,
           heure,
+          heureValue,
+          timeSpecified,
           patient,
           patientId: a.patient?.id,
           motif: a.reason || 'Consultation',
@@ -143,7 +161,7 @@ const Appointments = () => {
     setEditingAppointment(appointment);
     setQuickForm({
       date: appointment.date,
-      heure: appointment.heure || '09:00',
+      heure: appointment.timeSpecified ? (appointment.heureValue || '') : '',
       patient_id: appointment.patientId || '',
       motif: appointment.motif || 'Consultation',
       praticien: appointment.praticien || (user?.name || 'Dentiste'),
@@ -153,20 +171,29 @@ const Appointments = () => {
   };
 
   const handleDelete = async (appointment) => {
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le rendez-vous avec ${appointment.patient} ?`)) {
-      try {
-        if (appointment.apiId) {
-          await appointmentAPI.delete(appointment.apiId);
-        }
-        await loadAppointments();
-        if (selectedAppointment?.id === appointment.id) {
-          setShowDetailsModal(false);
-          setSelectedAppointment(null);
-        }
-      } catch (error) {
-        console.error('Erreur suppression rendez-vous:', error);
-        setAppointmentsError('Impossible de supprimer le rendez-vous.');
+    setDeleteData({ appointment });
+    setShowDeleteConfirmation(true);
+  };
+
+  const confirmDeleteAppointment = async () => {
+    try {
+      const { appointment } = deleteData;
+      if (!appointment) return;
+
+      if (appointment.apiId) {
+        await appointmentAPI.delete(appointment.apiId);
       }
+      await loadAppointments();
+      if (selectedAppointment?.id === appointment.id) {
+        setShowDetailsModal(false);
+        setSelectedAppointment(null);
+      }
+      setShowDeleteConfirmation(false);
+      setDeleteData({ appointment: null });
+    } catch (error) {
+      console.error('Erreur suppression rendez-vous:', error);
+      setAppointmentsError('Impossible de supprimer le rendez-vous.');
+      setShowDeleteConfirmation(false);
     }
   };
 
@@ -273,7 +300,7 @@ const Appointments = () => {
     const dateStr = toDateStr(date);
     setQuickForm({
       date: dateStr,
-      heure: '09:00',
+      heure: '',
       patient_id: '',
       motif: 'Consultation',
       praticien: user?.name || 'Dentiste',
@@ -291,23 +318,34 @@ const Appointments = () => {
 
   const handleQuickCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!quickForm.patient_id || !quickForm.date || !quickForm.heure) return;
+    if (!quickForm.patient_id || !quickForm.date) return;
     if (!user?.id) {
       setAppointmentsError("Utilisateur non authentifié.");
       return;
     }
-    // Empêcher la création à une date passée
+
+    // Date obligatoire, heure optionnelle.
     const now = new Date();
-    const selectedDateTime = new Date(`${quickForm.date}T${quickForm.heure}`);
-    if (selectedDateTime < now) {
+    if (quickForm.heure) {
+      const selectedDateTime = new Date(`${quickForm.date}T${quickForm.heure}`);
+      if (selectedDateTime < now) {
+        setAppointmentsError("Impossible de créer un rendez-vous dans le passé.");
+        return;
+      }
+    } else if (quickForm.date < todayDateStr) {
       setAppointmentsError("Impossible de créer un rendez-vous dans le passé.");
       return;
     }
+
     try {
+      const timeSpecified = Boolean(quickForm.heure);
       const payload = {
         patient_id: Number(quickForm.patient_id),
         dentist_id: user?.id,
-        appointment_date: `${quickForm.date}T${quickForm.heure}:00`,
+        appointment_date: timeSpecified
+          ? `${quickForm.date}T${quickForm.heure}:00`
+          : quickForm.date,
+        appointment_time_specified: timeSpecified,
         status: statusToApi[quickForm.statut] || 'pending',
         reason: quickForm.motif || null,
         notes: null,
@@ -336,36 +374,121 @@ const Appointments = () => {
     setSelectedDate(newDate);
   };
 
-  const confirmMoveAppointment = async () => {
+  const loadLinkedTreatment = async (appointmentId) => {
     try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/appointments/${appointmentId}/treatment-link`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        console.error(`Erreur API: ${response.status}`);
+        return { linked: false };
+      }
+      
+      const data = await response.json();
+      console.log('Treatment link response:', data);
+      return data;
+    } catch (error) {
+      console.error('Erreur chargement traitement lié:', error);
+      return { linked: false };
+    }
+  };
+
+  const initiateMove = async (appointmentId, newDate, appointment) => {
+    try {
+      console.log('initiateMove called:', { appointmentId, newDate, appointment });
+      
+      // Check if appointment is linked to a treatment
+      const treatmentLink = await loadLinkedTreatment(appointmentId);
+      
+      console.log('Treatment link check result:', treatmentLink);
+      
+      if (treatmentLink.linked) {
+        // Show sync choice modal
+        setSyncChoiceData({
+          appointment,
+          linkedTreatment: treatmentLink.treatment,
+          medicalRecordsCount: treatmentLink.medical_records_count,
+          canSync: treatmentLink.can_sync,
+        });
+        setMoveData({ appointmentId, newDate, appointment });
+        setShowSyncChoice(true);
+        console.log('Sync choice modal shown');
+      } else {
+        // No treatment linked, show normal move confirmation
+        setMoveData({ appointmentId, newDate, appointment });
+        setShowMoveConfirmation(true);
+        console.log('Normal move confirmation modal shown');
+      }
+    } catch (error) {
+      console.error('Erreur vérification traitement:', error);
+      // Continue with normal move if check fails
+      setMoveData({ appointmentId, newDate, appointment });
+      setShowMoveConfirmation(true);
+      console.log('Normal move confirmation shown (error fallback)');
+    }
+  };
+
+  const confirmMoveAppointment = async (shouldSync = false) => {
+    try {
+      setIsMoving(true);
       const { appointmentId, newDate, appointment } = moveData;
       if (!appointmentId || !appointment) return;
 
       if (isDateInPast(newDate)) {
         setAppointmentsError('Impossible de déplacer le rendez-vous vers une date passée.');
         setShowMoveConfirmation(false);
+        setShowSyncChoice(false);
+        setIsMoving(false);
         return;
       }
       
-      // Créer le nouvel objet datetime
       const dateStr = toDateStr(newDate);
-      const [year, month, day] = dateStr.split('-');
-      const [hours, minutes] = (appointment.heure || '09:00').split(':');
-      const newDateTime = `${year}-${month}-${day}T${hours}:${minutes}:00`;
+      const payload = appointment.timeSpecified
+        ? {
+            appointment_date: `${dateStr}T${(appointment.heureValue || '09:00')}:00`,
+            appointment_time_specified: true,
+          }
+        : {
+            appointment_date: dateStr,
+            appointment_time_specified: false,
+          };
       
-      // Appel API pour mettre à jour le rendez-vous
-      await appointmentAPI.update(appointmentId, {
-        appointment_date: newDateTime,
+      // Choose endpoint based on whether to sync
+      let endpoint = `${import.meta.env.VITE_API_URL}/appointments/${appointmentId}`;
+      if (shouldSync) {
+        endpoint = `${import.meta.env.VITE_API_URL}/appointments/${appointmentId}/reschedule-with-sync`;
+        payload.sync_treatments = true;
+      }
+
+      const response = await fetch(endpoint, {
+        method: shouldSync ? 'PATCH' : 'PUT',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
-      
+
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
       // Mettre à jour l'état local
       moveAppointment(appointmentId, newDate);
       setShowMoveConfirmation(false);
+      setShowSyncChoice(false);
       setMoveData({ appointmentId: null, newDate: null, appointment: null });
     } catch (error) {
       console.error('Erreur déplacement rendez-vous:', error);
       setAppointmentsError('Impossible de déplacer le rendez-vous.');
       setShowMoveConfirmation(false);
+      setShowSyncChoice(false);
+    } finally {
+      setIsMoving(false);
     }
   };
 
@@ -379,8 +502,8 @@ const Appointments = () => {
     if (!Number.isNaN(id)) {
       const appointment = appointments.find(a => a.id === id);
       if (appointment) {
-        setMoveData({ appointmentId: id, newDate: date, appointment });
-        setShowMoveConfirmation(true);
+        // Check for linked treatment before showing move confirmation
+        initiateMove(id, date, appointment);
       }
     }
   };
@@ -657,16 +780,187 @@ const Appointments = () => {
               </div>
               <div className="flex gap-2 justify-end">
                 <button
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={() => setShowMoveConfirmation(false)}
+                  disabled={isMoving}
                 >
                   Annuler
                 </button>
                 <button
-                  className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium transition-colors"
-                  onClick={confirmMoveAppointment}
+                  className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  onClick={() => confirmMoveAppointment(false)}
+                  disabled={isMoving}
                 >
-                  Confirmer le déplacement
+                  {isMoving ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Déplacement...
+                    </>
+                  ) : (
+                    'Confirmer le déplacement'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de choix synchronisation traitement */}
+      {showSyncChoice && syncChoiceData.linkedTreatment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+          onClick={() => setShowSyncChoice(false)}
+        >
+          <div
+            className="relative w-full max-w-md mx-2 bg-white rounded-lg shadow-lg border border-amber-100"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+              onClick={() => setShowSyncChoice(false)}
+              aria-label="Fermer"
+              type="button"
+            >
+              &times;
+            </button>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-amber-100">
+                  <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 4v2m0-14v2m0 0v2" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Attention - CE RDV est lié à un traitement</h3>
+              </div>
+              <div className="mb-6">
+                <div className="bg-amber-50 rounded-lg p-4 space-y-2 mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Traitement :</span>
+                    <span className="text-sm font-semibold text-gray-900">{syncChoiceData.linkedTreatment.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Début :</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {new Date(syncChoiceData.linkedTreatment.start_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Statut :</span>
+                    <span className="text-sm font-semibold text-gray-900">{syncChoiceData.linkedTreatment.status}</span>
+                  </div>
+                  {syncChoiceData.medicalRecordsCount > 0 && (
+                    <div className="flex items-center justify-between pt-2 border-t border-amber-200">
+                      <span className="text-sm text-gray-600">Séances complétées :</span>
+                      <span className="text-sm font-semibold text-red-600">{syncChoiceData.medicalRecordsCount}</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  Le traitement sera synchronisé avec la nouvelle date du rendez-vous.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <button
+                  className="w-full px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  onClick={() => {
+                    confirmMoveAppointment(true); // With sync
+                  }}
+                  disabled={isMoving || !syncChoiceData.canSync}
+                  title={syncChoiceData.canSync ? 'Synchronise le RDV et le traitement ensemble' : 'Impossible : séances déjà complétées'}
+                >
+                  {isMoving ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Synchronisation...
+                    </>
+                  ) : (
+                    '✅ Synchroniser le traitement'
+                  )}
+                </button>
+                <button
+                  className="w-full px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  onClick={() => setShowSyncChoice(false)}
+                  disabled={isMoving}
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de confirmation de suppression */}
+      {showDeleteConfirmation && deleteData.appointment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+          onClick={() => setShowDeleteConfirmation(false)}
+        >
+          <div
+            className="relative w-full max-w-sm mx-2 bg-white rounded-lg shadow-lg border border-red-100"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+              onClick={() => setShowDeleteConfirmation(false)}
+              aria-label="Fermer"
+              type="button"
+            >
+              &times;
+            </button>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                  <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 0v2m0-6V9m0 0V7m0 14a9 9 0 110-18 9 9 0 010 18z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Supprimer le rendez-vous</h3>
+              </div>
+              <div className="mb-6">
+                <p className="text-sm text-gray-600 mb-4">
+                  Êtes-vous sûr de vouloir supprimer ce rendez-vous ? Cette action est irréversible.
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Patient :</span>
+                    <span className="text-sm font-semibold text-gray-900">{deleteData.appointment.patient}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Date :</span>
+                    <span className="text-sm font-semibold text-gray-900">{deleteData.appointment.date}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Heure :</span>
+                    <span className="text-sm font-semibold text-gray-900">{deleteData.appointment.heure}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Motif :</span>
+                    <span className="text-sm font-semibold text-gray-900">{deleteData.appointment.motif}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  onClick={() => setShowDeleteConfirmation(false)}
+                >
+                  Annuler
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg font-medium transition-colors"
+                  onClick={confirmDeleteAppointment}
+                >
+                  Supprimer
                 </button>
               </div>
             </div>

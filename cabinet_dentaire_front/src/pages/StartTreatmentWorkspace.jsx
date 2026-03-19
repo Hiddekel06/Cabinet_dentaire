@@ -21,9 +21,7 @@ const StartTreatmentWorkspace = () => {
     acts: [],
     start_date: new Date().toISOString().split('T')[0],
     next_appointment_date: '',
-    next_appointment_duration: 60,
     next_appointment_reason: '',
-    next_appointment_notes: '',
     notes: '',
   });
 
@@ -117,10 +115,28 @@ const StartTreatmentWorkspace = () => {
   return (
     <Layout>
       <div className="p-6 space-y-6">
+        <div className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 px-5 py-4 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white">Nouveau suivi patient</h1>
+                <p className="text-xs text-slate-300 mt-0.5">Workspace traitement - saisie guidée en 3 sections</p>
+              </div>
+            </div>
+            <span className="text-[11px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
+              Étape 1
+            </span>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Nouveau suivi patient</h1>
-            <p className="text-sm text-gray-600 mt-1">Espace dédié pour démarrer un traitement sans modale</p>
+            <p className="text-sm text-gray-600">Configure le traitement puis planifie le premier rendez-vous.</p>
           </div>
           <button
             type="button"
@@ -131,7 +147,12 @@ const StartTreatmentWorkspace = () => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden ring-1 ring-slate-100">
+          <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">1. Patient</span>
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800">2. Actes</span>
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">3. Premier RDV</span>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-3">
             <section className="p-5 border-b lg:border-b-0 lg:border-r border-gray-200 bg-linear-to-b from-blue-50 to-white space-y-4">
               <h2 className="text-sm font-bold text-blue-900">1. Patient et suivi</h2>
@@ -304,45 +325,24 @@ const StartTreatmentWorkspace = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Durée (minutes)</label>
-                <input
-                  type="number"
-                  min="15"
-                  step="15"
-                  value={form.next_appointment_duration}
-                  onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_duration: e.target.value }))}
-                  className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Raison</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Note de planification (optionnel)</label>
                 <input
                   type="text"
                   value={form.next_appointment_reason}
                   onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_reason: e.target.value }))}
                   className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ex: contrôle"
+                  placeholder="Ex: contrôle post-op, point de vigilance"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Notes rendez-vous</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Note clinique de départ (optionnel)</label>
                 <textarea
-                  value={form.next_appointment_notes}
-                  onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_notes: e.target.value }))}
                   rows="3"
-                  className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Notes suivi</label>
-                <textarea
                   value={form.notes}
                   onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  rows="3"
                   className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: douleur initiale, examen clinique, contexte de départ"
                 />
               </div>
             </section>
@@ -359,7 +359,7 @@ const StartTreatmentWorkspace = () => {
             <button
               type="submit"
               disabled={loading || !!activePatientTreatment}
-              className="px-5 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {loading ? 'En cours...' : 'Démarrer le suivi'}
             </button>

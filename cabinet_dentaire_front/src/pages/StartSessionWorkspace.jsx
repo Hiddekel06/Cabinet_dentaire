@@ -19,6 +19,14 @@ const StartSessionWorkspace = () => {
   const [dentalActs, setDentalActs] = useState([]);
   const [sessionActsSearchTerm, setSessionActsSearchTerm] = useState('');
   const [treatment, setTreatment] = useState(null);
+  const [lastMedicalRecord, setLastMedicalRecord] = useState(null);
+  const [feedback, setFeedback] = useState({
+    open: false,
+    type: 'info',
+    title: '',
+    message: '',
+    redirectToTreatments: false,
+  });
 
   const [form, setForm] = useState({
     treatment_performed: '',
@@ -28,19 +36,54 @@ const StartSessionWorkspace = () => {
     acts: [],
   });
 
+  const formatAppointmentForDisplay = (rawDate, timeSpecified = true) => {
+    if (!rawDate) return 'Non renseignée';
+    const parsed = new Date(rawDate);
+    if (Number.isNaN(parsed.getTime())) return 'Non renseignée';
+
+    const isTimeUnspecified = timeSpecified === false;
+    if (isTimeUnspecified) {
+      return `${parsed.toLocaleDateString('fr-FR')} (heure non précisée)`;
+    }
+
+    return parsed.toLocaleString('fr-FR');
+  };
+
+  const showFeedback = (type, title, message, redirectToTreatments = false) => {
+    setFeedback({
+      open: true,
+      type,
+      title,
+      message,
+      redirectToTreatments,
+    });
+  };
+
+  const closeFeedback = () => {
+    const shouldRedirect = feedback.redirectToTreatments;
+    setFeedback((prev) => ({ ...prev, open: false }));
+    if (shouldRedirect) {
+      navigate('/treatments');
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setLoadingData(true);
       try {
-        const [userRes, actsRes, treatmentRes] = await Promise.all([
+        const [userRes, actsRes, treatmentRes, recordsRes] = await Promise.all([
           authAPI.getUser().catch(() => ({ data: null })),
           dentalActAPI.getAll(),
           patientTreatmentAPI.getById(treatmentId),
+          medicalRecordAPI.getAll({ patient_treatment_id: treatmentId }),
         ]);
 
         setCurrentUser(userRes?.data || null);
         setDentalActs(actsRes?.data?.data || actsRes?.data || []);
         setTreatment(treatmentRes?.data || null);
+
+        const records = recordsRes?.data?.data || recordsRes?.data?.data?.data || [];
+        setLastMedicalRecord(records.length > 0 ? records[0] : null);
       } catch (error) {
         console.error('Erreur chargement espace séance:', error);
       } finally {
@@ -70,54 +113,74 @@ const StartSessionWorkspace = () => {
     e.preventDefault();
 
     if (!form.treatment_performed) {
-      alert('Veuillez renseigner ce que vous avez fait exactement.');
+      showFeedback('warning', 'Information manquante', 'Veuillez renseigner ce que vous avez fait exactement.');
       return;
     }
 
-    if (!treatment?.next_appointment_id && !form.next_appointment_date) {
-      alert('Aucun rendez-vous actuel trouvé. Veuillez renseigner un prochain rendez-vous.');
+    if (!form.next_appointment_date) {
+      showFeedback('warning', 'Information manquante', 'Veuillez renseigner la date du prochain rendez-vous.');
       return;
     }
 
-    if (form.next_appointment_date) {
+    const currentAppointment = treatment?.nextAppointment || treatment?.next_appointment || null;
+    const currentAppointmentDateRaw = currentAppointment?.appointment_date || null;
+    const currentAppointmentTimeSpecified = typeof currentAppointment?.appointment_time_specified === 'boolean'
+      ? currentAppointment.appointment_time_specified
+      : true;
+    if (currentAppointmentDateRaw) {
+      const currentAppointmentDate = new Date(currentAppointmentDateRaw);
       const now = new Date();
+      if (!Number.isNaN(currentAppointmentDate.getTime()) && currentAppointmentDate > now) {
+        showFeedback(
+          'warning',
+          'Séance non autorisée',
+          `Vous ne pouvez pas ajouter une séance avant la date du rendez-vous en cours (${formatAppointmentForDisplay(currentAppointmentDateRaw, currentAppointmentTimeSpecified)}).`
+        );
+        return;
+      }
+    }
+
+    {
+      const now = new Date();
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
       const selectedDateTime = form.next_appointment_time
         ? new Date(`${form.next_appointment_date}T${form.next_appointment_time}`)
         : new Date(`${form.next_appointment_date}T00:00`);
 
-      if (selectedDateTime < now) {
-        alert('Impossible de créer un rendez-vous dans le passé.');
+      const isPast = form.next_appointment_time
+        ? selectedDateTime < now
+        : selectedDateTime < todayStart;
+
+      if (isPast) {
+        showFeedback('warning', 'Date invalide', 'Impossible de créer un rendez-vous dans le passé.');
         return;
       }
     }
 
     setLoading(true);
     try {
-      let newNextAppointmentId = null;
+      const appointmentDateTime = form.next_appointment_time
+        ? `${form.next_appointment_date} ${form.next_appointment_time}:00`
+        : form.next_appointment_date;
 
-      if (form.next_appointment_date) {
-        const appointmentDateTime = form.next_appointment_time
-          ? `${form.next_appointment_date} ${form.next_appointment_time}:00`
-          : form.next_appointment_date;
+      const appointmentRes = await appointmentAPI.create({
+        patient_id: treatment.patient_id,
+        dentist_id: currentUser?.id,
+        appointment_date: appointmentDateTime,
+        appointment_time_specified: !!form.next_appointment_time,
+        duration: null,
+        reason: null,
+        notes: null,
+      });
 
-        const appointmentRes = await appointmentAPI.create({
-          patient_id: treatment.patient_id,
-          dentist_id: currentUser?.id,
-          appointment_date: appointmentDateTime,
-          duration: null,
-          reason: null,
-          notes: null,
-        });
-
-        newNextAppointmentId = appointmentRes?.data?.id || null;
-      }
-
-      const sessionAppointmentId = treatment.next_appointment_id || newNextAppointmentId;
+      const newNextAppointmentId = appointmentRes?.data?.id || null;
+      const consumedAppointmentId = treatment.next_appointment_id || null;
 
       await medicalRecordAPI.create({
         patient_id: treatment.patient_id,
         patient_treatment_id: treatment.id,
-        appointment_id: sessionAppointmentId,
+        appointment_id: consumedAppointmentId || newNextAppointmentId,
         treatment_performed: form.treatment_performed,
         next_action: form.next_action,
       });
@@ -132,8 +195,7 @@ const StartSessionWorkspace = () => {
         await patientTreatmentAPI.addActs(treatment.id, form.acts);
       }
 
-      alert('Séance ajoutée avec succès !');
-      navigate('/treatments');
+      showFeedback('success', 'Séance enregistrée', 'La séance a été ajoutée avec succès.', true);
     } catch (error) {
       console.error('Erreur ajout séance:', error);
       let message = 'Erreur lors de l\'ajout de la séance.';
@@ -143,7 +205,7 @@ const StartSessionWorkspace = () => {
       if (error.response?.data?.errors) {
         message = `${message} ${Object.values(error.response.data.errors).flat().join(' | ')}`;
       }
-      alert(message);
+      showFeedback('error', 'Échec enregistrement', message);
     } finally {
       setLoading(false);
     }
@@ -175,16 +237,35 @@ const StartSessionWorkspace = () => {
   }
 
   const isLocked = !!treatment.is_invoice_paid_locked;
+  const lastAppointment = treatment?.nextAppointment || treatment?.next_appointment || null;
 
   return (
     <Layout>
       <div className="p-6 space-y-6">
+        <div className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 px-5 py-4 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white">Ajouter une séance</h1>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  {treatment.patient?.first_name} {treatment.patient?.last_name} - {treatment.name}
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-200 border border-cyan-400/30">
+              Étape 2
+            </span>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Ajouter une séance</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              {treatment.patient?.first_name} {treatment.patient?.last_name} - {treatment.name}
-            </p>
+            <p className="text-sm text-gray-600">Renseigne la séance, puis mets à jour les actes et le prochain rendez-vous.</p>
           </div>
           <button
             type="button"
@@ -201,7 +282,12 @@ const StartSessionWorkspace = () => {
           </div>
         )}
 
-        <form onSubmit={handleAddSession} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <form onSubmit={handleAddSession} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden ring-1 ring-slate-100">
+          <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">1. Séance</span>
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800">2. Actes</span>
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">3. Prochain RDV</span>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-3">
             <section className="p-5 border-b lg:border-b-0 lg:border-r border-gray-200 bg-linear-to-b from-blue-50 to-white space-y-3">
               <h2 className="text-sm font-bold text-blue-900">1. Séance réalisée</h2>
@@ -294,12 +380,15 @@ const StartSessionWorkspace = () => {
               <h2 className="text-sm font-bold text-indigo-900">3. Prochain rendez-vous</h2>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Date (optionnel)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Date <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="date"
                   value={form.next_appointment_date}
                   onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_date: e.target.value }))}
                   className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  required
                   disabled={isLocked}
                 />
               </div>
@@ -339,12 +428,84 @@ const StartSessionWorkspace = () => {
             <button
               type="submit"
               disabled={loading || isLocked}
-              className="px-6 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {loading ? 'Enregistrement...' : 'Enregistrer séance'}
             </button>
           </div>
         </form>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Contexte précédent</h3>
+            <span className="text-[11px] text-slate-500">Discret - lecture rapide</span>
+          </div>
+
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-700">
+            <div className="rounded-lg bg-white border border-slate-200 px-3 py-2">
+              <p className="font-semibold text-slate-800">Dernier rendez-vous</p>
+              {lastAppointment ? (
+                <>
+                  <p className="mt-1">
+                    {formatAppointmentForDisplay(
+                      lastAppointment.appointment_date,
+                      typeof lastAppointment.appointment_time_specified === 'boolean'
+                        ? lastAppointment.appointment_time_specified
+                        : true
+                    )}
+                  </p>
+                  {lastAppointment.reason && (
+                    <p className="mt-1 text-slate-600">Motif: {lastAppointment.reason}</p>
+                  )}
+                </>
+              ) : (
+                <p className="mt-1 text-slate-500">Aucun rendez-vous courant enregistré.</p>
+              )}
+            </div>
+
+            <div className="rounded-lg bg-white border border-slate-200 px-3 py-2">
+              <p className="font-semibold text-slate-800">Mémo clinique</p>
+              {lastMedicalRecord?.treatment_performed ? (
+                <p className="mt-1 whitespace-pre-line">{lastMedicalRecord.treatment_performed}</p>
+              ) : treatment?.notes ? (
+                <p className="mt-1 whitespace-pre-line">{treatment.notes}</p>
+              ) : (
+                <p className="mt-1 text-slate-500">Aucune note clinique précédente.</p>
+              )}
+              {lastMedicalRecord?.next_action && (
+                <p className="mt-2 text-slate-600">À prévoir: {lastMedicalRecord.next_action}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {feedback.open && (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
+              <div className={`px-5 py-4 border-b ${
+                feedback.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : feedback.type === 'error'
+                    ? 'bg-rose-50 border-rose-200'
+                    : 'bg-amber-50 border-amber-200'
+              }`}>
+                <h3 className="text-sm font-bold text-gray-900">{feedback.title}</h3>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-gray-700 whitespace-pre-line">{feedback.message}</p>
+              </div>
+              <div className="px-5 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+                <button
+                  type="button"
+                  onClick={closeFeedback}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700"
+                >
+                  {feedback.redirectToTreatments ? 'Retour à la liste' : 'Fermer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

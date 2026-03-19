@@ -21,18 +21,24 @@ class AuthController extends Controller
             ]);
         }
 
-        $request->session()->regenerate();
+        $user = Auth::user();
+        
+        // Générer un token Sanctum pour l'authentification API
+        $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
             'message' => 'Connecté avec succès',
-            'user' => Auth::user(),
+            'user' => $user,
+            'token' => $token,
         ]);
     }
 
     public function logout(Request $request)
     {
+        // Révoquer tous les tokens Sanctum de l'utilisateur
+        $request->user()->tokens()->delete();
+        
         Auth::guard('web')->logout();
-
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 

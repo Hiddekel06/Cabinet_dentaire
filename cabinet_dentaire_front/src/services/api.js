@@ -160,15 +160,21 @@ const clearCache = (pattern = null) => {
   }
 };
 
-// 🔥 Interceptor pour ajouter le token XSRF à chaque requête
+// 🔥 Interceptor pour ajouter le Bearer token à chaque requête
 api.interceptors.request.use((config) => {
-  const token = document.cookie
+  const bearerToken = localStorage.getItem('token');
+  if (bearerToken) {
+    config.headers['Authorization'] = `Bearer ${bearerToken}`;
+  }
+
+  // Garder aussi le XSRF token en cas de besoin
+  const xsrfToken = document.cookie
     .split('; ')
     .find(row => row.startsWith('XSRF-TOKEN='))
     ?.split('=')[1];
 
-  if (token) {
-    config.headers['X-XSRF-TOKEN'] = decodeURIComponent(token);
+  if (xsrfToken) {
+    config.headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrfToken);
   }
 
   return config;
@@ -183,11 +189,19 @@ export const authAPI = {
   login: async (email, password) => {
     await getCsrfToken();
     clearCache(); // Vider le cache à la connexion
-    return api.post('/api/login', { email, password });
+    const response = await api.post('/api/login', { email, password });
+    
+    // Stocker le token Bearer si fourni
+    if (response.data?.token) {
+      localStorage.setItem('token', response.data.token);
+    }
+    
+    return response;
   },
 
   logout: () => {
     clearCache(); // Vider le cache à la déconnexion
+    localStorage.removeItem('token');
     return api.post('/api/logout');
   },
 
