@@ -93,6 +93,13 @@ class MedicalRecordController extends Controller
         $validated['date'] = now()->toDateString();
 
         $record = MedicalRecord::create($validated);
+        
+        // Mettre à jour le statut du rendez-vous associé à "completed"
+        $appointment = \App\Models\Appointment::find($validated['appointment_id']);
+        if ($appointment) {
+            $appointment->update(['status' => 'completed']);
+        }
+        
         $record->load(['patient', 'appointment', 'patientTreatment', 'creator']);
 
         return response()->json($record, 201);

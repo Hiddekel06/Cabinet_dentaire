@@ -254,6 +254,11 @@ export const appointmentAPI = {
     });
   },
 
+  getByDate: (date) => {
+    const queryDate = encodeURIComponent(date);
+    return api.get(`/api/appointments?date=${queryDate}`);
+  },
+
   getById: (id) =>
     api.get(`/api/appointments/${id}`),
 

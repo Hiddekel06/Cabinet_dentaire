@@ -7,7 +7,9 @@ import { useAuth } from "../context/AuthContext";
 const statusOptions = [
   { value: 'all', label: 'Tous les statuts', color: 'gray' },
   { value: 'À venir', label: 'À venir', color: 'emerald' },
+  { value: 'En retard', label: 'En retard', color: 'amber' },
   { value: 'Terminé', label: 'Terminé', color: 'slate' },
+  { value: 'Absent', label: 'Absent', color: 'orange' },
   { value: 'Annulé', label: 'Annulé', color: 'red' },
 ];
 
@@ -51,6 +53,10 @@ const Appointments = () => {
     medicalRecordsCount: 0,
     canSync: false 
   });
+  const [showAbsentReschedule, setShowAbsentReschedule] = useState(false);
+  const [absentRescheduleData, setAbsentRescheduleData] = useState({ appointment: null });
+  const [newAbsentDate, setNewAbsentDate] = useState('');
+  const [isMarkingAbsent, setIsMarkingAbsent] = useState(false);
   const hasLoadedRef = useRef(false);
   const [quickForm, setQuickForm] = useState({
     date: '',
@@ -67,12 +73,14 @@ const Appointments = () => {
     pending: 'À venir',
     confirmed: 'À venir',
     completed: 'Terminé',
+    absent: 'Absent',
     cancelled: 'Annulé',
   };
 
   const statusToApi = {
     'À venir': 'pending',
     'Terminé': 'completed',
+    'Absent': 'absent',
     'Annulé': 'cancelled',
   };
 
@@ -95,6 +103,8 @@ const Appointments = () => {
           ? heureValue
           : '–';
         const patient = a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : '';
+        const baseStatus = statusMap[a.status] || 'À venir';
+        const statut = (baseStatus === 'À venir' && date && date < todayDateStr) ? 'En retard' : baseStatus;
         return {
           apiId: a.id,
           id: a.id,
@@ -106,7 +116,7 @@ const Appointments = () => {
           patientId: a.patient?.id,
           motif: a.reason || 'Consultation',
           praticien: a.dentist?.name || 'Dentiste',
-          statut: statusMap[a.status] || 'À venir',
+          statut,
         };
       });
       setAppointments(mapped);
@@ -165,7 +175,7 @@ const Appointments = () => {
       patient_id: appointment.patientId || '',
       motif: appointment.motif || 'Consultation',
       praticien: appointment.praticien || (user?.name || 'Dentiste'),
-      statut: appointment.statut || 'À venir',
+      statut: appointment.statut === 'En retard' ? 'À venir' : (appointment.statut || 'À venir'),
     });
     setShowQuickCreate(true);
   };
@@ -194,6 +204,65 @@ const Appointments = () => {
       console.error('Erreur suppression rendez-vous:', error);
       setAppointmentsError('Impossible de supprimer le rendez-vous.');
       setShowDeleteConfirmation(false);
+    }
+  };
+
+  const markAbsentInitiate = (appointment) => {
+    // Check if appointment is in the past and status is "À venir"
+    const appointmentDate = new Date(appointment.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (appointmentDate >= today || !['À venir', 'En retard'].includes(appointment.statut)) {
+      setAppointmentsError('Seuls les rendez-vous passés avec statut "À venir" ou "En retard" peuvent être marqués comme absent.');
+      return;
+    }
+
+    // Set suggested date as today
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    setAbsentRescheduleData({ appointment });
+    setNewAbsentDate(todayStr);
+    setShowAbsentReschedule(true);
+    setOpenMenu(null);
+  };
+
+  const confirmMarkAbsentAndReschedule = async () => {
+    try {
+      if (!absentRescheduleData.appointment || !newAbsentDate) {
+        setAppointmentsError('Veuillez sélectionner une nouvelle date.');
+        return;
+      }
+
+      setIsMarkingAbsent(true);
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/appointments/${absentRescheduleData.appointment.apiId}/mark-absent-and-reschedule`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          new_appointment_date: newAbsentDate,
+          appointment_time_specified: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || `Erreur HTTP: ${response.status}`);
+      }
+
+      await loadAppointments();
+      setShowAbsentReschedule(false);
+      setAbsentRescheduleData({ appointment: null });
+      setNewAbsentDate('');
+      setAppointmentsError(null);
+    } catch (error) {
+      console.error('Erreur marquage absent:', error);
+      setAppointmentsError('Impossible de marquer le rendez-vous comme absent.');
+    } finally {
+      setIsMarkingAbsent(false);
     }
   };
 
@@ -346,7 +415,9 @@ const Appointments = () => {
           ? `${quickForm.date}T${quickForm.heure}:00`
           : quickForm.date,
         appointment_time_specified: timeSpecified,
-        status: statusToApi[quickForm.statut] || 'pending',
+        status: editingAppointment
+          ? (statusToApi[quickForm.statut] || 'pending')
+          : 'pending',
         reason: quickForm.motif || null,
         notes: null,
       };
@@ -579,7 +650,11 @@ const Appointments = () => {
             </button>
             <div className="px-6 pt-6 pb-3 bg-gradient-to-r from-blue-50 via-white to-blue-50 rounded-t-xl">
               <h3 className="text-lg font-bold text-gray-900">{editingAppointment ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}</h3>
-              <p className="text-sm text-gray-500 mt-1">Saisie rapide</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {editingAppointment
+                  ? 'Saisie rapide'
+                  : 'Saisie rapide - ce rendez-vous sera lie automatiquement a un traitement'}
+              </p>
             </div>
             <form onSubmit={handleQuickCreateSubmit} className="px-6 py-4 grid grid-cols-1 gap-3">
               <div>
@@ -639,16 +714,22 @@ const Appointments = () => {
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Statut</label>
-                  <select
-                    name="statut"
-                    value={quickForm.statut}
-                    onChange={handleQuickCreateChange}
-                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
-                  >
-                    {statusOptions.filter(s => s.value !== 'all').map(s => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
+                  {editingAppointment ? (
+                    <select
+                      name="statut"
+                      value={quickForm.statut}
+                      onChange={handleQuickCreateChange}
+                      className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                    >
+                      {statusOptions.filter(s => ['À venir', 'Terminé', 'Absent', 'Annulé'].includes(s.value)).map(s => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="mt-1 w-full bg-blue-50 text-blue-700 rounded-lg px-3 py-2 text-sm border border-blue-100">
+                      A venir (defaut)
+                    </div>
+                  )}
                 </div>
               </div>
               <div>
@@ -720,8 +801,12 @@ const Appointments = () => {
                 <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
                   selectedAppointment.statut === 'À venir'
                     ? 'bg-emerald-100 text-emerald-700'
+                    : selectedAppointment.statut === 'En retard'
+                      ? 'bg-amber-100 text-amber-700'
                     : selectedAppointment.statut === 'Terminé'
                       ? 'bg-gray-100 text-gray-600'
+                      : selectedAppointment.statut === 'Absent'
+                        ? 'bg-orange-100 text-orange-700'
                       : 'bg-red-100 text-red-600'
                 }`}>
                   {selectedAppointment.statut}
@@ -968,6 +1053,94 @@ const Appointments = () => {
         </div>
       )}
 
+      {/* Modale: Marquer Absent et Reporter */}
+      {showAbsentReschedule && absentRescheduleData.appointment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+          onClick={() => setShowAbsentReschedule(false)}
+        >
+          <div
+            className="relative w-full max-w-md mx-2 bg-white rounded-lg shadow-lg border border-amber-100"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+              onClick={() => setShowAbsentReschedule(false)}
+              aria-label="Fermer"
+              type="button"
+            >
+              &times;
+            </button>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-amber-100">
+                  <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Reporter le rendez-vous absent</h3>
+              </div>
+              <div className="mb-6">
+                <p className="text-sm text-gray-600 mb-4">
+                  Marquer ce rendez-vous comme absent et le reporter à une nouvelle date. Tous les détails seront conservés (motif, praticien, notes, traitement).
+                </p>
+                <div className="bg-amber-50 rounded-lg p-4 space-y-3 mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Patient :</span>
+                    <span className="text-sm font-semibold text-gray-900">{absentRescheduleData.appointment.patient}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Date actuelle :</span>
+                    <span className="text-sm font-semibold text-gray-900">{absentRescheduleData.appointment.date}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Motif :</span>
+                    <span className="text-sm font-semibold text-gray-900">{absentRescheduleData.appointment.motif}</span>
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="text-sm font-semibold text-gray-700">Nouvelle date *</label>
+                  <input
+                    type="date"
+                    value={newAbsentDate}
+                    onChange={(e) => setNewAbsentDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="mt-2 w-full bg-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-200 focus:outline-none border border-amber-200"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setShowAbsentReschedule(false)}
+                  disabled={isMarkingAbsent}
+                >
+                  Annuler
+                </button>
+                <button
+                  className="px-4 py-2 bg-amber-600 text-white hover:bg-amber-700 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  onClick={confirmMarkAbsentAndReschedule}
+                  disabled={isMarkingAbsent || !newAbsentDate}
+                >
+                  {isMarkingAbsent ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Report en cours...
+                    </>
+                  ) : (
+                    '⚠️ Marquer Absent et Reporter'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestion des rendez-vous</h1>
@@ -1195,7 +1368,9 @@ const Appointments = () => {
                       <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">
                         <span className={
                           a.statut === 'À venir' ? 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700' :
+                          a.statut === 'En retard' ? 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700' :
                           a.statut === 'Terminé' ? 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600' :
+                          a.statut === 'Absent' ? 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700' :
                           'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-600'
                         }>
                           {a.statut}
@@ -1243,6 +1418,32 @@ const Appointments = () => {
                                   </svg>
                                   Modifier
                                 </button>
+                                {/* Mark Absent button - only for past pending/overdue appointments */}
+                                {(() => {
+                                  const appDate = new Date(a.date);
+                                  const today = new Date();
+                                  today.setHours(0, 0, 0, 0);
+                                  if (appDate < today && ['À venir', 'En retard'].includes(a.statut)) {
+                                    return (
+                                      <>
+                                        <div className="border-t border-gray-200 my-1"></div>
+                                        <button
+                                          onClick={() => {
+                                            markAbsentInitiate(a);
+                                            setOpenMenu(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 flex items-center gap-2 transition-colors"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                          </svg>
+                                          Marquer Absent
+                                        </button>
+                                      </>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                                 <div className="border-t border-gray-200 my-1"></div>
                                 <button
                                   onClick={() => {
@@ -1427,8 +1628,12 @@ const Appointments = () => {
                                     className={`text-xs px-1.5 py-0.5 rounded truncate cursor-move transition-colors font-medium ${
                                       app.statut === 'À venir'
                                         ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                        : app.statut === 'En retard'
+                                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
                                         : app.statut === 'Terminé'
                                         ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        : app.statut === 'Absent'
+                                        ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
                                         : 'bg-red-100 text-red-600 hover:bg-red-200'
                                     }`}
                                     title={`${app.patient} - ${app.heure} - ${app.motif}`}
@@ -1498,8 +1703,12 @@ const Appointments = () => {
                                 className={`text-xs px-1.5 py-0.5 rounded truncate font-medium ${
                                   app.statut === 'À venir'
                                     ? 'bg-emerald-100 text-emerald-700'
+                                    : app.statut === 'En retard'
+                                    ? 'bg-amber-100 text-amber-700'
                                     : app.statut === 'Terminé'
                                     ? 'bg-gray-100 text-gray-600'
+                                    : app.statut === 'Absent'
+                                    ? 'bg-orange-100 text-orange-700'
                                     : 'bg-red-100 text-red-600'
                                 }`}
                               >
@@ -1527,8 +1736,12 @@ const Appointments = () => {
                             className={`p-2 rounded-lg border ${
                               app.statut === 'À venir'
                                 ? 'bg-emerald-50 border-emerald-200'
+                                : app.statut === 'En retard'
+                                ? 'bg-amber-50 border-amber-200'
                                 : app.statut === 'Terminé'
                                 ? 'bg-gray-50 border-gray-200'
+                                : app.statut === 'Absent'
+                                ? 'bg-orange-50 border-orange-200'
                                 : 'bg-red-50 border-red-200'
                             }`}
                           >
@@ -1559,8 +1772,12 @@ const Appointments = () => {
                       <span className={`mt-1 inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
                         app.statut === 'À venir'
                           ? 'bg-emerald-100 text-emerald-700'
+                          : app.statut === 'En retard'
+                          ? 'bg-amber-100 text-amber-700'
                           : app.statut === 'Terminé'
                           ? 'bg-gray-100 text-gray-600'
+                          : app.statut === 'Absent'
+                          ? 'bg-orange-100 text-orange-700'
                           : 'bg-red-100 text-red-600'
                       }`}>
                         {app.statut}
@@ -1577,8 +1794,16 @@ const Appointments = () => {
                 <span className="text-sm text-gray-600">À venir</span>
               </div>
               <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-amber-100 border border-amber-300 rounded"></div>
+                <span className="text-sm text-gray-600">En retard</span>
+              </div>
+              <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-gray-100 border border-gray-300 rounded"></div>
                 <span className="text-sm text-gray-600">Terminé</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-orange-100 border border-orange-300 rounded"></div>
+                <span className="text-sm text-gray-600">Absent</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>

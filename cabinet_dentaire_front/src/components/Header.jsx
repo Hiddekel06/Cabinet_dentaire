@@ -1,11 +1,77 @@
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { appointmentAPI } from '../services/api';
 
 export const Header = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showAlertsMenu, setShowAlertsMenu] = useState(false);
+  const [todayPotentialOverdue, setTodayPotentialOverdue] = useState([]);
+
+  const todayDateStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  const alertCount = todayPotentialOverdue.length;
+
+  const loadPotentialOverdueToday = async () => {
+    try {
+      const { data } = await appointmentAPI.getByDate(todayDateStr);
+      const list = Array.isArray(data?.data) ? data.data : [];
+      const now = new Date();
+
+      // Potential overdue today: pending/confirmed appointments that should have started.
+      const overdueList = list
+        .filter((a) => ['pending', 'confirmed'].includes(a.status))
+        .filter((a) => {
+          if (!a.appointment_date) return false;
+          const appointmentDate = new Date(a.appointment_date);
+          const hasTime = typeof a.appointment_time_specified === 'boolean'
+            ? a.appointment_time_specified
+            : true;
+
+          // If time is not specified, keep it visible as potential overdue for today.
+          if (!hasTime) return true;
+
+          return appointmentDate <= now;
+        })
+        .map((a) => {
+          const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
+          const hasTime = typeof a.appointment_time_specified === 'boolean'
+            ? a.appointment_time_specified
+            : true;
+          const timeLabel = (dateObj && hasTime)
+            ? `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`
+            : 'Heure non precisee';
+
+          return {
+            id: a.id,
+            patientName: a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : 'Patient inconnu',
+            reason: a.reason || 'Consultation',
+            timeLabel,
+          };
+        });
+
+      setTodayPotentialOverdue(overdueList);
+    } catch (error) {
+      console.error('Erreur chargement alertes retard:', error);
+      setTodayPotentialOverdue([]);
+    }
+  };
+
+  useEffect(() => {
+    loadPotentialOverdueToday();
+
+    // Refresh every minute so count stays current.
+    const intervalId = setInterval(loadPotentialOverdueToday, 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [todayDateStr]);
 
   const handleLogout = async () => {
     await logout();
@@ -47,12 +113,56 @@ export const Header = () => {
                 </svg>
                 Statistiques
               </Link>
-              <button className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium rounded-lg transition-colors flex items-center">
-                <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                Alertes
-              </button>
+              <div
+                className="relative"
+                onMouseEnter={() => setShowAlertsMenu(true)}
+                onMouseLeave={() => setShowAlertsMenu(false)}
+              >
+                <button className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium rounded-lg transition-colors flex items-center relative">
+                  <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  Alertes
+                  {alertCount > 0 && (
+                    <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] leading-[18px] text-center font-bold border border-white">
+                      {alertCount > 99 ? '99+' : alertCount}
+                    </span>
+                  )}
+                </button>
+
+                {showAlertsMenu && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white border border-amber-100 rounded-xl shadow-lg z-50 overflow-hidden">
+                    <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
+                      <p className="text-sm font-semibold text-amber-900">Retards potentiels du jour</p>
+                      <p className="text-xs text-amber-700">{todayDateStr.split('-').reverse().join('/')}</p>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                      {alertCount === 0 ? (
+                        <div className="px-4 py-5 text-sm text-gray-500">Aucun rendez-vous potentiellement en retard pour aujourd'hui.</div>
+                      ) : (
+                        todayPotentialOverdue.map((item) => (
+                          <div key={item.id} className="px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-amber-50/40">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{item.patientName}</p>
+                                <p className="text-xs text-gray-600">{item.reason}</p>
+                              </div>
+                              <span className="text-xs font-medium text-amber-700 bg-amber-100 px-2 py-1 rounded-md whitespace-nowrap">
+                                {item.timeLabel}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="px-4 py-2 border-t border-gray-100 bg-gray-50 text-right">
+                      <Link to="/appointments" className="text-xs font-medium text-blue-700 hover:text-blue-800">
+                        Voir les rendez-vous
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Séparateur */}
