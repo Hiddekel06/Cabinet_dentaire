@@ -55,4 +55,12 @@ class PatientTreatment extends Model
     {
         return $this->hasMany(PatientTreatmentAct::class);
     }
+
+    /**
+     * La facture cumulative associée à ce traitement (1:1)
+     */
+    public function invoice()
+    {
+        return $this->hasOne(Invoice::class);
+    }
 }

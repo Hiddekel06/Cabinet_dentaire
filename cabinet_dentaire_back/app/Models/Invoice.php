@@ -11,6 +11,7 @@ class Invoice extends Model
 
     protected $fillable = [
         'patient_id',
+        'patient_treatment_id',
         'invoice_number',
         'issue_date',
         'due_date',
@@ -30,6 +31,11 @@ class Invoice extends Model
     public function patient()
     {
         return $this->belongsTo(Patient::class);
+    }
+
+    public function patientTreatment()
+    {
+        return $this->belongsTo(PatientTreatment::class);
     }
 
     public function items()

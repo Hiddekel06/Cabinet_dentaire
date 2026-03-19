@@ -118,6 +118,22 @@ class InvoiceController extends Controller
                 ]);
             }
 
+            // Verifier que les traitements associes n'ont pas deja une facture
+            $treatmentIds = $acts->pluck('patient_treatment_id')->unique()->filter();
+            if ($treatmentIds->isNotEmpty()) {
+                $treatmentsWithInvoice = DB::table('invoices')
+                    ->whereIn('patient_treatment_id', $treatmentIds)
+                    ->where('status', '!=', 'cancelled')
+                    ->pluck('patient_treatment_id')
+                    ->toArray();
+
+                if (!empty($treatmentsWithInvoice)) {
+                    throw ValidationException::withMessages([
+                        'items' => ['Un ou plusieurs traitements ont deja une facture associee.'],
+                    ]);
+                }
+            }
+
             $invoice = Invoice::create([
                 'patient_id' => $validated['patient_id'],
                 'invoice_number' => 'TMP-' . uniqid('', true),
@@ -190,6 +206,8 @@ class InvoiceController extends Controller
             return response()->json(['error' => 'Le modele Word facture est introuvable.'], 500);
         }
 
+        $isDraft = $invoice->status !== 'paid';
+
         // Cache PDF: evite de reconvertir via LibreOffice tant que la facture n'a pas change.
         $itemsSignature = $invoice->items
             ->map(function ($item) {
@@ -205,6 +223,7 @@ class InvoiceController extends Controller
 
         $versionKey = md5(implode('|', [
             (string) $invoice->invoice_number,
+            (string) $invoice->status,
             (string) $invoice->issue_date,
             (string) ($invoice->due_date ?? ''),
             (string) $invoice->total_amount,
@@ -218,7 +237,8 @@ class InvoiceController extends Controller
         $cachedPdfPath = $cacheDir . DIRECTORY_SEPARATOR . 'facture_' . $invoice->id . '_' . $versionKey . '.pdf';
 
         if (file_exists($cachedPdfPath)) {
-            return response()->download($cachedPdfPath, 'facture_' . $invoice->invoice_number . '.pdf');
+            $downloadName = ($isDraft ? 'brouillon_' : 'facture_') . $invoice->invoice_number . '.pdf';
+            return response()->download($cachedPdfPath, $downloadName);
         }
 
         try {
@@ -235,7 +255,11 @@ class InvoiceController extends Controller
             // Variables globales (en-tete + section patient)
             $templateProcessor->setValue('adresse cabinet',   (string) config('app.cabinet_address', ''));
             $templateProcessor->setValue('telephone cabinet', (string) config('app.cabinet_phone', ''));
-            $templateProcessor->setValue('numero facture',    (string) $invoice->invoice_number);
+            $displayInvoiceNumber = $isDraft
+                ? ('BROUILLON - ' . (string) $invoice->invoice_number)
+                : (string) $invoice->invoice_number;
+
+            $templateProcessor->setValue('numero facture',    $displayInvoiceNumber);
             $templateProcessor->setValue('date facture',      $issueDate);
             $templateProcessor->setValue('date echeance',     $dueDate);
             $templateProcessor->setValue('nom patient',       $patientName);
@@ -312,7 +336,8 @@ class InvoiceController extends Controller
 
             File::move($outputPdf, $cachedPdfPath);
 
-            return response()->download($cachedPdfPath, 'facture_' . $invoice->invoice_number . '.pdf');
+            $downloadName = ($isDraft ? 'brouillon_' : 'facture_') . $invoice->invoice_number . '.pdf';
+            return response()->download($cachedPdfPath, $downloadName);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Erreur lors de la generation de la facture : ' . $e->getMessage(),

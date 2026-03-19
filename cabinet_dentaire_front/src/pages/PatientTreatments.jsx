@@ -17,6 +17,9 @@ const PatientTreatments = () => {
   const [treatmentToFinish, setTreatmentToFinish] = useState(null);
   const [currentTreatmentForSession, setCurrentTreatmentForSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [auditLogsByTreatment, setAuditLogsByTreatment] = useState({});
+  const [openAuditByTreatment, setOpenAuditByTreatment] = useState({});
+  const [loadingAuditByTreatment, setLoadingAuditByTreatment] = useState({});
   const hasLoadedRef = useRef(false);
   
   // États pour la recherche et les filtres
@@ -102,7 +105,7 @@ const PatientTreatments = () => {
 
   const handleStartTreatment = async (e) => {
     e.preventDefault();
-    if (!startForm.patient_id || !startForm.name || startForm.acts.length === 0 || !startForm.next_appointment_date) {
+    if (!startForm.patient_id || !startForm.name || !startForm.next_appointment_date) {
       alert('Veuillez remplir tous les champs obligatoires');
       return;
     }
@@ -289,6 +292,106 @@ const PatientTreatments = () => {
       alert('Erreur lors de la fin du suivi');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRemoveAct = async (treatmentId, act) => {
+    if (!treatmentId || !act?.id) {
+      alert('Acte introuvable.');
+      return;
+    }
+
+    const confirmed = confirm('Voulez-vous vraiment supprimer cet acte ?');
+    if (!confirmed) return;
+
+    const auditNote = prompt('Note d\'audit (optionnelle)', '') ?? '';
+
+    setLoading(true);
+    try {
+      await patientTreatmentAPI.removeAct(treatmentId, act.id, auditNote);
+      await loadInitialData();
+      if (openAuditByTreatment[treatmentId]) {
+        await handleToggleAuditLogs(treatmentId, true);
+      }
+      alert('Acte supprimé avec succès.');
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Suppression impossible.';
+      alert(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditAct = async (treatmentId, act) => {
+    if (!treatmentId || !act?.id) {
+      alert('Acte introuvable.');
+      return;
+    }
+
+    const nextQuantityRaw = prompt('Nouvelle quantité', String(act.quantity || 1));
+    if (nextQuantityRaw === null) return;
+
+    const nextQuantity = parseInt(nextQuantityRaw, 10);
+    if (!Number.isInteger(nextQuantity) || nextQuantity < 1) {
+      alert('Quantité invalide.');
+      return;
+    }
+
+    const currentPrice = Number(act.tarif_snapshot ?? 0);
+    const nextPriceRaw = prompt('Nouveau tarif unitaire (snapshot)', String(currentPrice));
+    if (nextPriceRaw === null) return;
+
+    const nextPrice = Number(nextPriceRaw);
+    if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+      alert('Tarif invalide.');
+      return;
+    }
+
+    const auditNote = prompt('Note d\'audit (optionnelle)', '') ?? '';
+
+    setLoading(true);
+    try {
+      await patientTreatmentAPI.updateAct(treatmentId, act.id, {
+        quantity: nextQuantity,
+        tarif_snapshot: nextPrice,
+        audit_note: auditNote || null,
+      });
+      await loadInitialData();
+      if (openAuditByTreatment[treatmentId]) {
+        await handleToggleAuditLogs(treatmentId, true);
+      }
+      alert('Acte modifié avec succès.');
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Modification impossible.';
+      alert(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isConsultationSimpleAct = (actFromCatalog, actFromTreatment) => {
+    const catalogName = (actFromCatalog?.name || actFromCatalog?.label || '').toLowerCase();
+    const nestedName = (actFromTreatment?.dentalAct?.name || '').toLowerCase();
+    return catalogName.includes('consultation simple') || nestedName.includes('consultation simple');
+  };
+
+  const handleToggleAuditLogs = async (treatmentId, forceReload = false) => {
+    const wasOpen = !!openAuditByTreatment[treatmentId];
+    const nextOpen = forceReload ? true : !wasOpen;
+    setOpenAuditByTreatment(prev => ({ ...prev, [treatmentId]: nextOpen }));
+
+    if (!nextOpen) return;
+    if (!forceReload && auditLogsByTreatment[treatmentId]) return;
+
+    setLoadingAuditByTreatment(prev => ({ ...prev, [treatmentId]: true }));
+    try {
+      const res = await patientTreatmentAPI.getAuditLogs(treatmentId);
+      const logs = res?.data?.audit_logs || [];
+      setAuditLogsByTreatment(prev => ({ ...prev, [treatmentId]: logs }));
+    } catch {
+      setAuditLogsByTreatment(prev => ({ ...prev, [treatmentId]: [] }));
+    } finally {
+      setLoadingAuditByTreatment(prev => ({ ...prev, [treatmentId]: false }));
     }
   };
 
@@ -645,12 +748,44 @@ const PatientTreatments = () => {
                           <ul className="text-xs text-gray-700 space-y-1">
                             {pt.acts.map((a, idx) => {
                               const act = dentalActs.find(act => act.id === a.dental_act_id);
+                              const actLabel = act ? (act.code ? `${act.code} - ` : '') + (act.label || act.name || '') : `Acte #${a.dental_act_id}`;
+                              const isInvoiceLocked = !!pt.is_invoice_paid_locked;
+                              const isEditableTreatment = pt.status !== 'completed' && pt.status !== 'cancelled' && tab === 'en_cours' && !isInvoiceLocked;
+                              const isMandatoryConsultation = isConsultationSimpleAct(act, a);
+                              const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
                               return (
                                 <li key={idx} className="flex items-center gap-2">
-                                  <span className="font-medium">{act ? (act.code ? `${act.code} - ` : '') + act.label : `Acte #${a.dental_act_id}`}</span>
+                                  <span className="font-medium">{actLabel}</span>
                                   <span>x{a.quantity}</span>
-                                  {act && act.tarif && (
-                                    <span className="ml-2 text-gray-500">{(act.tarif * a.quantity).toFixed(2)} €</span>
+                                  {Number.isFinite(unitPrice) && (
+                                    <span className="ml-2 text-gray-500">{(unitPrice * a.quantity).toFixed(2)} €</span>
+                                  )}
+                                  {isMandatoryConsultation && (
+                                    <span className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-amber-800 bg-amber-100">
+                                      Obligatoire
+                                    </span>
+                                  )}
+                                  {isEditableTreatment && !isMandatoryConsultation && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditAct(pt.id, a)}
+                                      className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                                      title="Modifier quantité/prix"
+                                      disabled={loading}
+                                    >
+                                      Modifier
+                                    </button>
+                                  )}
+                                  {isEditableTreatment && !isMandatoryConsultation && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveAct(pt.id, a)}
+                                      className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100"
+                                      title="Supprimer cet acte"
+                                      disabled={loading}
+                                    >
+                                      Supprimer
+                                    </button>
                                   )}
                                 </li>
                               );
@@ -659,9 +794,23 @@ const PatientTreatments = () => {
                           <div className="mt-1 text-xs font-bold text-blue-800">
                             Total actes : {pt.acts.reduce((sum, a) => {
                               const act = dentalActs.find(act => act.id === a.dental_act_id);
-                              return sum + (act && act.tarif ? act.tarif * a.quantity : 0);
+                              const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
+                              return sum + (Number.isFinite(unitPrice) ? unitPrice * a.quantity : 0);
                             }, 0).toFixed(2)} €
                           </div>
+                        </div>
+                      )}
+                      {pt.invoice_preview && (
+                        <div className="mt-2 text-xs">
+                          {pt.invoice_preview.status === 'paid' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 text-emerald-800 font-semibold">
+                              Facture finale payée: {Number(pt.invoice_preview.total_amount || 0).toFixed(2)} €
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-sky-100 text-sky-800 font-semibold">
+                              Facture en cours (brouillon): {Number(pt.invoice_preview.total_amount || 0).toFixed(2)} €
+                            </span>
+                          )}
                         </div>
                       )}
                       {pt.notes && (
@@ -669,7 +818,19 @@ const PatientTreatments = () => {
                       )}
                     </div>
                     <div className="flex items-center space-x-2">
-                      {pt.status !== 'completed' && pt.status !== 'cancelled' && tab === 'en_cours' && (
+                      {pt.is_invoice_paid_locked && (
+                        <span className="px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-100 rounded-md">
+                          Facture payée - modifications verrouillées
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAuditLogs(pt.id)}
+                        className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                      >
+                        {openAuditByTreatment[pt.id] ? 'Masquer audit' : 'Voir audit'}
+                      </button>
+                      {pt.status !== 'completed' && pt.status !== 'cancelled' && tab === 'en_cours' && !pt.is_invoice_paid_locked && (
                         <>
                           <button
                             onClick={() => {
@@ -693,6 +854,26 @@ const PatientTreatments = () => {
                       )}
                     </div>
                   </div>
+                  {openAuditByTreatment[pt.id] && (
+                    <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <h4 className="text-xs font-semibold text-gray-800 mb-2">Historique audit</h4>
+                      {loadingAuditByTreatment[pt.id] ? (
+                        <div className="text-xs text-gray-500">Chargement...</div>
+                      ) : (auditLogsByTreatment[pt.id]?.length || 0) === 0 ? (
+                        <div className="text-xs text-gray-500">Aucune entrée d'audit</div>
+                      ) : (
+                        <ul className="space-y-1">
+                          {auditLogsByTreatment[pt.id].map((log) => (
+                            <li key={log.id} className="text-xs text-gray-700">
+                              <span className="font-semibold">{log.action}</span>
+                              {log.description ? ` - ${log.description}` : ''}
+                              {log.created_at ? ` (${new Date(log.created_at).toLocaleString('fr-FR')})` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -877,7 +1058,7 @@ const PatientTreatments = () => {
                   return (
                     <div className="p-4 bg-orange-50 border-l-4 border-orange-400 rounded-lg">
                       <div className="flex items-start">
-                        <div className="flex-shrink-0">
+                        <div className="shrink-0">
                           <svg className="w-5 h-5 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                           </svg>
@@ -926,8 +1107,11 @@ const PatientTreatments = () => {
                                   onChange={e => setDentalActsSearchTerm(e.target.value)}
                                 />
                 <label className="block text-sm font-medium text-gray-700">
-                  Actes dentaires <span className="text-red-500">*</span>
+                  Actes dentaires (optionnels)
                 </label>
+                <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                  Consultation simple est ajoutée automatiquement au démarrage du traitement.
+                </p>
                 <div className="space-y-2">
                   {dentalActsSearchTerm && dentalActs.filter(act =>
                     (act.name && act.name.toLowerCase().includes(dentalActsSearchTerm.toLowerCase())) ||

@@ -35,7 +35,7 @@ class MedicalRecordController extends Controller
     {
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
-            'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
+            'appointment_id' => ['required', 'integer', 'exists:appointments,id'],
             'patient_treatment_id' => ['nullable', 'integer', 'exists:patient_treatments,id'],
             'treatment_performed' => ['required', 'string'],
             'diagnosis' => ['nullable', 'string'],
@@ -43,6 +43,15 @@ class MedicalRecordController extends Controller
             'next_action' => ['nullable', 'string'],
             'appointment_notes' => ['nullable', 'string'],
         ]);
+
+        // Valider que l'appointment appartient au bon patient
+        $appointment = \App\Models\Appointment::findOrFail($validated['appointment_id']);
+        if ($appointment->patient_id !== $validated['patient_id']) {
+            return response()->json([
+                'message' => 'Le rendez-vous ne correspond pas au patient.',
+                'errors' => ['appointment_id' => ['Le rendez-vous doit appartenir au patient sélectionné.']]
+            ], 422);
+        }
 
         // Ajouter l'utilisateur connecté comme créateur
         $validated['created_by'] = $request->user()->id;

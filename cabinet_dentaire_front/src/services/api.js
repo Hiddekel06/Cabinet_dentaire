@@ -328,6 +328,26 @@ export const patientTreatmentAPI = {
     clearCache('patient-treatments');
     return api.post(`/api/patient-treatments/${id}/acts`, { acts });
   },
+
+  // Modifier un acte d'un traitement existant
+  updateAct: (treatmentId, actId, data) => {
+    clearCache('patient-treatments');
+    return api.patch(`/api/patient-treatments/${treatmentId}/acts/${actId}`, data);
+  },
+
+  // Supprimer un acte d'un traitement existant
+  removeAct: (treatmentId, actId, auditNote = '') => {
+    clearCache('patient-treatments');
+    return api.delete(`/api/patient-treatments/${treatmentId}/acts/${actId}`, {
+      data: {
+        audit_note: auditNote || null,
+      },
+    });
+  },
+
+  // Historique d'audit d'un traitement
+  getAuditLogs: (id) =>
+    api.get(`/api/patient-treatments/${id}/audit-logs`),
 };
 
 // Endpoints pour les dossiers médicaux

@@ -45,7 +45,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des traitements patients (suivi)
     Route::apiResource('patient-treatments', PatientTreatmentController::class);
+    Route::get('patient-treatments/{patientTreatment}/audit-logs', [PatientTreatmentController::class, 'auditLogs']);
     Route::post('patient-treatments/{patientTreatment}/acts', [PatientTreatmentController::class, 'addActs']);
+    Route::patch('patient-treatments/{patientTreatment}/acts/{patientTreatmentAct}', [PatientTreatmentController::class, 'updateAct']);
+    Route::delete('patient-treatments/{patientTreatment}/acts/{patientTreatmentAct}', [PatientTreatmentController::class, 'removeAct']);
     
     // Gestion des radiographies
     Route::apiResource('radiographies', RadiographyController::class);
