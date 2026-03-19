@@ -24,20 +24,7 @@ class PatientController extends Controller
             ->paginate(5);
 
         $patients->getCollection()->transform(function ($patient) {
-            $lastAppointment = $patient->appointments->first();
-            $lastRecord = $patient->medicalRecords->first();
-
-            $patient->last_appointment_date = $lastAppointment?->appointment_date;
-            $patient->last_appointment_status = $lastAppointment?->status;
-            $patient->last_treatment = $lastRecord?->treatment_performed;
-
-            $patient->status = match ($lastAppointment?->status) {
-                'pending', 'confirmed' => 'En traitement',
-                'completed' => 'Suivi',
-                'cancelled' => 'Nouveau',
-                default => 'Nouveau',
-            };
-
+            $this->buildPatientSummary($patient);
             return $patient;
         });
 
@@ -49,13 +36,7 @@ class PatientController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['required', 'string', 'max:20'],
-            'date_of_birth' => ['nullable', 'date'],
-            'gender' => ['nullable', 'in:M,F,Other'],
-            'address' => ['nullable', 'string'],
-            'city' => ['nullable', 'string', 'max:100'],
-            'notes' => ['nullable', 'string'],
         ]);
 
         $patient = Patient::create($validated);
@@ -74,19 +55,7 @@ class PatientController extends Controller
             },
         ]);
 
-        $lastAppointment = $patient->appointments->first();
-        $lastRecord = $patient->medicalRecords->first();
-
-        $patient->last_appointment_date = $lastAppointment?->appointment_date;
-        $patient->last_appointment_status = $lastAppointment?->status;
-        $patient->last_treatment = $lastRecord?->treatment_performed;
-
-        $patient->status = match ($lastAppointment?->status) {
-            'pending', 'confirmed' => 'En traitement',
-            'completed' => 'Suivi',
-            'cancelled' => 'Nouveau',
-            default => 'Nouveau',
-        };
+        $this->buildPatientSummary($patient);
 
         return response()->json($patient);
     }
@@ -96,13 +65,7 @@ class PatientController extends Controller
         $validated = $request->validate([
             'first_name' => ['sometimes', 'required', 'string', 'max:255'],
             'last_name' => ['sometimes', 'required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['sometimes', 'required', 'string', 'max:20'],
-            'date_of_birth' => ['nullable', 'date'],
-            'gender' => ['nullable', 'in:M,F,Other'],
-            'address' => ['nullable', 'string'],
-            'city' => ['nullable', 'string', 'max:100'],
-            'notes' => ['nullable', 'string'],
         ]);
 
         $patient->update($validated);
@@ -160,5 +123,52 @@ class PatientController extends Controller
             'patient_id' => $patient->id,
             'billable_acts' => $acts,
         ]);
+    }
+
+    /**
+     * Build patient dashboard summary with business-driven status.
+     *
+     * Rules:
+     * - last_visit_date = latest COMPLETED appointment only
+     * - status = En traitement if active treatment exists (planned/in_progress)
+     * - status = Suivi if completed history exists (appointment/treatment)
+     * - otherwise = Nouveau
+     */
+    private function buildPatientSummary(Patient $patient): void
+    {
+        $lastAppointment = $patient->appointments->first();
+        $lastRecord = $patient->medicalRecords->first();
+
+        // Last visit = last validated session only (medical record exists).
+        // A missed/no-show appointment without validated session is not counted.
+        $lastVisitDate = $patient->medicalRecords()
+            ->join('appointments', 'medical_records.appointment_id', '=', 'appointments.id')
+            ->max('appointments.appointment_date');
+
+        $hasActiveTreatment = $patient->patientTreatments()
+            ->whereIn('status', ['planned', 'in_progress'])
+            ->exists();
+
+        $hasCompletedHistory = $patient->medicalRecords()->exists()
+            || $patient->patientTreatments()
+                ->where('status', 'completed')
+                ->exists();
+
+        $patient->last_visit_date = $lastVisitDate;
+        $patient->last_appointment_date = $lastAppointment?->appointment_date;
+        $patient->last_appointment_status = $lastAppointment?->status;
+        $patient->last_treatment = $lastRecord?->treatment_performed;
+
+        if ($hasActiveTreatment) {
+            $patient->status = 'En traitement';
+            return;
+        }
+
+        if ($hasCompletedHistory) {
+            $patient->status = 'Suivi';
+            return;
+        }
+
+        $patient->status = 'Nouveau';
     }
 }

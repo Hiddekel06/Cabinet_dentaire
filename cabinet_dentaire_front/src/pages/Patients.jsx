@@ -21,12 +21,6 @@ const initialForm = {
   first_name: '',
   last_name: '',
   phone: '',
-  email: '',
-  date_of_birth: '',
-  gender: '',
-  address: '',
-  city: '',
-  notes: '',
 };
 
 const Patients = () => {
@@ -88,13 +82,7 @@ const Patients = () => {
     initials: getInitials(p.first_name, p.last_name),
     name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
     phone: p.phone || '',
-    email: p.email || '',
-    city: p.city || '',
-    address: p.address || '',
-    gender: p.gender || '',
-    date_of_birth: p.date_of_birth || '',
-    notes: p.notes || '',
-    date: formatDate(p.last_appointment_date || p.created_at || p.updated_at),
+    date: formatDate(p.last_visit_date) || '-',
     treatment: p.last_treatment || '-',
     status: p.status || 'Nouveau',
     color: statusToColor(p.status),
@@ -150,12 +138,6 @@ const Patients = () => {
         first_name: data.first_name || '',
         last_name: data.last_name || '',
         phone: data.phone || '',
-        email: data.email || '',
-        city: data.city || '',
-        address: data.address || '',
-        gender: data.gender || '',
-        date_of_birth: data.date_of_birth || '',
-        notes: data.notes || '',
       });
       setShowForm(true);
     } catch (error) {
@@ -245,7 +227,6 @@ const Patients = () => {
     if (normalizedSearch) {
       results = results.filter(patient =>
         (patient.name || '').toLowerCase().includes(normalizedSearch) ||
-        (patient.email || '').toLowerCase().includes(normalizedSearch) ||
         (patient.phone || '').includes(normalizedSearch) ||
         (patient.id || '').toLowerCase().includes(normalizedSearch)
       );
@@ -384,90 +365,6 @@ const Patients = () => {
                   required
                 />
               </div>
-              <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
-                <label className="text-xs font-semibold text-gray-800 mb-1">Email</label>
-                <input
-                  name="email"
-                  value={form.email}
-                  onChange={handleFormChange}
-                    placeholder="Email"
-                  className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
-                  type="email"
-                />
-              </div>
-              <div className=" border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
-                <label className="text-xs font-semibold text-gray-800 mb-1">Date de naissance</label>
-                <input
-                  name="date_of_birth"
-                  value={form.date_of_birth}
-                  onChange={handleFormChange}
-                    placeholder="Date de naissance"
-                  className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
-                  type="date"
-                />
-              </div>
-              <div className="   border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
-                <label className="text-xs font-semibold text-gray-800 mb-1">Genre</label>
-                <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 flex flex-col items-start w-fit shadow-sm">
-                  <span className="text-xs font-semibold text-blue-700 mb-1">Sexe</span>
-                  <div className="flex flex-row gap-4 items-center">
-                    <label className="inline-flex items-center cursor-pointer text-sm">
-                      <input
-                        type="radio"
-                        name="gender"
-                        value="M"
-                        checked={form.gender === 'M'}
-                        onChange={handleFormChange}
-                        className="form-radio text-blue-500 focus:ring-blue-400 h-3 w-3 border-gray-300 accent-blue-500"
-                      />
-                      <span className="ml-1 text-gray-700">Masculin</span>
-                    </label>
-                    <label className="inline-flex items-center cursor-pointer text-sm">
-                      <input
-                        type="radio"
-                        name="gender"
-                        value="F"
-                        checked={form.gender === 'F'}
-                        onChange={handleFormChange}
-                        className="form-radio text-blue-500 focus:ring-blue-400 h-3 w-3 border-gray-300 accent-blue-500"
-                      />
-                      <span className="ml-1 text-gray-700">Féminin</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col md:flex-row gap-3 md:col-span-2">
-                <div className=" border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 w-full md:w-1/2 shadow-sm">
-                  <label className="text-xs font-semibold text-gray-800 mb-1">Ville</label>
-                  <input
-                    name="city"
-                    value={form.city}
-                    onChange={handleFormChange}
-                    placeholder="Ville"
-                    className="bg-gray-50 rounded-lg px-3 py-2 text-left focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
-                  />
-                </div>
-                <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 w-full md:w-1/2 shadow-sm">
-                  <label className="text-xs font-semibold text-gray-800 mb-1">Adresse</label>
-                  <input
-                    name="address"
-                    value={form.address}
-                    onChange={handleFormChange}
-                    placeholder="Adresse"
-                    className="bg-gray-50 rounded-lg px-3 py-2 text-left focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
-                  />
-                </div>
-              </div>
-              <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 md:col-span-2 shadow-sm">
-                <label className="text-xs font-semibold text-gray-800 mb-1">Notes</label>
-                <textarea
-                  name="notes"
-                  value={form.notes}
-                  onChange={handleFormChange}
-                  placeholder="Notes"
-                  className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
-                />
-              </div>
               {formError && <div className="text-red-600 text-sm">{formError}</div>}
               {formSuccess && <div className="text-green-600 text-sm">{formSuccess}</div>}
               <div className="flex justify-center mt-4 md:col-span-2">
@@ -528,10 +425,6 @@ const Patients = () => {
                     <span className="text-sm text-gray-600">Téléphone :</span>
                     <span className="text-sm font-semibold text-gray-900">{patientToDelete.phone || '-'}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Email :</span>
-                    <span className="text-sm font-semibold text-gray-900">{patientToDelete.email || '-'}</span>
-                  </div>
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
@@ -584,7 +477,7 @@ const Patients = () => {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Rechercher un patient par nom, email, téléphone..."
+                placeholder="Rechercher un patient par nom ou téléphone..."
                 className="block w-full pl-10 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-normal placeholder-gray-400"
                 style={{ maxWidth: 260, fontFamily: 'Inter, Arial, sans-serif' }}
               />
@@ -821,12 +714,6 @@ const Patients = () => {
                         </div>
                         <div>
                           <p className="font-medium text-gray-900 text-xs truncate max-w-35">{patient.name}</p>
-                          <div className="flex items-center text-gray-500 text-xs mt-0.5">
-                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            {patient.id}
-                          </div>
                         </div>
                       </div>
                     </td>
@@ -838,22 +725,30 @@ const Patients = () => {
                           </svg>
                           {patient.phone}
                         </p>
-                        <div className="text-xs text-gray-500 mt-1">
-                          <span className="font-medium text-gray-700">Ville:</span>{' '}
-                          {patient.city || '-'}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          <span className="font-medium text-gray-700">Adresse:</span>{' '}
-                          {patient.address || '-'}
-                        </div>
-                        <div>
-                          <svg className="w-3 h-3 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                          {patient.treatment}
-                          <p className="text-gray-400 text-xs mt-1">{patient.timeAgo}</p>
-                        </div>
                       </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      {patient.date && patient.date !== '-' ? (
+                        <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-100">
+                          <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <div className="leading-tight">
+                            <p className="text-xs font-semibold text-blue-800">{patient.date}</p>
+                            <p className="text-[11px] text-blue-600">Seance validee</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 border border-gray-200">
+                          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <div className="leading-tight">
+                            <p className="text-xs font-semibold text-gray-500">-</p>
+                            <p className="text-[11px] text-gray-500">Aucune seance validee</p>
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td className="py-4 px-4">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${colorClasses[patient.color] || colorClasses.blue}`}>

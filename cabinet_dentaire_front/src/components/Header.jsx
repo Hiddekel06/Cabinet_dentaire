@@ -78,6 +78,11 @@ export const Header = () => {
     navigate('/login', { replace: true });
   };
 
+  const handleAlertClick = (appointmentId) => {
+    setShowAlertsMenu(false);
+    navigate('/appointments', { state: { focusAppointmentId: appointmentId } });
+  };
+
   return (
     <header className="sticky top-0 z-50 bg-gradient-to-r from-white via-gray-50 to-gray-100 border-b border-gray-200 shadow backdrop-blur-md bg-opacity-90">
       <div className="w-full px-4 sm:px-6 lg:px-8">
@@ -141,7 +146,12 @@ export const Header = () => {
                         <div className="px-4 py-5 text-sm text-gray-500">Aucun rendez-vous potentiellement en retard pour aujourd'hui.</div>
                       ) : (
                         todayPotentialOverdue.map((item) => (
-                          <div key={item.id} className="px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-amber-50/40">
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleAlertClick(item.id)}
+                            className="w-full text-left px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-amber-50/40 transition-colors"
+                          >
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <p className="text-sm font-semibold text-gray-900">{item.patientName}</p>
@@ -151,7 +161,7 @@ export const Header = () => {
                                 {item.timeLabel}
                               </span>
                             </div>
-                          </div>
+                          </button>
                         ))
                       )}
                     </div>

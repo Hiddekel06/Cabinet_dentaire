@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Layout } from "../components/Layout";
 import { appointmentAPI, patientAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { useLocation } from "react-router-dom";
 
 const statusOptions = [
   { value: 'all', label: 'Tous les statuts', color: 'gray' },
@@ -22,6 +23,7 @@ const motifOptions = [
 
 const Appointments = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const [appointments, setAppointments] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -58,6 +60,9 @@ const Appointments = () => {
   const [newAbsentDate, setNewAbsentDate] = useState('');
   const [isMarkingAbsent, setIsMarkingAbsent] = useState(false);
   const hasLoadedRef = useRef(false);
+  const lastFocusedAppointmentRef = useRef(null);
+  const flashTimerRef = useRef(null);
+  const [flashAppointmentId, setFlashAppointmentId] = useState(null);
   const [quickForm, setQuickForm] = useState({
     date: '',
     heure: '',
@@ -161,6 +166,39 @@ const Appointments = () => {
     loadPatients();
     // eslint-disable-next-line
   }, [page]);
+
+  useEffect(() => {
+    const focusAppointmentId = location.state?.focusAppointmentId;
+    if (!focusAppointmentId || appointmentsLoading) return;
+
+    // Avoid reopening the same focus request repeatedly.
+    if (lastFocusedAppointmentRef.current === focusAppointmentId) return;
+
+    const focused = appointments.find((a) => a.apiId === focusAppointmentId || a.id === focusAppointmentId);
+    if (!focused) return;
+
+    lastFocusedAppointmentRef.current = focusAppointmentId;
+    setSelectedAppointment(focused);
+    setShowDetailsModal(true);
+    setViewMode('table');
+
+    setFlashAppointmentId(focusAppointmentId);
+    if (flashTimerRef.current) {
+      clearTimeout(flashTimerRef.current);
+    }
+    flashTimerRef.current = setTimeout(() => {
+      setFlashAppointmentId(null);
+      flashTimerRef.current = null;
+    }, 2500);
+  }, [location.state, appointments, appointmentsLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) {
+        clearTimeout(flashTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleViewDetails = (appointment) => {
     setSelectedAppointment(appointment);
@@ -1359,7 +1397,14 @@ const Appointments = () => {
                   </tr>
                 ) : filteredAppointments.length > 0 ? (
                   filteredAppointments.map((a) => (
-                    <tr key={a.id} className="hover:bg-blue-50 transition-colors duration-150 group">
+                    <tr
+                      key={a.id}
+                      className={`transition-colors duration-300 group ${
+                        flashAppointmentId === a.id || flashAppointmentId === a.apiId
+                          ? 'bg-amber-100/80 animate-pulse'
+                          : 'hover:bg-blue-50'
+                      }`}
+                    >
                       <td className="py-2 px-2 sm:py-3 sm:px-4 font-medium text-gray-900 whitespace-nowrap">{a.date}</td>
                       <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">{a.heure}</td>
                       <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">{a.patient}</td>
