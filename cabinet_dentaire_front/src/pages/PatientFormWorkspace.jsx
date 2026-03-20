@@ -262,6 +262,7 @@ const PatientFormWorkspace = () => {
   };
 
   const hasPersonalPhone = form.phone.trim() !== '';
+  const isContactSectionLocked = hasPersonalPhone;
 
   return (
     <Layout>
@@ -352,72 +353,80 @@ const PatientFormWorkspace = () => {
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Prenom du contact {!hasPersonalPhone && '*'}</label>
-                    <input name="contact_first_name" value={form.contact_first_name} onChange={handleFormChange} className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500" required={!hasPersonalPhone} />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Nom du contact {!hasPersonalPhone && '*'}</label>
-                    <input name="contact_last_name" value={form.contact_last_name} onChange={handleFormChange} className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500" required={!hasPersonalPhone} />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Telephone du contact {!hasPersonalPhone && '*'}</label>
-                    <input name="contact_phone" value={form.contact_phone} onChange={handleFormChange} className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500" required={!hasPersonalPhone} />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Relation {!hasPersonalPhone && '*'}</label>
-                    <select name="contact_relationship" value={form.contact_relationship} onChange={handleFormChange} className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500" required={!hasPersonalPhone}>
-                      <option value="">Selectionner...</option>
-                      <option value="tuteur_legal">Tuteur legal</option>
-                      <option value="parent">Parent</option>
-                      <option value="proche">Proche</option>
-                      <option value="autre">Autre</option>
-                    </select>
-                  </div>
-
-                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 border border-amber-200 bg-white rounded-lg px-3 py-2">
-                    <input id="contact_is_patient" type="checkbox" name="contact_is_patient" checked={form.contact_is_patient} onChange={handleFormChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                    Ce contact est aussi un patient du cabinet.
-                  </label>
-
-                  {form.contact_is_patient && (
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-gray-700 block">Rechercher le patient contact *</label>
-                      <input
-                        value={contactSearchTerm}
-                        onChange={(e) => {
-                          setContactSearchTerm(e.target.value);
-                          setForm((prev) => ({ ...prev, contact_patient_id: '' }));
-                        }}
-                        placeholder="Tapez le nom, prenom ou telephone"
-                        className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500"
-                      />
-
-                      {contactSearchLoading && <p className="text-xs text-gray-500">Recherche en cours...</p>}
-
-                      {!contactSearchLoading && contactSearchTerm.trim().length >= 2 && contactSearchResults.length > 0 && (
-                        <div className="max-h-44 overflow-y-auto border border-amber-200 rounded-lg bg-white">
-                          {contactSearchResults.map((candidate) => (
-                            <button
-                              type="button"
-                              key={candidate.id}
-                              className="w-full text-left px-3 py-2 hover:bg-amber-50 border-b border-gray-100 last:border-b-0"
-                              onClick={() => selectContactPatient(candidate)}
-                            >
-                              <span className="text-sm font-medium text-gray-900">{candidate.first_name} {candidate.last_name}</span>
-                              <span className="ml-2 text-xs text-gray-500">{candidate.phone || candidate.contact_phone || 'Sans telephone'}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {!contactSearchLoading && contactSearchTerm.trim().length >= 2 && contactSearchResults.length === 0 && (
-                        <p className="text-xs text-gray-500">Aucun patient correspondant.</p>
-                      )}
+                  <fieldset disabled={isContactSectionLocked} className={isContactSectionLocked ? 'space-y-4 opacity-60' : 'space-y-4'}>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Prenom du contact {!hasPersonalPhone && '*'}</label>
+                      <input name="contact_first_name" value={form.contact_first_name} onChange={handleFormChange} className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500" required={!hasPersonalPhone} />
                     </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Nom du contact {!hasPersonalPhone && '*'}</label>
+                      <input name="contact_last_name" value={form.contact_last_name} onChange={handleFormChange} className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500" required={!hasPersonalPhone} />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Telephone du contact {!hasPersonalPhone && '*'}</label>
+                      <input name="contact_phone" value={form.contact_phone} onChange={handleFormChange} className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500" required={!hasPersonalPhone} />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Relation {!hasPersonalPhone && '*'}</label>
+                      <select name="contact_relationship" value={form.contact_relationship} onChange={handleFormChange} className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500" required={!hasPersonalPhone}>
+                        <option value="">Selectionner...</option>
+                        <option value="tuteur_legal">Tuteur legal</option>
+                        <option value="parent">Parent</option>
+                        <option value="proche">Proche</option>
+                        <option value="autre">Autre</option>
+                      </select>
+                    </div>
+
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700 border border-amber-200 bg-white rounded-lg px-3 py-2">
+                      <input id="contact_is_patient" type="checkbox" name="contact_is_patient" checked={form.contact_is_patient} onChange={handleFormChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                      Ce contact est aussi un patient du cabinet.
+                    </label>
+
+                    {form.contact_is_patient && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-gray-700 block">Rechercher le patient contact *</label>
+                        <input
+                          value={contactSearchTerm}
+                          onChange={(e) => {
+                            setContactSearchTerm(e.target.value);
+                            setForm((prev) => ({ ...prev, contact_patient_id: '' }));
+                          }}
+                          placeholder="Tapez le nom, prenom ou telephone"
+                          className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500"
+                        />
+
+                        {contactSearchLoading && <p className="text-xs text-gray-500">Recherche en cours...</p>}
+
+                        {!contactSearchLoading && contactSearchTerm.trim().length >= 2 && contactSearchResults.length > 0 && (
+                          <div className="max-h-44 overflow-y-auto border border-amber-200 rounded-lg bg-white">
+                            {contactSearchResults.map((candidate) => (
+                              <button
+                                type="button"
+                                key={candidate.id}
+                                className="w-full text-left px-3 py-2 hover:bg-amber-50 border-b border-gray-100 last:border-b-0"
+                                onClick={() => selectContactPatient(candidate)}
+                              >
+                                <span className="text-sm font-medium text-gray-900">{candidate.first_name} {candidate.last_name}</span>
+                                <span className="ml-2 text-xs text-gray-500">{candidate.phone || candidate.contact_phone || 'Sans telephone'}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {!contactSearchLoading && contactSearchTerm.trim().length >= 2 && contactSearchResults.length === 0 && (
+                          <p className="text-xs text-gray-500">Aucun patient correspondant.</p>
+                        )}
+                      </div>
+                    )}
+                  </fieldset>
+
+                  {isContactSectionLocked && (
+                    <p className="text-[11px] text-amber-700">
+                      Enlevez le numero du patient pour activer la saisie du contact tiers.
+                    </p>
                   )}
                 </section>
 
