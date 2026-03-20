@@ -211,12 +211,13 @@ export const authAPI = {
 
 // Endpoints pour les patients
 export const patientAPI = {
-  getAll: (page = 1) => {
-    const cacheKey = `patients:${page}`;
+  getAll: (page = 1, params = {}) => {
+    const query = new URLSearchParams({ page: String(page), ...params }).toString();
+    const cacheKey = `patients:${query}`;
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
     
-    return api.get(`/api/patients?page=${page}`).then(res => {
+    return api.get(`/api/patients?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });

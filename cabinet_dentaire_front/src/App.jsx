@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import Patients from './pages/Patients';
+import PatientFormWorkspace from './pages/PatientFormWorkspace';
 import Appointments from './pages/Appointments';
 import MedicalCertificates from './pages/MedicalCertificates';
 import DossierMedicaux from './pages/DossierMedicaux';
@@ -45,6 +46,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Patients />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patients/new"
+            element={
+              <ProtectedRoute>
+                <PatientFormWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patients/:id/edit"
+            element={
+              <ProtectedRoute>
+                <PatientFormWorkspace />
               </ProtectedRoute>
             }
           />

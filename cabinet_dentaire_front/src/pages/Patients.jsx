@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from "../components/Layout";
 import { patientAPI } from "../services/api";
 
@@ -17,13 +18,9 @@ const treatmentOptions = [
   { value: 'Extraction', label: 'Extraction' }
 ];
 
-const initialForm = {
-  first_name: '',
-  last_name: '',
-  phone: '',
-};
-
 const Patients = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [patients, setPatients] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -34,19 +31,12 @@ const Patients = () => {
   const [selectedTreatment, setSelectedTreatment] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('desc');
-  const [showForm, setShowForm] = useState(false);
-  const [editingPatient, setEditingPatient] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
-  const [form, setForm] = useState(initialForm);
-  const [formError, setFormError] = useState("");
-  const [formSuccess, setFormSuccess] = useState("");
-  const [formLoading, setFormLoading] = useState(false);
-  const [editLoading, setEditLoading] = useState(false);
-  const isFormBusy = formLoading || editLoading;
+  const [successMessage, setSuccessMessage] = useState('');
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [patientToDelete, setPatientToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const hasLoadedRef = useRef(false);
+  const successTimeoutRef = useRef(null);
 
   const formatDate = (value) => {
     if (!value) return '';
@@ -81,7 +71,7 @@ const Patients = () => {
     id: `N°${p.id}`,
     initials: getInitials(p.first_name, p.last_name),
     name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
-    phone: p.phone || '',
+    phone: p.phone || p.contact_phone || '',
     date: formatDate(p.last_visit_date) || '-',
     treatment: p.last_treatment || '-',
     status: p.status || 'Nouveau',
@@ -94,7 +84,7 @@ const Patients = () => {
       setPatientsLoading(true);
       setPatientsError('');
       try {
-        const { data } = await patientAPI.getAll(page);
+        const { data } = await patientAPI.getAll(page, { search: searchTerm.trim(), per_page: 5 });
         const list = Array.isArray(data?.data) ? data.data : [];
         setPatients(list.map(mapPatient));
         setTotalPages(data?.last_page || 1);
@@ -106,7 +96,11 @@ const Patients = () => {
       }
     };
     loadPatients();
-  }, [page]);
+  }, [page, searchTerm]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -119,33 +113,34 @@ const Patients = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  const closeForm = () => {
-    setShowForm(false);
-    setEditingPatient(null);
-    setForm(initialForm);
-    setFormError("");
-    setFormSuccess("");
-  };
+
+  useEffect(() => {
+    const incomingSuccess = location.state?.success;
+    if (!incomingSuccess) return;
+
+    setSuccessMessage(incomingSuccess);
+    navigate(location.pathname, { replace: true, state: {} });
+
+    if (successTimeoutRef.current) {
+      clearTimeout(successTimeoutRef.current);
+    }
+    successTimeoutRef.current = setTimeout(() => {
+      setSuccessMessage('');
+      successTimeoutRef.current = null;
+    }, 3500);
+  }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleEdit = async (patient) => {
     if (!patient?.apiId) return;
-    setEditLoading(true);
-    setEditingPatient(patient);
-    setFormError('');
-    try {
-      const { data } = await patientAPI.getById(patient.apiId);
-      setForm({
-        first_name: data.first_name || '',
-        last_name: data.last_name || '',
-        phone: data.phone || '',
-      });
-      setShowForm(true);
-    } catch (error) {
-      console.error('Erreur chargement patient:', error);
-      setFormError('Impossible de charger le patient.');
-    } finally {
-      setEditLoading(false);
-    }
+    navigate(`/patients/${patient.apiId}/edit`);
   };
 
   const handleDelete = (patient) => {
@@ -174,7 +169,7 @@ const Patients = () => {
     setPatientsLoading(true);
     setPatientsError('');
     try {
-      const { data } = await patientAPI.getAll(page);
+      const { data } = await patientAPI.getAll(page, { search: searchTerm.trim(), per_page: 5 });
       const list = Array.isArray(data?.data) ? data.data : [];
       setPatients(list.map(mapPatient));
       setTotalPages(data?.last_page || 1);
@@ -186,51 +181,8 @@ const Patients = () => {
     }
   };
 
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleFormSubmit = async (e) => {
-    e.preventDefault();
-    setFormError("");
-    setFormSuccess("");
-    if (!form.first_name || !form.last_name || !form.phone) {
-      setFormError("Prénom, nom et téléphone sont obligatoires.");
-      return;
-    }
-    setFormLoading(true);
-    try {
-      if (editingPatient?.apiId) {
-        await patientAPI.update(editingPatient.apiId, form);
-        setFormSuccess("Patient mis à jour avec succès !");
-        closeForm();
-        reloadPatients();
-      } else {
-        await patientAPI.create(form);
-        setFormSuccess("Patient ajouté avec succès !");
-        closeForm();
-        reloadPatients();
-      }
-    } catch (err) {
-      setFormError(err.response?.data?.message || "Erreur lors de l'ajout du patient");
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
   const filteredPatients = useMemo(() => {
     let results = [...patients];
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-
-    // Filtre par recherche
-    if (normalizedSearch) {
-      results = results.filter(patient =>
-        (patient.name || '').toLowerCase().includes(normalizedSearch) ||
-        (patient.phone || '').includes(normalizedSearch) ||
-        (patient.id || '').toLowerCase().includes(normalizedSearch)
-      );
-    }
 
     // Filtre par statut
     if (selectedStatus !== 'all') {
@@ -271,7 +223,7 @@ const Patients = () => {
     });
 
     return results;
-  }, [patients, searchTerm, selectedStatus, selectedTreatment, sortBy, sortOrder]);
+  }, [patients, selectedStatus, selectedTreatment, sortBy, sortOrder]);
 
   const clearFilters = () => {
     setSearchTerm('');
@@ -298,89 +250,9 @@ const Patients = () => {
         <p className="text-gray-600 mt-1">Gérez et suivez tous vos patients</p>
       </div>
 
-      {/* Formulaire d'ajout de patient */}
-      {showForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
-          onClick={closeForm}
-        >
-          <div
-            className="relative w-full max-w-3xl mx-2 sm:mx-auto bg-white rounded-xl shadow-lg border border-blue-100 animate-fadeIn"
-            style={{ maxHeight: '90vh', minHeight: '320px', overflowY: 'auto' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <button
-              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
-              onClick={closeForm}
-              aria-label="Fermer"
-              type="button"
-            >
-              &times;
-            </button>
-            <div className="flex items-center gap-3 px-6 pt-6 pb-2 bg-linear-to-r from-blue-50 via-white to-blue-50">
-              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-50">
-                <svg className="w-7 h-7 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold">{editingPatient ? 'Modifier un patient' : 'Ajouter un patient'}</h2>
-              {editLoading && (
-                <span className="text-xs text-gray-500">Chargement...</span>
-              )}
-                <div className="w-full border-t border-gray-200 my-2"></div>
-
-            </div>
-            <form onSubmit={handleFormSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 px-6 pb-6">
-              <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
-                <label className="text-xs font-semibold text-gray-900 mb-1">Prénom *</label>
-                <input
-                  name="first_name"
-                  value={form.first_name}
-                  onChange={handleFormChange}
-                  placeholder="Prénom"
-                  className="bg-gray-50 rounded-lg px-3 py-2 text-left focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
-                  required
-                />
-              </div>
-              <div className="border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
-                <label className="text-xs font-semibold text-gray-900 mb-1">Nom *</label>
-                <input
-                  name="last_name"
-                  value={form.last_name}
-                  onChange={handleFormChange}
-                  placeholder="Nom"
-                  className="bg-gray-50 rounded-lg px-3 py-2 text-left focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
-                  required
-                />
-              </div>
-              <div className=" border border-blue-100 rounded-lg px-4 py-2 flex flex-col gap-1 shadow-sm">
-                <label className="text-xs font-semibold text-gray-900 mb-1">Téléphone *</label>
-                <input
-                  name="phone"
-                  value={form.phone}
-                  onChange={handleFormChange}
-                    placeholder="Téléphone"
-                  className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none w-full border border-transparent focus:border-blue-300 transition placeholder-gray-400"
-                  required
-                />
-              </div>
-              {formError && <div className="text-red-600 text-sm">{formError}</div>}
-              {formSuccess && <div className="text-green-600 text-sm">{formSuccess}</div>}
-              <div className="flex justify-center mt-4 md:col-span-2">
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 text-white rounded-full font-semibold bg-emerald-600 border-2 border-emerald-600 hover:bg-emerald-700 hover:border-emerald-700 focus:ring-4 focus:ring-emerald-200 flex items-center justify-center gap-2 text-sm shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed max-w-xs w-full mx-auto"
-                  disabled={isFormBusy}
-                >
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span>{isFormBusy ? "Enregistrement..." : (editingPatient ? "Mettre à jour" : "Ajouter le patient")}</span>
-                </button>
-              </div>
-            </form>
-          </div>
+      {successMessage && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {successMessage}
         </div>
       )}
 
@@ -631,12 +503,12 @@ const Patients = () => {
           <div className="mt-3 sm:mt-0 flex space-x-2">
             <button
               className="inline-flex items-center gap-1.5 px-3 py-2 text-orange-500 text-sm font-medium rounded-lg bg-orange-50 hover:bg-orange-100 transition-colors cursor-pointer select-none border border-orange-100"
-              onClick={() => setShowForm((v) => !v)}
+              onClick={() => navigate('/patients/new')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              {showForm ? 'Fermer' : 'Nouveau patient'}
+              Nouveau patient
             </button>
           </div>
         </div>
@@ -729,25 +601,9 @@ const Patients = () => {
                     </td>
                     <td className="py-4 px-4">
                       {patient.date && patient.date !== '-' ? (
-                        <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-100">
-                          <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          <div className="leading-tight">
-                            <p className="text-xs font-semibold text-blue-800">{patient.date}</p>
-                            <p className="text-[11px] text-blue-600">Seance validee</p>
-                          </div>
-                        </div>
+                        <span className="text-sm font-bold text-blue-700">{patient.date}</span>
                       ) : (
-                        <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 border border-gray-200">
-                          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          <div className="leading-tight">
-                            <p className="text-xs font-semibold text-gray-500">-</p>
-                            <p className="text-[11px] text-gray-500">Aucune seance validee</p>
-                          </div>
-                        </div>
+                        <span className="text-sm font-medium text-gray-400">-</span>
                       )}
                     </td>
                     <td className="py-4 px-4">

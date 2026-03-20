@@ -210,6 +210,8 @@ const PatientTreatments = () => {
 
   // Onglet sélectionné : 'en_cours' ou 'termines'
   const [tab, setTab] = useState('en_cours');
+  const [expandedTreatmentId, setExpandedTreatmentId] = useState(null);
+  const [showRecentPatients, setShowRecentPatients] = useState(false);
 
   // Filtrer et trier selon l'onglet
   const filteredTreatments = patientTreatments
@@ -306,43 +308,37 @@ const PatientTreatments = () => {
 
         {/* Section derniers patients enregistrés */}
         {recentPatients.length > 0 && (
-          <div className="bg-linear-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-100 shadow-sm p-5">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-3">
-                  <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                  <h3 className="text-sm font-semibold text-gray-900">Derniers patients enregistrés</h3>
-                </div>
-                <p className="text-xs text-gray-600 mb-3">
-                  Démarrez un traitement pour vos nouveaux patients
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {recentPatients.map((patient) => (
-                    <button
-                      key={patient.id}
-                      onClick={() => {
-                        navigate('/treatments/new', {
-                          state: { patientId: patient.id },
-                        });
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all text-sm group"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium text-xs">
-                        {patient.first_name?.charAt(0)}{patient.last_name?.charAt(0)}
-                      </div>
-                      <span className="text-gray-700 font-medium">
-                        {patient.first_name} {patient.last_name}
-                      </span>
-                      <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  ))}
-                </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
+            <button
+              type="button"
+              onClick={() => setShowRecentPatients(!showRecentPatients)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <span className="text-sm font-semibold text-gray-800">Derniers patients enregistrés</span>
+              <span className="text-xs text-blue-700 font-medium">{showRecentPatients ? 'Masquer' : 'Afficher'}</span>
+            </button>
+            {showRecentPatients && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {recentPatients.map((patient) => (
+                  <button
+                    key={patient.id}
+                    onClick={() => {
+                      navigate('/treatments/new', {
+                        state: { patientId: patient.id },
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all text-sm group"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-blue-600 font-medium text-xs">
+                      {patient.first_name?.charAt(0)}{patient.last_name?.charAt(0)}
+                    </div>
+                    <span className="text-gray-700 font-medium">
+                      {patient.first_name} {patient.last_name}
+                    </span>
+                  </button>
+                ))}
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -519,80 +515,84 @@ const PatientTreatments = () => {
                         <span>Début: {pt.start_date ? new Date(pt.start_date).toLocaleDateString('fr-FR') : ''}</span>
                         {pt.end_date && <span>Fin: {new Date(pt.end_date).toLocaleDateString('fr-FR')}</span>}
                       </div>
-                      {/* Affichage détail actes et total */}
-                      {Array.isArray(pt.acts) && pt.acts.length > 0 && (
-                        <div className="mt-2">
-                          <div className="font-semibold text-xs text-blue-700 mb-1">Actes sélectionnés :</div>
-                          <ul className="text-xs text-gray-700 space-y-1">
-                            {pt.acts.map((a, idx) => {
-                              const act = dentalActs.find(act => act.id === a.dental_act_id);
-                              const actLabel = act ? (act.code ? `${act.code} - ` : '') + (act.label || act.name || '') : `Acte #${a.dental_act_id}`;
-                              const isInvoiceLocked = !!pt.is_invoice_paid_locked;
-                              const isEditableTreatment = pt.status !== 'completed' && pt.status !== 'cancelled' && tab === 'en_cours' && !isInvoiceLocked;
-                              const isMandatoryConsultation = isConsultationSimpleAct(act, a);
-                              const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
-                              return (
-                                <li key={idx} className="flex items-center gap-2">
-                                  <span className="font-medium">{actLabel}</span>
-                                  <span>x{a.quantity}</span>
-                                  {Number.isFinite(unitPrice) && (
-                                    <span className="ml-2 text-gray-500">{(unitPrice * a.quantity).toFixed(2)} €</span>
-                                  )}
-                                  {isMandatoryConsultation && (
-                                    <span className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-amber-800 bg-amber-100">
-                                      Obligatoire
-                                    </span>
-                                  )}
-                                  {isEditableTreatment && !isMandatoryConsultation && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleEditAct(pt.id, a)}
-                                      className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
-                                      title="Modifier quantité/prix"
-                                      disabled={loading}
-                                    >
-                                      Modifier
-                                    </button>
-                                  )}
-                                  {isEditableTreatment && !isMandatoryConsultation && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveAct(pt.id, a)}
-                                      className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100"
-                                      title="Supprimer cet acte"
-                                      disabled={loading}
-                                    >
-                                      Supprimer
-                                    </button>
-                                  )}
-                                </li>
-                              );
-                            })}
-                          </ul>
-                          <div className="mt-1 text-xs font-bold text-blue-800">
-                            Total actes : {pt.acts.reduce((sum, a) => {
-                              const act = dentalActs.find(act => act.id === a.dental_act_id);
-                              const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
-                              return sum + (Number.isFinite(unitPrice) ? unitPrice * a.quantity : 0);
-                            }, 0).toFixed(2)} €
-                          </div>
-                        </div>
-                      )}
-                      {pt.invoice_preview && (
-                        <div className="mt-2 text-xs">
-                          {pt.invoice_preview.status === 'paid' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 text-emerald-800 font-semibold">
-                              Facture finale payée: {Number(pt.invoice_preview.total_amount || 0).toFixed(2)} €
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-sky-100 text-sky-800 font-semibold">
-                              Facture en cours (brouillon): {Number(pt.invoice_preview.total_amount || 0).toFixed(2)} €
-                            </span>
+                      {expandedTreatmentId === pt.id && (
+                        <>
+                          {/* Détails avancés */}
+                          {Array.isArray(pt.acts) && pt.acts.length > 0 && (
+                            <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+                              <div className="font-semibold text-xs text-blue-700 mb-2">Actes sélectionnés</div>
+                              <ul className="text-xs text-gray-700 space-y-1">
+                                {pt.acts.map((a, idx) => {
+                                  const act = dentalActs.find(act => act.id === a.dental_act_id);
+                                  const actLabel = act ? (act.code ? `${act.code} - ` : '') + (act.label || act.name || '') : `Acte #${a.dental_act_id}`;
+                                  const isInvoiceLocked = !!pt.is_invoice_paid_locked;
+                                  const isEditableTreatment = pt.status !== 'completed' && pt.status !== 'cancelled' && tab === 'en_cours' && !isInvoiceLocked;
+                                  const isMandatoryConsultation = isConsultationSimpleAct(act, a);
+                                  const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
+                                  return (
+                                    <li key={idx} className="flex items-center gap-2">
+                                      <span className="font-medium">{actLabel}</span>
+                                      <span>x{a.quantity}</span>
+                                      {Number.isFinite(unitPrice) && (
+                                        <span className="ml-2 text-gray-500">{(unitPrice * a.quantity).toFixed(2)} €</span>
+                                      )}
+                                      {isMandatoryConsultation && (
+                                        <span className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-amber-800 bg-amber-100">
+                                          Obligatoire
+                                        </span>
+                                      )}
+                                      {isEditableTreatment && !isMandatoryConsultation && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleEditAct(pt.id, a)}
+                                          className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                                          title="Modifier quantité/prix"
+                                          disabled={loading}
+                                        >
+                                          Modifier
+                                        </button>
+                                      )}
+                                      {isEditableTreatment && !isMandatoryConsultation && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveAct(pt.id, a)}
+                                          className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100"
+                                          title="Supprimer cet acte"
+                                          disabled={loading}
+                                        >
+                                          Supprimer
+                                        </button>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                              <div className="mt-2 text-xs font-bold text-blue-800">
+                                Total actes : {pt.acts.reduce((sum, a) => {
+                                  const act = dentalActs.find(act => act.id === a.dental_act_id);
+                                  const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
+                                  return sum + (Number.isFinite(unitPrice) ? unitPrice * a.quantity : 0);
+                                }, 0).toFixed(2)} €
+                              </div>
+                            </div>
                           )}
-                        </div>
-                      )}
-                      {pt.notes && (
-                        <p className="text-sm text-gray-600 mt-2 italic">{pt.notes}</p>
+                          {pt.invoice_preview && (
+                            <div className="mt-2 text-xs">
+                              {pt.invoice_preview.status === 'paid' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 text-emerald-800 font-semibold">
+                                  Facture finale payée: {Number(pt.invoice_preview.total_amount || 0).toFixed(2)} €
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-sky-100 text-sky-800 font-semibold">
+                                  Facture en cours (brouillon): {Number(pt.invoice_preview.total_amount || 0).toFixed(2)} €
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {pt.notes && (
+                            <p className="text-sm text-gray-600 mt-2 italic">{pt.notes}</p>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="flex items-center space-x-2">
@@ -603,11 +603,20 @@ const PatientTreatments = () => {
                       )}
                       <button
                         type="button"
-                        onClick={() => handleToggleAuditLogs(pt.id)}
+                        onClick={() => setExpandedTreatmentId(expandedTreatmentId === pt.id ? null : pt.id)}
                         className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
                       >
-                        {openAuditByTreatment[pt.id] ? 'Masquer audit' : 'Voir audit'}
+                        {expandedTreatmentId === pt.id ? 'Masquer détails' : 'Détails'}
                       </button>
+                      {expandedTreatmentId === pt.id && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAuditLogs(pt.id)}
+                          className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                        >
+                          {openAuditByTreatment[pt.id] ? 'Masquer audit' : 'Voir audit'}
+                        </button>
+                      )}
                       {pt.status !== 'completed' && pt.status !== 'cancelled' && tab === 'en_cours' && !pt.is_invoice_paid_locked && (
                         <>
                           <button
@@ -631,7 +640,7 @@ const PatientTreatments = () => {
                       )}
                     </div>
                   </div>
-                  {openAuditByTreatment[pt.id] && (
+                  {expandedTreatmentId === pt.id && openAuditByTreatment[pt.id] && (
                     <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
                       <h4 className="text-xs font-semibold text-gray-800 mb-2">Historique audit</h4>
                       {loadingAuditByTreatment[pt.id] ? (
