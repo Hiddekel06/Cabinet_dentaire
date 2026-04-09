@@ -24,6 +24,12 @@ class DashboardController extends Controller
         $data = Cache::remember($cacheKey, 120, function () use (
             $periodKey, $periodLabel, $startDate, $endDate, $prevStartDate, $prevEndDate, $today
         ) {
+            $now = Carbon::now();
+            $todayStart = $today->copy()->startOfDay();
+            $todayEnd = $today->copy()->endOfDay();
+            $yesterdayStart = Carbon::yesterday()->startOfDay();
+            $yesterdayEnd = Carbon::yesterday()->endOfDay();
+
             $patientsTotal = Patient::query()->count();
 
             $newPatientsCurrent = Patient::query()
@@ -34,33 +40,35 @@ class DashboardController extends Controller
                 ->whereBetween('created_at', [$prevStartDate->copy()->startOfDay(), $prevEndDate->copy()->endOfDay()])
                 ->count();
 
-            $appointmentsTodayQuery = Appointment::query()->whereDate('appointment_date', $today);
-            $appointmentsToday = (clone $appointmentsTodayQuery)->count();
-            $appointmentsPendingToday = (clone $appointmentsTodayQuery)
-                ->whereIn('status', ['pending', 'confirmed'])
-                ->count();
+            $appointmentsTodayStats = Appointment::query()
+                ->whereBetween('appointment_date', [$todayStart, $todayEnd])
+                ->selectRaw('COUNT(*) as total_count')
+                ->selectRaw("SUM(CASE WHEN status IN ('pending', 'confirmed') THEN 1 ELSE 0 END) as pending_count")
+                ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count")
+                ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count")
+                ->selectRaw("SUM(CASE WHEN appointment_date > ? AND status IN ('pending', 'confirmed') THEN 1 ELSE 0 END) as remaining_count", [$now])
+                ->selectRaw('AVG(duration) as avg_duration')
+                ->first();
 
-            $appointmentsCancelledToday = (clone $appointmentsTodayQuery)
-                ->where('status', 'cancelled')
-                ->count();
-
-            $appointmentsCompletedToday = (clone $appointmentsTodayQuery)
-                ->where('status', 'completed')
-                ->count();
+            $appointmentsToday = (int) ($appointmentsTodayStats?->total_count ?? 0);
+            $appointmentsPendingToday = (int) ($appointmentsTodayStats?->pending_count ?? 0);
+            $appointmentsCancelledToday = (int) ($appointmentsTodayStats?->cancelled_count ?? 0);
+            $appointmentsCompletedToday = (int) ($appointmentsTodayStats?->completed_count ?? 0);
+            $remainingAppointments = (int) ($appointmentsTodayStats?->remaining_count ?? 0);
+            $averageDuration = (float) ($appointmentsTodayStats?->avg_duration ?? 0);
 
             $appointmentsYesterday = Appointment::query()
-                ->whereDate('appointment_date', Carbon::yesterday())
+                ->whereBetween('appointment_date', [$yesterdayStart, $yesterdayEnd])
                 ->count();
 
-            $invoicesPending = Invoice::query()
+            $invoiceStats = Invoice::query()
                 ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
-                ->where('status', 'pending')
-                ->count();
+                ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count")
+                ->selectRaw("SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count")
+                ->first();
 
-            $invoicesPaid = Invoice::query()
-                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
-                ->where('status', 'paid')
-                ->count();
+            $invoicesPending = (int) ($invoiceStats?->pending_count ?? 0);
+            $invoicesPaid = (int) ($invoiceStats?->paid_count ?? 0);
 
             $invoicesTotalPeriod = max($invoicesPending + $invoicesPaid, 1);
             $pendingRatioPercent = (int) round(($invoicesPending / $invoicesTotalPeriod) * 100);
@@ -104,7 +112,7 @@ class DashboardController extends Controller
 
             $todayAppointments = Appointment::query()
                 ->with('patient:id,first_name,last_name')
-                ->whereDate('appointment_date', $today)
+                ->whereBetween('appointment_date', [$todayStart, $todayEnd])
                 ->orderBy('appointment_date')
                 ->limit(8)
                 ->get()
@@ -126,20 +134,13 @@ class DashboardController extends Controller
             $patientsBySlot = $this->buildPatientsBySlotSeries($today);
             $actsBreakdown = $this->buildActsBreakdownSeries($startDate, $endDate);
 
-            $remainingAppointments = Appointment::query()
-                ->whereDate('appointment_date', $today)
-                ->where('appointment_date', '>', Carbon::now())
-                ->whereIn('status', ['pending', 'confirmed'])
-                ->count();
-
-            $averageDuration = (float) Appointment::query()
-                ->whereDate('appointment_date', $today)
-                ->whereNotNull('duration')
-                ->avg('duration');
-
             $attendanceRate = $appointmentsToday > 0
                 ? (int) round((($appointmentsToday - $appointmentsCancelledToday) / $appointmentsToday) * 100)
                 : 0;
+
+            $newPatientsToday = Patient::query()
+                ->whereBetween('created_at', [$todayStart, $todayEnd])
+                ->count();
 
             return [
                 'period' => [
@@ -180,7 +181,7 @@ class DashboardController extends Controller
                         'total_today' => $appointmentsToday,
                     ],
                     'quick_indicators' => [
-                        'new_patients_today' => Patient::query()->whereDate('created_at', $today)->count(),
+                        'new_patients_today' => $newPatientsToday,
                         'attendance_rate_percent' => $attendanceRate,
                         'average_duration_minutes' => (int) round($averageDuration),
                         'vs_yesterday_percent' => $this->calculatePercentChange($appointmentsToday, $appointmentsYesterday),
@@ -234,9 +235,14 @@ class DashboardController extends Controller
 
     private function buildPatientsBySlotSeries(Carbon $day): array
     {
-        $appointments = Appointment::query()
-            ->whereDate('appointment_date', $day)
-            ->get(['appointment_date']);
+        $dayStart = $day->copy()->startOfDay();
+        $dayEnd = $day->copy()->endOfDay();
+
+        $hourlyCounts = Appointment::query()
+            ->whereBetween('appointment_date', [$dayStart, $dayEnd])
+            ->selectRaw('HOUR(appointment_date) as hour_slot, COUNT(*) as total')
+            ->groupBy('hour_slot')
+            ->pluck('total', 'hour_slot');
 
         $slots = [
             ['slot' => '08:00-10:00', 'start' => 8, 'end' => 10],
@@ -244,11 +250,12 @@ class DashboardController extends Controller
             ['slot' => '14:00-16:00', 'start' => 14, 'end' => 16],
         ];
 
-        return collect($slots)->map(function ($slot) use ($appointments) {
-            $count = $appointments->filter(function ($appointment) use ($slot) {
-                $hour = (int) Carbon::parse($appointment->appointment_date)->format('H');
-                return $hour >= $slot['start'] && $hour < $slot['end'];
-            })->count();
+        return collect($slots)->map(function ($slot) use ($hourlyCounts) {
+            $count = 0;
+
+            for ($hour = $slot['start']; $hour < $slot['end']; $hour++) {
+                $count += (int) ($hourlyCounts[$hour] ?? 0);
+            }
 
             return [
                 'slot' => $slot['slot'],

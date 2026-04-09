@@ -133,6 +133,7 @@ const api = axios.create({
 
 // 🔥 Mini système de cache (5 minutes par défaut)
 const cache = new Map();
+const inFlightRequests = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 const getCachedData = (key) => {
@@ -148,13 +149,39 @@ const setCachedData = (key, data) => {
   cache.set(key, { data, timestamp: Date.now() });
 };
 
+const fetchWithCache = (cacheKey, requestFactory) => {
+  const cached = getCachedData(cacheKey);
+  if (cached) return Promise.resolve(cached);
+
+  const pending = inFlightRequests.get(cacheKey);
+  if (pending) return pending;
+
+  const request = requestFactory()
+    .then((res) => {
+      setCachedData(cacheKey, res);
+      return res;
+    })
+    .finally(() => {
+      inFlightRequests.delete(cacheKey);
+    });
+
+  inFlightRequests.set(cacheKey, request);
+  return request;
+};
+
 const clearCache = (pattern = null) => {
   if (!pattern) {
     cache.clear();
+    inFlightRequests.clear();
   } else {
     for (const key of cache.keys()) {
       if (key.includes(pattern)) {
         cache.delete(key);
+      }
+    }
+    for (const key of inFlightRequests.keys()) {
+      if (key.includes(pattern)) {
+        inFlightRequests.delete(key);
       }
     }
   }
@@ -206,7 +233,7 @@ export const authAPI = {
   },
 
   getUser: () =>
-    api.get('/api/user'),
+    fetchWithCache('auth:user', () => api.get('/api/user')),
 };
 
 // Endpoints pour les patients
@@ -257,7 +284,8 @@ export const appointmentAPI = {
 
   getByDate: (date) => {
     const queryDate = encodeURIComponent(date);
-    return api.get(`/api/appointments?date=${queryDate}`);
+    const cacheKey = `appointments:date:${queryDate}`;
+    return fetchWithCache(cacheKey, () => api.get(`/api/appointments?date=${queryDate}`));
   },
 
   getById: (id) =>
@@ -495,13 +523,10 @@ export const productAPI = {
 export const statisticsAPI = {
   getOverview: (period = 'month') => {
     const cacheKey = `statistics:overview:${period}`;
-    const cached = getCachedData(cacheKey);
-    if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/statistics/overview?period=${encodeURIComponent(period)}`).then(res => {
-      setCachedData(cacheKey, res);
-      return res;
-    });
+    return fetchWithCache(
+      cacheKey,
+      () => api.get(`/api/statistics/overview?period=${encodeURIComponent(period)}`)
+    );
   },
 };
 
@@ -509,13 +534,10 @@ export const statisticsAPI = {
 export const dashboardAPI = {
   getOverview: (period = 'month') => {
     const cacheKey = `dashboard:overview:${period}`;
-    const cached = getCachedData(cacheKey);
-    if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/dashboard/overview?period=${encodeURIComponent(period)}`).then(res => {
-      setCachedData(cacheKey, res);
-      return res;
-    });
+    return fetchWithCache(
+      cacheKey,
+      () => api.get(`/api/dashboard/overview?period=${encodeURIComponent(period)}`)
+    );
   },
 };
 

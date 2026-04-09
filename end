@@ -1,0 +1,38 @@
+[33m7495cd8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Amelioration de la page login
+[33me49dde4[m Amelioration legere
+[33mee90d8b[m Amelioration metier add patients
+[33m27f9cba[m Amelioration legere
+[33m7df0002[m Boutton alerte implemente et update apointments
+[33m7ff0c50[m Amelioration partie Apointments
+[33mdde1976[m Amelioration page traitement
+[33mf05ce14[m Amelioration UX design
+[33m47c2caf[m Refonte du traitement
+[33m81093f3[m Optimization dashboard
+[33m9e9bb72[m Implementation dans le dashboard
+[33m818abad[m Ajout des statistiques
+[33m97f8e5c[m Status pending et payé ajouter
+[33macea173[m Optimisation gestion facture
+[33m8614d0f[m Ajout de la template de la facture
+[33m77cf357[m Debut implementation Factures
+[33mf5ef7d0[m Ajout nombre indisponibilité
+[33m6a4282e[m Ajout des ordonnances
+[33m8adc78c[m Implemntation des ordonnances
+[33m14ef441[m Implementation des actes apres demmarage suivi
+[33m4c8fbe1[m Traitement upgrade
+[33m38c2640[m Phase 4 termine
+[33mb24aa37[m Phase 3 termine
+[33m10b9d79[m import des actes
+[33mf57799d[m Ajout de la page achat
+[33mff5ec84[m Big amelioration sur le certificat
+[33mf3215e5[m Ajout de la table des actes & integration des actes
+[33m69b07c4[m Optimisation requete & ajout fiche medical
+[33me5cbda8[m Upgrade du deplacement RV
+[33m42f54f6[m Ajout certificat medicale et corection requete lourde
+[33maacbddc[m paydunia marche
+[33m7bda6c0[m Je viens de creer un fichier test2
+[33m379210a[m Je viens de creer un fichier test
+[33mb131f33[m Page patients NETTE AMelioration
+[33m03050a2[m Page patients update mis in progress
+[33m1ff7083[m Integration API apointments & patient
+[33m57392be[m Version Beta0.2
+[33mcf08989[m Fist commit

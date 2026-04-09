@@ -29,7 +29,13 @@ class AppointmentController extends Controller
         // Filtre par date si ?date=YYYY-MM-DD fourni
         if (request()->has('date')) {
             $date = request('date');
-            $query->whereDate('appointment_date', $date);
+            $dayStart = Carbon::parse($date)->startOfDay();
+            $dayEnd = Carbon::parse($date)->endOfDay();
+            $query->whereBetween('appointment_date', [$dayStart, $dayEnd]);
+
+            return response()->json(
+                $query->orderBy('appointment_date')->paginate(15)
+            );
         }
 
         return response()->json(

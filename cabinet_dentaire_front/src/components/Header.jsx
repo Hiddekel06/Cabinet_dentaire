@@ -97,7 +97,7 @@ export const Header = () => {
                 style={{ backgroundColor: '#fff' }}
               />
               <div className="hidden sm:block">
-                <h1 className="text-lg font-bold text-gray-900 leading-tight">MATLABUL SHIFAH</h1>
+                <h1 className="text-lg font-bold text-gray-900 leading-tight">Clinique Medicale</h1>
                 <p className="text-xs text-gray-500">Gestion médicale intelligente</p>
               </div>
             </Link>
