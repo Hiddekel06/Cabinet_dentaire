@@ -62,7 +62,10 @@ class AppointmentController extends Controller
         );
 
         // Empêcher la création d'un rendez-vous à une date passée
-        if (strtotime($validated['appointment_date']) < time()) {
+        if ($this->isAppointmentInPast(
+            $validated['appointment_date'],
+            $validated['appointment_time_specified']
+        )) {
             return response()->json(['message' => 'Impossible de créer un rendez-vous dans le passé.'], 422);
         }
 
@@ -132,7 +135,10 @@ class AppointmentController extends Controller
         }
 
         // Empêcher la modification d'un rendez-vous à une date passée
-        if (isset($validated['appointment_date']) && strtotime($validated['appointment_date']) < time()) {
+        if (isset($validated['appointment_date']) && $this->isAppointmentInPast(
+            $validated['appointment_date'],
+            $validated['appointment_time_specified'] ?? $appointment->appointment_time_specified
+        )) {
             return response()->json(['message' => 'Impossible de modifier un rendez-vous à une date passée.'], 422);
         }
 
@@ -161,7 +167,10 @@ class AppointmentController extends Controller
         ]);
 
         // Prevent past date changes
-        if (strtotime($validated['appointment_date']) < time()) {
+        if ($this->isAppointmentInPast(
+            $validated['appointment_date'],
+            $validated['appointment_time_specified'] ?? null
+        )) {
             return response()->json(['message' => 'Impossible de modifier un rendez-vous à une date passée.'], 422);
         }
 
@@ -275,7 +284,10 @@ class AppointmentController extends Controller
         ]);
 
         // Prevent scheduling in past
-        if (strtotime($validated['new_appointment_date']) < time()) {
+        if ($this->isAppointmentInPast(
+            $validated['new_appointment_date'],
+            $validated['appointment_time_specified'] ?? null
+        )) {
             return response()->json([
                 'message' => 'Impossible de programmer un rendez-vous dans le passé.',
             ], 422);
@@ -345,6 +357,19 @@ class AppointmentController extends Controller
 
         // DateTime fourni: heure précisée.
         return true;
+    }
+
+    private function isAppointmentInPast(string $rawDate, $explicitFlag = null): bool
+    {
+        $timeSpecified = $this->resolveTimeSpecified($rawDate, $explicitFlag);
+        $appointmentDate = Carbon::parse($rawDate);
+
+        // Sans heure explicite, on compare uniquement la date (aujourd'hui reste valide).
+        if (!$timeSpecified) {
+            return $appointmentDate->toDateString() < Carbon::today()->toDateString();
+        }
+
+        return $appointmentDate->lt(Carbon::now());
     }
 
     private function resolveConsultationSimpleAct(): ?DentalAct

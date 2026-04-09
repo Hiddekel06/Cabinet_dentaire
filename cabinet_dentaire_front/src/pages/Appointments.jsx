@@ -471,7 +471,15 @@ const Appointments = () => {
       setEditingAppointment(null);
     } catch (error) {
       console.error('Erreur création/modification rendez-vous:', error);
-      setAppointmentsError("Impossible d'enregistrer le rendez-vous.");
+      const backendMessage = error?.response?.data?.message;
+      const backendErrors = error?.response?.data?.errors;
+      const firstFieldError = backendErrors
+        ? Object.values(backendErrors).flat().find(Boolean)
+        : null;
+
+      setAppointmentsError(
+        backendMessage || firstFieldError || "Impossible d'enregistrer le rendez-vous."
+      );
     }
   };
 
