@@ -21,7 +21,7 @@ class DashboardController extends Controller
         $today = Carbon::today();
         $cacheKey = "dashboard:overview:{$periodKey}:{$today->toDateString()}";
 
-        $data = Cache::remember($cacheKey, 120, function () use (
+        $data = Cache::remember($cacheKey, 300, function () use (
             $periodKey, $periodLabel, $startDate, $endDate, $prevStartDate, $prevEndDate, $today
         ) {
             $now = Carbon::now();
@@ -30,15 +30,22 @@ class DashboardController extends Controller
             $yesterdayStart = Carbon::yesterday()->startOfDay();
             $yesterdayEnd = Carbon::yesterday()->endOfDay();
 
-            $patientsTotal = Patient::query()->count();
+            $periodStart = $startDate->copy()->startOfDay();
+            $periodEnd = $endDate->copy()->endOfDay();
+            $prevPeriodStart = $prevStartDate->copy()->startOfDay();
+            $prevPeriodEnd = $prevEndDate->copy()->endOfDay();
 
-            $newPatientsCurrent = Patient::query()
-                ->whereBetween('created_at', [$startDate->copy()->startOfDay(), $endDate->copy()->endOfDay()])
-                ->count();
+            $patientStats = Patient::query()
+                ->selectRaw('COUNT(*) as total_count')
+                ->selectRaw('SUM(CASE WHEN created_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as current_count', [$periodStart, $periodEnd])
+                ->selectRaw('SUM(CASE WHEN created_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as previous_count', [$prevPeriodStart, $prevPeriodEnd])
+                ->selectRaw('SUM(CASE WHEN created_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as today_count', [$todayStart, $todayEnd])
+                ->first();
 
-            $newPatientsPrevious = Patient::query()
-                ->whereBetween('created_at', [$prevStartDate->copy()->startOfDay(), $prevEndDate->copy()->endOfDay()])
-                ->count();
+            $patientsTotal = (int) ($patientStats?->total_count ?? 0);
+            $newPatientsCurrent = (int) ($patientStats?->current_count ?? 0);
+            $newPatientsPrevious = (int) ($patientStats?->previous_count ?? 0);
+            $newPatientsToday = (int) ($patientStats?->today_count ?? 0);
 
             $appointmentsTodayStats = Appointment::query()
                 ->whereBetween('appointment_date', [$todayStart, $todayEnd])
@@ -138,10 +145,6 @@ class DashboardController extends Controller
                 ? (int) round((($appointmentsToday - $appointmentsCancelledToday) / $appointmentsToday) * 100)
                 : 0;
 
-            $newPatientsToday = Patient::query()
-                ->whereBetween('created_at', [$todayStart, $todayEnd])
-                ->count();
-
             return [
                 'period' => [
                     'key' => $periodKey,
@@ -151,7 +154,7 @@ class DashboardController extends Controller
                 ],
                 'meta' => [
                     'generated_at' => Carbon::now()->toIso8601String(),
-                    'cache_ttl_seconds' => 120,
+                    'cache_ttl_seconds' => 300,
                 ],
                 'cards' => [
                     'patients_total' => [
