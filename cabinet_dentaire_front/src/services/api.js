@@ -123,8 +123,11 @@ export const medicationAPI = {
 };
 import axios from 'axios';
 
+const rawApiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8088';
+const apiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: apiBaseUrl,
   withCredentials: true,
   headers: {
     Accept: 'application/json',

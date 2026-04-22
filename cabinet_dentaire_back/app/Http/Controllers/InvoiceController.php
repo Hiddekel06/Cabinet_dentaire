@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\PatientTreatmentAct;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Mpdf\Mpdf;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -201,14 +202,8 @@ class InvoiceController extends Controller
             'items.patientTreatmentAct.dentalAct',
         ]);
 
-        $templatePath = resource_path('template/template_facture.docx');
-        if (!file_exists($templatePath)) {
-            return response()->json(['error' => 'Le modele Word facture est introuvable.'], 500);
-        }
-
         $isDraft = $invoice->status !== 'paid';
 
-        // Cache PDF: evite de reconvertir via LibreOffice tant que la facture n'a pas change.
         $itemsSignature = $invoice->items
             ->map(function ($item) {
                 return implode(':', [
@@ -221,6 +216,8 @@ class InvoiceController extends Controller
             })
             ->implode('|');
 
+        $templateVersion = $this->resolveInvoiceTemplateVersion();
+
         $versionKey = md5(implode('|', [
             (string) $invoice->invoice_number,
             (string) $invoice->status,
@@ -230,6 +227,7 @@ class InvoiceController extends Controller
             (string) $invoice->paid_amount,
             (string) ($invoice->updated_at?->timestamp ?? ''),
             $itemsSignature,
+            $templateVersion,
         ]));
 
         $cacheDir = storage_path('app/generated/invoices');
@@ -242,106 +240,131 @@ class InvoiceController extends Controller
         }
 
         try {
-            $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor($templatePath);
+            $pdfData = $this->buildInvoicePdfData($invoice, $isDraft);
+            $html = view('pdf.invoice', $pdfData)->render();
 
-            $patientName = trim(
-                ($invoice->patient->first_name ?? '') . ' ' . ($invoice->patient->last_name ?? '')
-            );
-            $patientPhone = (string) ($invoice->patient->phone ?? '');
-            $issueDate    = (string) $invoice->issue_date;
-            $dueDate      = (string) ($invoice->due_date ?? $issueDate);
-            $resteAPayer  = (float) $invoice->total_amount - (float) $invoice->paid_amount;
+            $tempDir = storage_path('app/mpdf');
+            File::ensureDirectoryExists($tempDir);
 
-            // Variables globales (en-tete + section patient)
-            $templateProcessor->setValue('adresse cabinet',   (string) config('app.cabinet_address', ''));
-            $templateProcessor->setValue('telephone cabinet', (string) config('app.cabinet_phone', ''));
-            $displayInvoiceNumber = $isDraft
-                ? ('BROUILLON - ' . (string) $invoice->invoice_number)
-                : (string) $invoice->invoice_number;
-
-            $templateProcessor->setValue('numero facture',    $displayInvoiceNumber);
-            $templateProcessor->setValue('date facture',      $issueDate);
-            $templateProcessor->setValue('date echeance',     $dueDate);
-            $templateProcessor->setValue('nom patient',       $patientName);
-            $templateProcessor->setValue('téléphone patient', $patientPhone);
-
-            // Totaux
-            $templateProcessor->setValue('total',         number_format((float) $invoice->total_amount, 2, '.', ' '));
-            $templateProcessor->setValue('montant paye',  number_format((float) $invoice->paid_amount, 2, '.', ' '));
-            $templateProcessor->setValue('reste a payer', number_format($resteAPayer, 2, '.', ' '));
-
-            // Lignes d'actes (cloneRow)
-            $items      = $invoice->items;
-            $itemsCount = $items->count();
-
-            if ($itemsCount > 0) {
-                try {
-                    $templateProcessor->cloneRow('nom acte', $itemsCount);
-                    foreach ($items as $index => $item) {
-                        $i      = $index + 1;
-                        $dental = $item->patientTreatmentAct?->dentalAct;
-                        $templateProcessor->setValue("nom patient#{$i}",  $patientName);
-                        $templateProcessor->setValue("date facture#{$i}", $issueDate);
-                        $templateProcessor->setValue("nom acte#{$i}",     (string) ($dental?->name ?? 'Acte'));
-                        $templateProcessor->setValue("indice#{$i}",       (string) ($dental?->code ?? ''));
-                        $templateProcessor->setValue("montant#{$i}",      number_format((float) $item->subtotal, 2, '.', ' '));
-                    }
-                } catch (\Throwable $e) {
-                    // Template sans placeholder cloneRow, on continue.
-                }
-            }
-
-            $tmpDir = storage_path('app/generated/tmp');
-            File::ensureDirectoryExists($tmpDir);
-
-            $baseName   = 'facture_' . $invoice->id . '_' . time();
-            $outputWord = $tmpDir . DIRECTORY_SEPARATOR . $baseName . '.docx';
-            $templateProcessor->saveAs($outputWord);
-
-            $outputPdf = $tmpDir . DIRECTORY_SEPARATOR . $baseName . '.pdf';
-            $cmd = sprintf(
-                'soffice --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to pdf --outdir %s %s 2>&1',
-                escapeshellarg($tmpDir),
-                escapeshellarg($outputWord)
-            );
-
-            $start = microtime(true);
-            $result = [];
-            $retval = null;
-            exec($cmd, $result, $retval);
-            $durationMs = (int) round((microtime(true) - $start) * 1000);
-            Log::info('Invoice PDF generation timing', [
-                'invoice_id' => $invoice->id,
-                'duration_ms' => $durationMs,
-                'retval' => $retval,
+            $tmpPdfDir = storage_path('app/generated/tmp');
+            File::ensureDirectoryExists($tmpPdfDir);
+            $tmpPdfPath = $tmpPdfDir . DIRECTORY_SEPARATOR . 'facture_' . $invoice->id . '_' . time() . '.pdf';
+            $mpdf = new Mpdf([
+                'format' => 'A4',
+                'orientation' => 'P',
+                'tempDir' => $tempDir,
+                'margin_left' => 10,
+                'margin_right' => 10,
+                'margin_top' => 10,
+                'margin_bottom' => 10,
+                'margin_header' => 4,
+                'margin_footer' => 4,
+                'default_font' => 'dejavusans',
+                'default_font_size' => 10,
             ]);
 
-            if (file_exists($outputWord)) {
-                File::delete($outputWord);
-            }
+            $mpdf->SetTitle('Facture ' . $invoice->invoice_number);
+            $mpdf->SetAuthor(config('app.cabinet_name', 'MATLABUL SHIFAH'));
+            $mpdf->SetSubject('Facture cabinet dentaire');
+            $mpdf->WriteHTML($html);
+            $mpdf->Output($tmpPdfPath, 'F');
 
-            if ($retval !== 0 || !file_exists($outputPdf)) {
-                return response()->json([
-                    'error'   => 'Erreur lors de la conversion PDF.',
-                    'details' => implode(PHP_EOL, $result),
-                ], 500);
-            }
-
-            // Remplace les anciennes versions en cache de cette facture.
             foreach (File::glob($cacheDir . DIRECTORY_SEPARATOR . 'facture_' . $invoice->id . '_*.pdf') as $oldCacheFile) {
                 if ($oldCacheFile !== $cachedPdfPath) {
                     File::delete($oldCacheFile);
                 }
             }
 
-            File::move($outputPdf, $cachedPdfPath);
+            if (file_exists($cachedPdfPath)) {
+                File::delete($cachedPdfPath);
+            }
+
+            File::move($tmpPdfPath, $cachedPdfPath);
 
             $downloadName = ($isDraft ? 'brouillon_' : 'facture_') . $invoice->invoice_number . '.pdf';
             return response()->download($cachedPdfPath, $downloadName);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('Invoice PDF generation failed', [
+                'invoice_id' => $invoice->id,
+                'message' => $e->getMessage(),
+            ]);
+
             return response()->json([
                 'error' => 'Erreur lors de la generation de la facture : ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function buildInvoicePdfData(Invoice $invoice, bool $isDraft): array
+    {
+        $patientName = trim(
+            (string) ($invoice->patient->first_name ?? '') . ' ' . (string) ($invoice->patient->last_name ?? '')
+        );
+
+        $items = $invoice->items->map(function ($item) use ($patientName, $invoice) {
+            $dentalAct = $item->patientTreatmentAct?->dentalAct;
+
+            return [
+                'patient_name' => $patientName,
+                'date' => (string) $invoice->issue_date,
+                'acte' => (string) ($dentalAct?->name ?? 'Acte'),
+                'indice' => (string) ($dentalAct?->code ?? ''),
+                'montant' => (float) $item->subtotal,
+            ];
+        })->values()->all();
+
+        return [
+            'cabinetName' => $this->normalizeCabinetName(
+                (string) config('app.cabinet_name', 'MATLABUL SHIFAH')
+            ),
+            'cabinetAddress' => (string) config('app.cabinet_address', ''),
+            'cabinetPhone' => (string) config('app.cabinet_phone', ''),
+            'logoDataUri' => $this->fileToDataUri(public_path('images/logoCabinet.png')),
+            'invoiceNumber' => $isDraft
+                ? ('BROUILLON - ' . (string) $invoice->invoice_number)
+                : (string) $invoice->invoice_number,
+            'issueDate' => (string) $invoice->issue_date,
+            'dueDate' => (string) ($invoice->due_date ?? $invoice->issue_date),
+            'patientName' => $patientName,
+            'patientPhone' => (string) ($invoice->patient->phone ?? ''),
+            'items' => $items,
+            'totalAmount' => (float) $invoice->total_amount,
+            'paidAmount' => (float) $invoice->paid_amount,
+            'remainingAmount' => max((float) $invoice->total_amount - (float) $invoice->paid_amount, 0),
+        ];
+    }
+
+    private function resolveInvoiceTemplateVersion(): string
+    {
+        $templatePath = resource_path('views/pdf/invoice.blade.php');
+        $logoPath = public_path('images/logoCabinet.png');
+
+        $templateHash = file_exists($templatePath) ? md5_file($templatePath) : 'no-template';
+        $logoHash = file_exists($logoPath) ? md5_file($logoPath) : 'no-logo';
+
+        return $templateHash . ':' . $logoHash;
+    }
+
+    private function normalizeCabinetName(string $name): string
+    {
+        $normalized = trim(str_replace('_', ' ', $name));
+
+        return $normalized !== '' ? $normalized : 'MATLABUL SHIFAH';
+    }
+
+    private function fileToDataUri(string $path): ?string
+    {
+        if (!file_exists($path)) {
+            return null;
+        }
+
+        $content = file_get_contents($path);
+        if ($content === false) {
+            return null;
+        }
+
+        $mime = mime_content_type($path) ?: 'image/png';
+
+        return 'data:' . $mime . ';base64,' . base64_encode($content);
     }
 }

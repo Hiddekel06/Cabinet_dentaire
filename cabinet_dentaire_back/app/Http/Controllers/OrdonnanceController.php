@@ -6,6 +6,8 @@ use App\Models\Ordonnance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Mpdf\Mpdf;
 
 class OrdonnanceController extends Controller
 {
@@ -92,91 +94,100 @@ class OrdonnanceController extends Controller
         return response()->json($ordonnance);
     }
 
-    /**
-     * Genere une ordonnance PDF depuis un template Word a variables.
-     */
     public function generate(Request $request, Ordonnance $ordonnance)
     {
         $ordonnance->load(['patient', 'issuer', 'items.medication']);
 
-        $templatePath = resource_path('template/template_ordonnance.docx');
-        if (!file_exists($templatePath)) {
-            $templatePath = resource_path('template/Template_Ordonnance.docx');
-        }
-        if (!file_exists($templatePath)) {
-            return response()->json(['error' => 'Le modele Word ordonnance est introuvable.'], 500);
-        }
-
         try {
-            $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor($templatePath);
-
-            $patientFullName = trim(($ordonnance->patient->first_name ?? '') . ' ' . ($ordonnance->patient->last_name ?? ''));
-
-            // Variables de base standardisees pour la template.
-            $templateProcessor->setValue('ordonnance_id', (string) $ordonnance->id);
-            $templateProcessor->setValue('patient_full_name', $patientFullName);
-            $templateProcessor->setValue('patient_first_name', (string) ($ordonnance->patient->first_name ?? ''));
-            $templateProcessor->setValue('patient_last_name', (string) ($ordonnance->patient->last_name ?? ''));
-            $templateProcessor->setValue('doctor_name', (string) ($ordonnance->issuer->name ?? ''));
-            $templateProcessor->setValue('issue_date', (string) $ordonnance->issue_date);
-            $templateProcessor->setValue('notes', (string) ($ordonnance->notes ?? ''));
-            $templateProcessor->setValue('items_text', $this->buildItemsText($ordonnance));
-
-            // Variables detaillees par ligne (optionnelles si la template utilise cloneRow).
-            $itemsCount = $ordonnance->items->count();
-            if ($itemsCount > 0) {
-                try {
-                    $templateProcessor->cloneRow('medication_name', $itemsCount);
-                    foreach ($ordonnance->items as $index => $item) {
-                        $i = $index + 1;
-                        $templateProcessor->setValue("medication_name#{$i}", (string) $item->medication_name);
-                        $templateProcessor->setValue("frequency#{$i}", (string) $item->frequency);
-                        $templateProcessor->setValue("duration#{$i}", (string) ($item->duration ?? ''));
-                        $templateProcessor->setValue("instructions#{$i}", (string) ($item->instructions ?? ''));
-                    }
-                } catch (\Throwable $e) {
-                    // Si la template ne contient pas les placeholders cloneRow, on garde items_text.
-                }
-            }
-
-            // Variables personnalisees optionnelles envoyees par le frontend.
             $customVariables = $request->input('variables', []);
-            if (is_array($customVariables)) {
-                foreach ($customVariables as $key => $value) {
-                    if (is_string($key)) {
-                        $templateProcessor->setValue($key, (string) ($value ?? ''));
-                    }
+
+            if (!is_array($customVariables)) {
+                $customVariables = [];
+            }
+
+            $itemsSignature = $ordonnance->items
+                ->map(function ($item) {
+                    return implode(':', [
+                        (string) $item->id,
+                        (string) $item->medication_name,
+                        (string) $item->frequency,
+                        (string) ($item->duration ?? ''),
+                        (string) ($item->instructions ?? ''),
+                        (string) ($item->updated_at?->timestamp ?? ''),
+                    ]);
+                })
+                ->implode('|');
+
+            $templateVersion = $this->resolveOrdonnanceTemplateVersion();
+            $customVariablesHash = md5(json_encode($customVariables, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
+
+            $versionKey = md5(implode('|', [
+                (string) $ordonnance->id,
+                (string) $ordonnance->issue_date,
+                (string) ($ordonnance->updated_at?->timestamp ?? ''),
+                (string) ($ordonnance->notes ?? ''),
+                $itemsSignature,
+                $templateVersion,
+                $customVariablesHash,
+            ]));
+
+            $cacheDir = storage_path('app/generated/ordonnances');
+            File::ensureDirectoryExists($cacheDir);
+            $cachedPdfPath = $cacheDir . DIRECTORY_SEPARATOR . 'ordonnance_' . $ordonnance->id . '_' . $versionKey . '.pdf';
+
+            if (file_exists($cachedPdfPath)) {
+                return response()->download($cachedPdfPath, 'ordonnance_' . $ordonnance->id . '.pdf');
+            }
+
+            $pdfData = $this->buildOrdonnancePdfData($ordonnance, $customVariables);
+            $html = view('pdf.ordonnance', $pdfData)->render();
+
+            $tempDir = storage_path('app/mpdf');
+            File::ensureDirectoryExists($tempDir);
+
+            $tmpPdfDir = storage_path('app/generated/tmp');
+            File::ensureDirectoryExists($tmpPdfDir);
+            $tmpPdfPath = $tmpPdfDir . DIRECTORY_SEPARATOR . 'ordonnance_' . $ordonnance->id . '_' . time() . '.pdf';
+
+            $mpdf = new Mpdf([
+                'format' => 'A4',
+                'orientation' => 'P',
+                'tempDir' => $tempDir,
+                'margin_left' => 10,
+                'margin_right' => 10,
+                'margin_top' => 10,
+                'margin_bottom' => 10,
+                'margin_header' => 4,
+                'margin_footer' => 4,
+                'default_font' => 'dejavusans',
+                'default_font_size' => 10,
+            ]);
+
+            $mpdf->SetTitle('Ordonnance ' . $ordonnance->id);
+            $mpdf->SetAuthor((string) ($ordonnance->issuer->name ?? '')); 
+            $mpdf->SetSubject('Ordonnance cabinet dentaire');
+            $mpdf->WriteHTML($html);
+            $mpdf->Output($tmpPdfPath, 'F');
+
+            foreach (File::glob($cacheDir . DIRECTORY_SEPARATOR . 'ordonnance_' . $ordonnance->id . '_*.pdf') as $oldCacheFile) {
+                if ($oldCacheFile !== $cachedPdfPath) {
+                    File::delete($oldCacheFile);
                 }
             }
 
-            $baseName = 'ordonnance_' . $ordonnance->id . '_' . time();
-            $outputWord = storage_path('app/' . $baseName . '.docx');
-            $templateProcessor->saveAs($outputWord);
-
-            // Conversion en PDF via LibreOffice (soffice)
-            $outputPdf = storage_path('app/' . $baseName . '.pdf');
-            $cmd = sprintf(
-                'soffice --headless --convert-to pdf --outdir %s %s 2>&1',
-                escapeshellarg(dirname($outputWord)),
-                escapeshellarg($outputWord)
-            );
-            $result = [];
-            $retval = null;
-            exec($cmd, $result, $retval);
-
-            if ($retval !== 0 || !file_exists($outputPdf)) {
-                if (file_exists($outputWord)) {
-                    File::delete($outputWord);
-                }
-
-                return response()->json([
-                    'error' => 'Erreur lors de la conversion PDF.',
-                    'details' => implode(PHP_EOL, $result),
-                ], 500);
+            if (file_exists($cachedPdfPath)) {
+                File::delete($cachedPdfPath);
             }
 
-            return response()->download($outputPdf)->deleteFileAfterSend(true);
-        } catch (\Exception $e) {
+            File::move($tmpPdfPath, $cachedPdfPath);
+
+            return response()->download($cachedPdfPath, 'ordonnance_' . $ordonnance->id . '.pdf');
+        } catch (\Throwable $e) {
+            Log::error('Ordonnance PDF generation failed', [
+                'ordonnance_id' => $ordonnance->id,
+                'message' => $e->getMessage(),
+            ]);
+
             return response()->json(['error' => 'Erreur lors de la generation de l\'ordonnance : ' . $e->getMessage()], 500);
         }
     }
@@ -206,5 +217,73 @@ class OrdonnanceController extends Controller
                 return $line;
             })
             ->implode("\n");
+    }
+
+    private function buildOrdonnancePdfData(Ordonnance $ordonnance, array $customVariables): array
+    {
+        $patientFirstName = (string) ($ordonnance->patient->first_name ?? '');
+        $patientLastName = (string) ($ordonnance->patient->last_name ?? '');
+        $patientFullName = trim($patientFirstName . ' ' . $patientLastName);
+
+        $items = $ordonnance->items->map(function ($item) {
+            return [
+                'medication_name' => (string) $item->medication_name,
+                'frequency' => (string) $item->frequency,
+                'duration' => (string) ($item->duration ?? ''),
+                'instructions' => (string) ($item->instructions ?? ''),
+            ];
+        })->values()->all();
+
+        $defaultDoctorName = (string) ($ordonnance->issuer->name ?? '');
+
+        return [
+            'cabinetName' => $this->normalizeCabinetName((string) config('app.cabinet_name', 'MATLABUL SHIFAH')),
+            'cabinetAddress' => (string) config('app.cabinet_address', ''),
+            'cabinetPhone' => (string) config('app.cabinet_phone', ''),
+            'logoDataUri' => $this->fileToDataUri(public_path('images/logoCabinet.png')),
+            'ordonnanceId' => (int) $ordonnance->id,
+            'issueDate' => (string) $ordonnance->issue_date,
+            'patientFirstName' => (string) ($customVariables['patient_first_name'] ?? $patientFirstName),
+            'patientLastName' => (string) ($customVariables['patient_last_name'] ?? $patientLastName),
+            'patientFullName' => (string) ($customVariables['patient_full_name'] ?? $patientFullName),
+            'doctorName' => (string) ($customVariables['doctor_name'] ?? $defaultDoctorName),
+            'notes' => (string) ($customVariables['notes'] ?? ($ordonnance->notes ?? '')),
+            'itemsText' => (string) ($customVariables['items_text'] ?? $this->buildItemsText($ordonnance)),
+            'items' => $items,
+        ];
+    }
+
+    private function resolveOrdonnanceTemplateVersion(): string
+    {
+        $templatePath = resource_path('views/pdf/ordonnance.blade.php');
+        $logoPath = public_path('images/logoCabinet.png');
+
+        $templateHash = file_exists($templatePath) ? md5_file($templatePath) : 'no-template';
+        $logoHash = file_exists($logoPath) ? md5_file($logoPath) : 'no-logo';
+
+        return $templateHash . ':' . $logoHash;
+    }
+
+    private function normalizeCabinetName(string $name): string
+    {
+        $normalized = trim(str_replace('_', ' ', $name));
+
+        return $normalized !== '' ? $normalized : 'MATLABUL SHIFAH';
+    }
+
+    private function fileToDataUri(string $path): ?string
+    {
+        if (!file_exists($path)) {
+            return null;
+        }
+
+        $content = file_get_contents($path);
+        if ($content === false) {
+            return null;
+        }
+
+        $mime = mime_content_type($path) ?: 'image/png';
+
+        return 'data:' . $mime . ';base64,' . base64_encode($content);
     }
 }

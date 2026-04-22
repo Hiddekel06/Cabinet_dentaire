@@ -66,7 +66,15 @@ class MedicalRecordController extends Controller
             }
 
             $currentNextAppointment = $patientTreatment->nextAppointment;
-            if ($currentNextAppointment && $currentNextAppointment->appointment_date && $currentNextAppointment->appointment_date->isFuture()) {
+            $recordAppointmentId = (int) $validated['appointment_id'];
+            $currentNextAppointmentId = (int) ($currentNextAppointment?->id ?? 0);
+
+            if (
+                $currentNextAppointment
+                && $currentNextAppointmentId === $recordAppointmentId
+                && $currentNextAppointment->appointment_date
+                && $currentNextAppointment->appointment_date->isFuture()
+            ) {
                 $appointmentDateLabel = $currentNextAppointment->appointment_date->format('d/m/Y H:i');
                 $timeSpecified = (bool) ($currentNextAppointment->appointment_time_specified ?? true);
                 if (!$timeSpecified) {
