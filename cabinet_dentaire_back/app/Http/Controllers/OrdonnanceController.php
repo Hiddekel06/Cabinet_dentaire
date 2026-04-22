@@ -132,10 +132,21 @@ class OrdonnanceController extends Controller
             ]));
 
             $cacheDir = storage_path('app/generated/ordonnances');
-            File::ensureDirectoryExists($cacheDir);
             $cachedPdfPath = $cacheDir . DIRECTORY_SEPARATOR . 'ordonnance_' . $ordonnance->id . '_' . $versionKey . '.pdf';
+            $cacheUsable = true;
 
-            if (file_exists($cachedPdfPath)) {
+            try {
+                File::ensureDirectoryExists($cacheDir);
+            } catch (\Throwable $cacheInitError) {
+                $cacheUsable = false;
+                Log::warning('Ordonnance PDF cache directory unavailable', [
+                    'ordonnance_id' => $ordonnance->id,
+                    'dir' => $cacheDir,
+                    'message' => $cacheInitError->getMessage(),
+                ]);
+            }
+
+            if ($cacheUsable && file_exists($cachedPdfPath)) {
                 return response()->download($cachedPdfPath, 'ordonnance_' . $ordonnance->id . '.pdf');
             }
 
@@ -144,10 +155,6 @@ class OrdonnanceController extends Controller
 
             $tempDir = storage_path('app/mpdf');
             File::ensureDirectoryExists($tempDir);
-
-            $tmpPdfDir = storage_path('app/generated/tmp');
-            File::ensureDirectoryExists($tmpPdfDir);
-            $tmpPdfPath = $tmpPdfDir . DIRECTORY_SEPARATOR . 'ordonnance_' . $ordonnance->id . '_' . time() . '.pdf';
 
             $mpdf = new Mpdf([
                 'format' => 'A4',
@@ -167,21 +174,34 @@ class OrdonnanceController extends Controller
             $mpdf->SetAuthor((string) ($ordonnance->issuer->name ?? '')); 
             $mpdf->SetSubject('Ordonnance cabinet dentaire');
             $mpdf->WriteHTML($html);
-            $mpdf->Output($tmpPdfPath, 'F');
+            $pdfBinary = $mpdf->Output('', 'S');
 
-            foreach (File::glob($cacheDir . DIRECTORY_SEPARATOR . 'ordonnance_' . $ordonnance->id . '_*.pdf') as $oldCacheFile) {
-                if ($oldCacheFile !== $cachedPdfPath) {
-                    File::delete($oldCacheFile);
+            if (!is_string($pdfBinary) || $pdfBinary === '') {
+                throw new \RuntimeException('Le moteur PDF n\'a retourné aucun contenu.');
+            }
+
+            if ($cacheUsable) {
+                try {
+                    foreach (File::glob($cacheDir . DIRECTORY_SEPARATOR . 'ordonnance_' . $ordonnance->id . '_*.pdf') as $oldCacheFile) {
+                        if ($oldCacheFile !== $cachedPdfPath) {
+                            File::delete($oldCacheFile);
+                        }
+                    }
+
+                    file_put_contents($cachedPdfPath, $pdfBinary);
+                } catch (\Throwable $cacheWriteError) {
+                    Log::warning('Ordonnance PDF cache write skipped', [
+                        'ordonnance_id' => $ordonnance->id,
+                        'path' => $cachedPdfPath,
+                        'message' => $cacheWriteError->getMessage(),
+                    ]);
                 }
             }
 
-            if (file_exists($cachedPdfPath)) {
-                File::delete($cachedPdfPath);
-            }
-
-            File::move($tmpPdfPath, $cachedPdfPath);
-
-            return response()->download($cachedPdfPath, 'ordonnance_' . $ordonnance->id . '.pdf');
+            return response($pdfBinary, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="ordonnance_' . $ordonnance->id . '.pdf"',
+            ]);
         } catch (\Throwable $e) {
             Log::error('Ordonnance PDF generation failed', [
                 'ordonnance_id' => $ordonnance->id,
