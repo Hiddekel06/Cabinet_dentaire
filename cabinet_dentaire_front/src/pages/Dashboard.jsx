@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/Layout';
-import { dashboardAPI } from '../services/api';
+import { dashboardAPI, patientTreatmentAPI } from '../services/api';
 
 const statusClasses = {
   Nouveau: 'bg-blue-50 text-blue-700 border-blue-100',
@@ -85,10 +86,13 @@ const getTrendText = (trendPercent, suffix) => {
 };
 
 export const Dashboard = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedRecentPatient, setSelectedRecentPatient] = useState(null);
+  const [continuingTreatment, setContinuingTreatment] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -123,6 +127,39 @@ export const Dashboard = () => {
   }, [summary.acts_breakdown]);
 
   const totalActs = actsBreakdown.reduce((sum, act) => sum + Number(act.count || 0), 0);
+
+  const openPatientModal = (patient) => {
+    setSelectedRecentPatient(patient || null);
+  };
+
+  const closePatientModal = () => {
+    setSelectedRecentPatient(null);
+  };
+
+  const continueTreatment = async () => {
+    if (!selectedRecentPatient?.id || continuingTreatment) return;
+
+    setContinuingTreatment(true);
+    try {
+      const response = await patientTreatmentAPI.getAll();
+      const treatments = response?.data?.data || response?.data || [];
+      const activeTreatment = treatments.find((treatment) => (
+        Number(treatment.patient_id) === Number(selectedRecentPatient.id)
+        && ['planned', 'in_progress'].includes(treatment.status)
+      ));
+
+      if (activeTreatment?.id) {
+        navigate(`/treatments/${activeTreatment.id}/session`);
+      } else {
+        navigate('/treatments/new', { state: { patientId: selectedRecentPatient.id } });
+      }
+      closePatientModal();
+    } catch (e) {
+      alert("Impossible d'ouvrir le traitement pour le moment.");
+    } finally {
+      setContinuingTreatment(false);
+    }
+  };
 
   const cardItems = [
     {
@@ -294,7 +331,19 @@ export const Dashboard = () => {
                           recentPatients.map((patient) => {
                             const fullName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Patient';
                             return (
-                              <tr key={patient.id} className="hover:bg-gray-50 transition-colors duration-150">
+                              <tr
+                                key={patient.id}
+                                className="hover:bg-gray-50 transition-colors duration-150 cursor-pointer"
+                                onClick={() => openPatientModal(patient)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openPatientModal(patient);
+                                  }
+                                }}
+                              >
                                 <td className="py-4 px-4">
                                   <div className="flex items-center">
                                     <div className="w-8 h-8 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center mr-3">
@@ -486,6 +535,89 @@ export const Dashboard = () => {
               </div>
             </div>
           </>
+        )}
+
+        {selectedRecentPatient && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+            onClick={closePatientModal}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl border border-blue-100 bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between px-6 py-5 border-b border-gray-200">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Détails patient</h3>
+                  <p className="text-sm text-gray-500 mt-1">Informations complètes du patient récent</p>
+                </div>
+                <button
+                  onClick={closePatientModal}
+                  className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                  aria-label="Fermer"
+                  type="button"
+                >
+                  &times;
+                </button>
+              </div>
+
+              <div className="px-6 py-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Identifiant</p>
+                  <p className="text-sm font-medium text-gray-900 mt-1">{selectedRecentPatient.display_id || '-'}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Nom complet</p>
+                  <p className="text-sm font-medium text-gray-900 mt-1">
+                    {`${selectedRecentPatient.first_name || ''} ${selectedRecentPatient.last_name || ''}`.trim() || '-'}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Téléphone</p>
+                  <p className="text-sm font-medium text-gray-900 mt-1">{selectedRecentPatient.phone || '-'}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Email</p>
+                  <p className="text-sm font-medium text-gray-900 mt-1 break-all">{selectedRecentPatient.email || '-'}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Dernière visite</p>
+                  <p className="text-sm font-medium text-gray-900 mt-1">{formatDate(selectedRecentPatient.last_appointment_date)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Dernier traitement</p>
+                  <p className="text-sm font-medium text-gray-900 mt-1">{selectedRecentPatient.last_treatment || '-'}</p>
+                </div>
+                <div className="md:col-span-2 rounded-lg border border-gray-200 p-3 bg-gray-50">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Statut</p>
+                  <div className="mt-2">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${statusClasses[selectedRecentPatient.status_label] || statusClasses.Nouveau}`}>
+                      {selectedRecentPatient.status_label || 'Nouveau'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closePatientModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 bg-white hover:bg-gray-50 rounded-lg transition-all duration-200"
+                >
+                  Fermer
+                </button>
+                <button
+                  type="button"
+                  onClick={continueTreatment}
+                  disabled={continuingTreatment}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200"
+                >
+                  {continuingTreatment ? 'Ouverture...' : 'Continuer le traitement'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </Layout>

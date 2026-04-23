@@ -17,8 +17,7 @@
 
         .header-table,
         .patient-table,
-        .items-table,
-        .signature-table {
+        .items-table {
             width: 100%;
             border-collapse: collapse;
         }
@@ -145,16 +144,6 @@
             line-height: 1.4;
         }
 
-        .signature-table td {
-            vertical-align: top;
-            padding-top: 12px;
-        }
-
-        .signature-line {
-            margin-top: 30px;
-            border-top: 1px solid #0f172a;
-            width: 72%;
-        }
     </style>
 </head>
 <body>
@@ -222,15 +211,12 @@
     <div class="notes-box">{{ $notes }}</div>
 @endif
 
-<table class="signature-table" style="margin-top: 14px;">
+<table style="width: 100%; margin-top: 14px;">
     <tr>
-        <td style="width: 50%;">
-            <div class="muted">Signature du patient</div>
-            <div class="signature-line"></div>
-        </td>
+        <td style="width: 50%;"></td>
         <td style="width: 50%; text-align: right;">
             <div class="muted">Signature et cachet du médecin</div>
-            <div class="signature-line" style="margin-left: auto;"></div>
+            <div style="margin-top: 30px; border-top: 1px solid #0f172a; width: 72%; margin-left: auto;"></div>
         </td>
     </tr>
 </table>
