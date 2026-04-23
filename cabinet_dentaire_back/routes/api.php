@@ -12,6 +12,7 @@ use App\Http\Controllers\PatientTreatmentController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductTypeController;
 use App\Http\Controllers\RadiographyController;
+use App\Http\Controllers\SessionReceiptController;
 use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\MedicalFolderController;
 use Illuminate\Support\Facades\Route;
@@ -32,6 +33,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Gestion des actes dentaires (admin)
     Route::post('/dental-acts/import', [App\Http\Controllers\DentalActController::class, 'import']);
     Route::delete('/dental-acts/truncate', [App\Http\Controllers\DentalActController::class, 'truncate']);
+    Route::patch('/dental-acts/{dentalAct}', [App\Http\Controllers\DentalActController::class, 'update']);
     
     // Gestion des patients
     Route::apiResource('patients', PatientController::class);
@@ -55,6 +57,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des radiographies
     Route::apiResource('radiographies', RadiographyController::class);
+
+    // Reçus de séance (distincts des factures finales)
+    Route::get('session-receipts', [SessionReceiptController::class, 'index']);
+    Route::post('session-receipts', [SessionReceiptController::class, 'store']);
+    Route::get('session-receipts/{sessionReceipt}', [SessionReceiptController::class, 'show']);
+    Route::post('session-receipts/{sessionReceipt}/generate', [SessionReceiptController::class, 'generate']);
 
     // Gestion des achats (produits)
     Route::get('products/statistics', [ProductController::class, 'statistics']);

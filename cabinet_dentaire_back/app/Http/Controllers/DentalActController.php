@@ -148,4 +148,23 @@ class DentalActController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Mettre à jour un acte dentaire (tarif, etc.)
+     */
+    public function update(Request $request, DentalAct $dentalAct)
+    {
+        $validated = $request->validate([
+            'tarif' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'category' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'subcategory' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'tarif_level' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'description' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        $dentalAct->update($validated);
+
+        return response()->json($dentalAct->fresh());
+    }
 }
