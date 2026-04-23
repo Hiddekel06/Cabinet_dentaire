@@ -272,6 +272,29 @@ export const patientAPI = {
   },
 };
 
+// Endpoints pour les radiographies
+export const radiographyAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `radiographies:${query}`;
+    return fetchWithCache(cacheKey, () => api.get(`/api/radiographies?${query}`));
+  },
+
+  create: (formData) => {
+    clearCache('radiographies');
+    return api.post('/api/radiographies', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  delete: (id) => {
+    clearCache('radiographies');
+    return api.delete(`/api/radiographies/${id}`);
+  },
+};
+
 // Endpoints pour les rendez-vous
 export const appointmentAPI = {
   getAll: (page = 1) => {

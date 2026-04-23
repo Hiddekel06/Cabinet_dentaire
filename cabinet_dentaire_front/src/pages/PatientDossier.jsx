@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { medicalCertificateAPI, medicalRecordAPI, patientAPI, patientTreatmentAPI } from '../services/api';
+import { medicalCertificateAPI, medicalRecordAPI, patientAPI, patientTreatmentAPI, radiographyAPI } from '../services/api';
 
 // Icônes
 const BackIcon = () => (
@@ -53,6 +53,19 @@ const CertificateIcon = () => (
   </svg>
 );
 
+const RadiographyIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11h8M8 15h5" />
+  </svg>
+);
+
+const buildPublicFileUrl = (filePath) => {
+  if (!filePath) return '#';
+  const base = (import.meta.env.VITE_API_URL || 'http://localhost:8088').replace(/\/+$/, '').replace(/\/api$/, '');
+  return `${base}/storage/${filePath}`;
+};
+
 const PatientDossier = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -61,26 +74,30 @@ const PatientDossier = () => {
   const [records, setRecords] = useState([]);
   const [certificates, setCertificates] = useState([]);
   const [patientTreatments, setPatientTreatments] = useState([]);
+  const [radiographies, setRadiographies] = useState([]);
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [patientRes, recordsRes, certificatesRes, treatmentsRes] = await Promise.all([
+        const [patientRes, recordsRes, certificatesRes, treatmentsRes, radiographiesRes] = await Promise.all([
           patientAPI.getById(id),
           medicalRecordAPI.getByPatient(id),
           medicalCertificateAPI.getByPatient(id),
-          patientTreatmentAPI.getAll({ patient_id: id })
+          patientTreatmentAPI.getAll({ patient_id: id }),
+          radiographyAPI.getAll({ patient_id: id })
         ]);
         setPatient(patientRes.data.data || patientRes.data || null);
         setRecords(recordsRes.data.data || recordsRes.data || []);
         setCertificates(certificatesRes.data.data || certificatesRes.data || []);
         setPatientTreatments(treatmentsRes.data.data || treatmentsRes.data || []);
+        setRadiographies(radiographiesRes.data.data || radiographiesRes.data || []);
       } catch {
         setPatient(null);
         setRecords([]);
         setCertificates([]);
         setPatientTreatments([]);
+        setRadiographies([]);
       } finally {
         setLoading(false);
       }
@@ -364,6 +381,64 @@ const PatientDossier = () => {
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
                           {r.notes || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Radiographies */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <RadiographyIcon />
+              Radiographies
+            </h2>
+          </div>
+          <div className="p-6">
+            {radiographies.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <RadiographyIcon />
+                <p className="mt-2">Aucune radiographie enregistrée pour ce patient.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date du scan
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Fichier
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {radiographies.map((radio) => (
+                      <tr key={radio.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {radio.scan_date ? new Date(radio.scan_date).toLocaleDateString('fr-FR') : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {radio.description || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <a
+                            href={buildPublicFileUrl(radio.file_path)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            Ouvrir
+                          </a>
                         </td>
                       </tr>
                     ))}
