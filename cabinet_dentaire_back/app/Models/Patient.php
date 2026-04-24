@@ -25,6 +25,7 @@ class Patient extends Model
         'address',
         'city',
         'notes',
+        'general_state',
     ];
 
     protected $casts = [

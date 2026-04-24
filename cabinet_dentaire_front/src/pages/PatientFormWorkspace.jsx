@@ -9,6 +9,8 @@ const initialForm = {
   phone: '',
   gender: 'M',
   age: '',
+  address: '',
+  general_state: '',
   contact_first_name: '',
   contact_last_name: '',
   contact_phone: '',
@@ -71,6 +73,8 @@ const PatientFormWorkspace = () => {
           phone: data.phone || '',
           gender: data.gender || 'M',
           age: calculateAgeFromDate(data.date_of_birth),
+          address: data.address || '',
+          general_state: data.general_state || '',
           contact_first_name: data.contact_first_name || '',
           contact_last_name: data.contact_last_name || '',
           contact_phone: data.contact_phone || '',
@@ -220,6 +224,8 @@ const PatientFormWorkspace = () => {
       ...form,
       age: ageValue,
       phone: form.phone.trim(),
+      address: form.address.trim(),
+      general_state: form.general_state.trim(),
       contact_first_name: form.contact_first_name.trim(),
       contact_last_name: form.contact_last_name.trim(),
       contact_phone: form.contact_phone.trim(),
@@ -338,6 +344,29 @@ const PatientFormWorkspace = () => {
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Age *</label>
                     <input type="number" min="0" max="120" name="age" value={form.age} onChange={handleFormChange} className="w-full px-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500" required />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Adresse du patient</label>
+                    <input
+                      name="address"
+                      value={form.address}
+                      onChange={handleFormChange}
+                      className="w-full px-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Adresse"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Etat general du patient</label>
+                    <textarea
+                      name="general_state"
+                      value={form.general_state}
+                      onChange={handleFormChange}
+                      rows="3"
+                      className="w-full px-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Champ libre"
+                    />
+                  </div>
                 </section>
 
                 <section className="p-5 border-b lg:border-b-0 lg:border-r border-gray-200 bg-linear-to-b from-amber-50 to-white space-y-4">
@@ -436,6 +465,8 @@ const PatientFormWorkspace = () => {
                   <div className="text-sm text-emerald-900 border border-emerald-200 bg-emerald-100 rounded-lg px-3 py-3 space-y-2">
                     <p><span className="font-semibold">Patient:</span> {form.first_name || '-'} {form.last_name || ''}</p>
                     <p><span className="font-semibold">Telephone patient:</span> {hasPersonalPhone ? form.phone : 'Non renseigne'}</p>
+                    <p><span className="font-semibold">Adresse:</span> {form.address || 'Non renseignee'}</p>
+                    <p><span className="font-semibold">Etat general:</span> {form.general_state || 'Non renseigne'}</p>
                     {!hasPersonalPhone && (
                       <p>
                         <span className="font-semibold">Contact tiers:</span> {[form.contact_first_name, form.contact_last_name].filter(Boolean).join(' ') || 'Non renseigne'}
