@@ -18,6 +18,7 @@ import PatientDossier from './pages/PatientDossier';
 import Achats from './pages/Achats';
 import Factures from './pages/Factures';
 import Radiographies from './pages/Radiographies';
+import SessionReceipts from './pages/SessionReceipts';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
 import ImportDentalActs from './pages/admin/ImportDentalActs';
@@ -192,6 +193,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Radiographies />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/session-receipts"
+            element={
+              <ProtectedRoute>
+                <SessionReceipts />
               </ProtectedRoute>
             }
           />

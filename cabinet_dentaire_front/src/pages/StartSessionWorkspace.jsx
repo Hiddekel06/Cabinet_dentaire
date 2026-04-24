@@ -144,6 +144,11 @@ const StartSessionWorkspace = () => {
       return;
     }
 
+    if (form.acts.length === 0) {
+      showFeedback('warning', 'Actes manquants', 'Veuillez sélectionner au moins un acte pour générer automatiquement le reçu de séance.');
+      return;
+    }
+
     const currentAppointment = treatment?.nextAppointment || treatment?.next_appointment || null;
     const currentAppointmentDateRaw = currentAppointment?.appointment_date || null;
     const currentAppointmentTimeSpecified = typeof currentAppointment?.appointment_time_specified === 'boolean'
@@ -213,20 +218,15 @@ const StartSessionWorkspace = () => {
         next_appointment_id: newNextAppointmentId,
       });
 
-      let sessionReceiptId = null;
-      if (form.acts.length > 0) {
-        await patientTreatmentAPI.addActs(treatment.id, form.acts);
+      await patientTreatmentAPI.addActs(treatment.id, form.acts);
 
-        const receiptRes = await sessionReceiptAPI.create({
-          medical_record_id: medicalRecordRes?.data?.id,
-          acts: form.acts,
-        });
-        sessionReceiptId = receiptRes?.data?.id || null;
-      }
+      const receiptRes = await sessionReceiptAPI.create({
+        medical_record_id: medicalRecordRes?.data?.id,
+        acts: form.acts,
+      });
+      const sessionReceiptId = receiptRes?.data?.id || null;
 
-      const successMessage = sessionReceiptId
-        ? 'La séance a été ajoutée avec succès. Vous pouvez télécharger le reçu de séance.'
-        : 'La séance a été ajoutée avec succès. Aucun acte sélectionné, donc aucun reçu de séance généré.';
+      const successMessage = 'La séance a été ajoutée avec succès. Vous pouvez télécharger le reçu de séance.';
 
       showFeedback('success', 'Séance enregistrée', successMessage, true, sessionReceiptId);
     } catch (error) {
@@ -337,7 +337,7 @@ const StartSessionWorkspace = () => {
             </section>
 
             <section className="p-5 border-b lg:border-b-0 lg:border-r border-gray-200 bg-linear-to-b from-amber-50 to-white space-y-3">
-              <h2 className="text-sm font-bold text-amber-900">2. Actes à ajouter (optionnel)</h2>
+              <h2 className="text-sm font-bold text-amber-900">2. Actes réalisés (obligatoire)</h2>
               <input
                 type="text"
                 value={sessionActsSearchTerm}
@@ -460,7 +460,7 @@ const StartSessionWorkspace = () => {
             </button>
             <button
               type="submit"
-              disabled={loading || isLocked}
+              disabled={loading || isLocked || form.acts.length === 0}
               className="px-6 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {loading ? 'Enregistrement...' : 'Enregistrer séance'}

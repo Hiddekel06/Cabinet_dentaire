@@ -132,8 +132,10 @@ export const sessionReceiptAPI = {
   getById: (id) =>
     api.get(`/api/session-receipts/${id}`),
 
-  generate: (id) =>
-    api.post(`/api/session-receipts/${id}/generate`, {}, { responseType: 'blob' }),
+  generate: (id) => {
+    clearCache('session-receipts');
+    return api.post(`/api/session-receipts/${id}/generate`, {}, { responseType: 'blob' });
+  },
 };
 
 // Endpoints pour les suggestions de médicaments

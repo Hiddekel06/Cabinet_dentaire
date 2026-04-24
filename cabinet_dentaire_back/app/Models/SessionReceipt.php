@@ -42,4 +42,9 @@ class SessionReceipt extends Model
     {
         return $this->hasMany(SessionReceiptItem::class);
     }
+
+    public function events()
+    {
+        return $this->hasMany(SessionReceiptEvent::class);
+    }
 }

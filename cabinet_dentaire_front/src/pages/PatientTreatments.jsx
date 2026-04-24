@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { patientAPI, patientTreatmentAPI, dentalActAPI, sessionReceiptAPI } from '../services/api';
+import { patientAPI, patientTreatmentAPI, dentalActAPI, medicalRecordAPI, sessionReceiptAPI } from '../services/api';
 
 const PatientTreatments = () => {
   const navigate = useNavigate();
@@ -21,8 +21,12 @@ const PatientTreatments = () => {
   // État pour les reçus de séance
   const [sessionReceiptsByPatient, setSessionReceiptsByPatient] = useState({});
   const [loadingReceiptsByPatient, setLoadingReceiptsByPatient] = useState({});
+  const [medicalRecordsByTreatment, setMedicalRecordsByTreatment] = useState({});
+  const [loadingRecordsByTreatment, setLoadingRecordsByTreatment] = useState({});
+  const [generatingReceiptByRecordId, setGeneratingReceiptByRecordId] = useState({});
   const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
   const [loadedReceiptPatientIds] = useState(new Set());
+  const [loadedMedicalRecordTreatmentIds] = useState(new Set());
 
   const hasLoadedRef = useRef(false);
   
@@ -31,6 +35,10 @@ const PatientTreatments = () => {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
+  // Onglet sélectionné : 'en_cours' ou 'termines'
+  const [tab, setTab] = useState('en_cours');
+  const [expandedTreatmentId, setExpandedTreatmentId] = useState(null);
+  const [showRecentPatients, setShowRecentPatients] = useState(false);
 
   useEffect(() => {
     if (hasLoadedRef.current) return;
@@ -49,6 +57,9 @@ const PatientTreatments = () => {
       const expandedTreatment = patientTreatments.find(pt => pt.id === expandedTreatmentId);
       if (expandedTreatment?.patient_id) {
         loadSessionReceiptsForPatient(expandedTreatment.patient_id);
+      }
+      if (expandedTreatment?.id) {
+        loadMedicalRecordsForTreatment(expandedTreatment.id);
       }
     }
   }, [expandedTreatmentId, patientTreatments]);
@@ -199,8 +210,8 @@ const PatientTreatments = () => {
     }
   };
 
-  const loadSessionReceiptsForPatient = async (patientId) => {
-    if (loadedReceiptPatientIds.has(patientId)) {
+  const loadSessionReceiptsForPatient = async (patientId, forceReload = false) => {
+    if (!forceReload && loadedReceiptPatientIds.has(patientId)) {
       return;
     }
 
@@ -214,6 +225,61 @@ const PatientTreatments = () => {
       setSessionReceiptsByPatient(prev => ({ ...prev, [patientId]: [] }));
     } finally {
       setLoadingReceiptsByPatient(prev => ({ ...prev, [patientId]: false }));
+    }
+  };
+
+  const loadMedicalRecordsForTreatment = async (treatmentId, forceReload = false) => {
+    if (!forceReload && loadedMedicalRecordTreatmentIds.has(treatmentId)) {
+      return;
+    }
+
+    setLoadingRecordsByTreatment(prev => ({ ...prev, [treatmentId]: true }));
+    try {
+      const res = await medicalRecordAPI.getAll({ patient_treatment_id: treatmentId, per_page: 200 });
+      const records = res?.data?.data || res?.data || [];
+      setMedicalRecordsByTreatment(prev => ({ ...prev, [treatmentId]: records }));
+      loadedMedicalRecordTreatmentIds.add(treatmentId);
+    } catch {
+      setMedicalRecordsByTreatment(prev => ({ ...prev, [treatmentId]: [] }));
+    } finally {
+      setLoadingRecordsByTreatment(prev => ({ ...prev, [treatmentId]: false }));
+    }
+  };
+
+  const generateMissingSessionReceipt = async (treatment, medicalRecord) => {
+    const recordId = medicalRecord?.id;
+    if (!recordId) return;
+
+    const actsPayload = (Array.isArray(treatment?.acts) ? treatment.acts : [])
+      .map((act) => ({
+        dental_act_id: Number(act.dental_act_id),
+        quantity: Math.max(1, Number(act.quantity) || 1),
+      }))
+      .filter((act) => Number.isInteger(act.dental_act_id) && act.dental_act_id > 0);
+
+    if (actsPayload.length === 0) {
+      alert('Impossible de générer un reçu: aucun acte n\'est associé à ce traitement.');
+      return;
+    }
+
+    setGeneratingReceiptByRecordId(prev => ({ ...prev, [recordId]: true }));
+    try {
+      const receiptRes = await sessionReceiptAPI.create({
+        medical_record_id: recordId,
+        acts: actsPayload,
+      });
+
+      await loadSessionReceiptsForPatient(treatment.patient_id, true);
+
+      const generatedReceiptId = receiptRes?.data?.id;
+      if (generatedReceiptId && window.confirm('Reçu généré avec succès. Voulez-vous le télécharger maintenant ?')) {
+        await downloadSessionReceipt(generatedReceiptId);
+      }
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Impossible de générer le reçu de séance.';
+      alert(message);
+    } finally {
+      setGeneratingReceiptByRecordId(prev => ({ ...prev, [recordId]: false }));
     }
   };
 
@@ -263,11 +329,6 @@ const PatientTreatments = () => {
     setSortBy('date');
     setSortOrder('desc');
   };
-
-  // Onglet sélectionné : 'en_cours' ou 'termines'
-  const [tab, setTab] = useState('en_cours');
-  const [expandedTreatmentId, setExpandedTreatmentId] = useState(null);
-  const [showRecentPatients, setShowRecentPatients] = useState(false);
 
   // Filtrer et trier selon l'onglet
   const filteredTreatments = patientTreatments
@@ -573,6 +634,56 @@ const PatientTreatments = () => {
                       </div>
                       {expandedTreatmentId === pt.id && (
                         <>
+                          {(() => {
+                            const treatmentRecords = medicalRecordsByTreatment[pt.id] || [];
+                            const receiptIdsByRecord = new Set(
+                              (sessionReceiptsByPatient[pt.patient_id] || [])
+                                .map(receipt => Number(receipt.medical_record_id))
+                                .filter((id) => Number.isInteger(id) && id > 0)
+                            );
+                            const missingReceiptRecords = treatmentRecords.filter(
+                              (record) => !receiptIdsByRecord.has(Number(record.id))
+                            );
+
+                            if (loadingRecordsByTreatment[pt.id] || loadingReceiptsByPatient[pt.patient_id]) {
+                              return (
+                                <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50/40 p-3 text-xs text-gray-600">
+                                  Vérification des séances sans reçu...
+                                </div>
+                              );
+                            }
+
+                            if (missingReceiptRecords.length === 0) {
+                              return null;
+                            }
+
+                            return (
+                              <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50/40 p-3">
+                                <div className="font-semibold text-xs text-amber-800 mb-2">Séances sans reçu</div>
+                                <ul className="text-xs space-y-2">
+                                  {missingReceiptRecords.map((record) => (
+                                    <li key={record.id} className="flex items-center justify-between bg-white rounded p-2 border border-amber-100">
+                                      <div className="flex-1 pr-2">
+                                        <div className="font-medium text-gray-800">
+                                          Séance #{record.id} - {record.date ? new Date(record.date).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                                        </div>
+                                        <div className="text-gray-600">{record.treatment_performed || 'Acte non précisé'}</div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => generateMissingSessionReceipt(pt, record)}
+                                        disabled={!!generatingReceiptByRecordId[record.id]}
+                                        className="ml-2 px-3 py-1 rounded text-[11px] font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                                      >
+                                        {generatingReceiptByRecordId[record.id] ? 'Génération...' : 'Générer reçu'}
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            );
+                          })()}
+
                           {/* Détails avancés */}
                           {Array.isArray(pt.acts) && pt.acts.length > 0 && (
                             <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/40 p-3">

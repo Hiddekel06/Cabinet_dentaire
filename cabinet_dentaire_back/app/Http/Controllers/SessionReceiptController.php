@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\DentalAct;
 use App\Models\MedicalRecord;
 use App\Models\SessionReceipt;
+use App\Models\SessionReceiptEvent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Mpdf\Mpdf;
+use Throwable;
 
 class SessionReceiptController extends Controller
 {
@@ -18,6 +20,17 @@ class SessionReceiptController extends Controller
 
         $query = SessionReceipt::query()
             ->with(['patient:id,first_name,last_name', 'medicalRecord:id,date,patient_treatment_id'])
+            ->withCount([
+                'events as downloads_count' => function ($eventQuery) {
+                    $eventQuery->where('event_type', 'downloaded');
+                },
+            ])
+            ->addSelect([
+                'last_downloaded_at' => SessionReceiptEvent::query()
+                    ->selectRaw('MAX(created_at)')
+                    ->whereColumn('session_receipt_id', 'session_receipts.id')
+                    ->where('event_type', 'downloaded'),
+            ])
             ->latest('issue_date');
 
         if ($request->filled('patient_id')) {
@@ -63,7 +76,7 @@ class SessionReceiptController extends Controller
             ], 422);
         }
 
-        $receipt = DB::transaction(function () use ($validated, $medicalRecord, $acts) {
+        $receipt = DB::transaction(function () use ($validated, $medicalRecord, $acts, $request) {
             $receipt = SessionReceipt::create([
                 'medical_record_id' => $medicalRecord->id,
                 'patient_id' => $medicalRecord->patient_id,
@@ -99,22 +112,62 @@ class SessionReceiptController extends Controller
                 'total_amount' => $total,
             ]);
 
+            $this->logReceiptEvent(
+                $receipt,
+                'created',
+                $request->user()?->id,
+                [
+                    'medical_record_id' => $receipt->medical_record_id,
+                    'patient_treatment_id' => $receipt->patient_treatment_id,
+                ]
+            );
+
             return $receipt;
         });
 
-        $receipt->load(['items.dentalAct', 'patient', 'medicalRecord']);
+        $receipt->load(['items.dentalAct', 'patient', 'medicalRecord'])
+            ->loadCount([
+                'events as downloads_count' => function ($eventQuery) {
+                    $eventQuery->where('event_type', 'downloaded');
+                },
+            ]);
+
+        $receipt->setAttribute(
+            'last_downloaded_at',
+            $receipt->events()->where('event_type', 'downloaded')->max('created_at')
+        );
 
         return response()->json($receipt, 201);
     }
 
     public function show(SessionReceipt $sessionReceipt)
     {
-        $sessionReceipt->load(['items.dentalAct', 'patient', 'medicalRecord', 'patientTreatment']);
+        $sessionReceipt->load([
+            'items.dentalAct',
+            'patient',
+            'medicalRecord',
+            'patientTreatment',
+            'events' => function ($query) {
+                $query->with('user:id,name,email')
+                    ->latest('created_at')
+                    ->limit(30);
+            },
+        ]);
+
+        $sessionReceipt->setAttribute(
+            'downloads_count',
+            $sessionReceipt->events()->where('event_type', 'downloaded')->count()
+        );
+
+        $sessionReceipt->setAttribute(
+            'last_downloaded_at',
+            $sessionReceipt->events()->where('event_type', 'downloaded')->max('created_at')
+        );
 
         return response()->json($sessionReceipt);
     }
 
-    public function generate(SessionReceipt $sessionReceipt)
+    public function generate(Request $request, SessionReceipt $sessionReceipt)
     {
         $sessionReceipt->load(['items.dentalAct', 'patient', 'medicalRecord', 'patientTreatment']);
 
@@ -149,6 +202,16 @@ class SessionReceiptController extends Controller
 
         $pdfBinary = $mpdf->Output('', 'S');
 
+        $this->logReceiptEvent(
+            $sessionReceipt,
+            'downloaded',
+            $request->user()?->id,
+            [
+                'ip' => $request->ip(),
+                'user_agent' => (string) $request->userAgent(),
+            ]
+        );
+
         return response($pdfBinary, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="recu_seance_' . $sessionReceipt->receipt_number . '.pdf"',
@@ -176,5 +239,19 @@ class SessionReceiptController extends Controller
         $mime = mime_content_type($path) ?: 'image/png';
 
         return 'data:' . $mime . ';base64,' . base64_encode($content);
+    }
+
+    private function logReceiptEvent(SessionReceipt $receipt, string $eventType, ?int $userId = null, array $metadata = []): void
+    {
+        try {
+            SessionReceiptEvent::create([
+                'session_receipt_id' => $receipt->id,
+                'user_id' => $userId,
+                'event_type' => $eventType,
+                'metadata' => $metadata,
+            ]);
+        } catch (Throwable) {
+            // Avoid breaking receipt generation/download when event logging fails.
+        }
     }
 }
