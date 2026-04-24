@@ -49,6 +49,8 @@ const defaultStats = {
     receivable_amount: 0,
     invoices_paid: 0,
     invoices_pending: 0,
+    session_receipts_paid: 0,
+    session_receipts_pending: 0,
     new_patients: 0,
     appointments_total: 0,
     appointments_cancelled: 0,
@@ -63,10 +65,16 @@ const defaultStats = {
     net_result_percent: 0,
     invoices_paid_percent: 0,
     invoices_pending_percent: 0,
+    session_receipts_paid_percent: 0,
+    session_receipts_pending_percent: 0,
     new_patients_percent: 0,
     appointments_total_percent: 0,
     appointments_cancelled_percent: 0,
   },
+  receipt_status: [
+    { key: "paid", label: "Reçus payés", value: 0, color: "emerald" },
+    { key: "pending", label: "Reçus non payés", value: 0, color: "amber" },
+  ],
   top_acts: [],
   appointments_by_day: [],
   finance_by_month: [],
@@ -104,6 +112,7 @@ const Statistics = () => {
   const kpiData = stats.kpis || defaultStats.kpis;
   const financeByMonth = Array.isArray(stats.finance_by_month) ? stats.finance_by_month : [];
   const invoiceStatus = Array.isArray(stats.invoice_status) ? stats.invoice_status : [];
+  const receiptStatus = Array.isArray(stats.receipt_status) ? stats.receipt_status : [];
   const topActs = Array.isArray(stats.top_acts) ? stats.top_acts : [];
   const appointmentsByDay = Array.isArray(stats.appointments_by_day) ? stats.appointments_by_day : [];
   const trends = stats.trends || defaultStats.trends;
@@ -114,6 +123,8 @@ const Statistics = () => {
   const receivableAmount = Number(kpiData.receivable_amount || 0);
   const paidInvoices = Number(kpiData.invoices_paid || 0);
   const pendingInvoices = Number(kpiData.invoices_pending || 0);
+  const paidReceipts = Number(kpiData.session_receipts_paid || 0);
+  const pendingReceipts = Number(kpiData.session_receipts_pending || 0);
 
   const kpis = [
     {
@@ -148,6 +159,20 @@ const Statistics = () => {
       label: "Factures non traitées",
       value: String(pendingInvoices),
       trend: formatTrend(trends.invoices_pending_percent),
+      color: "amber",
+      icon: DocumentTextIcon,
+    },
+    {
+      label: "Reçus payés",
+      value: String(paidReceipts),
+      trend: formatTrend(trends.session_receipts_paid_percent),
+      color: "emerald",
+      icon: DocumentCheckIcon,
+    },
+    {
+      label: "Reçus non payés",
+      value: String(pendingReceipts),
+      trend: formatTrend(trends.session_receipts_pending_percent),
       color: "amber",
       icon: DocumentTextIcon,
     },
@@ -285,6 +310,7 @@ const Statistics = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Recettes vs dépenses (6 mois)</h2>
+              <p className="text-xs text-gray-500 mb-3">Les recettes incluent les factures encaissées et les reçus de séance payés.</p>
               <div className="flex items-end gap-2 h-56">
                 {financeByMonth.map((m) => (
                   <div key={m.month} className="flex-1 flex flex-col items-center gap-2">
@@ -317,10 +343,36 @@ const Statistics = () => {
             </div>
 
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">État des factures</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4">État des paiements</h2>
               <div className="space-y-4">
                 {invoiceStatus.map((s) => {
                   const total = paidInvoices + pendingInvoices || 1;
+                  const percent = Math.round((Number(s.value || 0) / total) * 100);
+
+                  return (
+                    <div key={s.key || s.label}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="font-medium text-gray-700">{s.label}</span>
+                        <span className="text-gray-900 font-semibold">
+                          {s.value} ({percent}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full">
+                        <div
+                          className={`h-2 rounded-full bg-gradient-to-r ${
+                            s.color === "emerald"
+                              ? "from-emerald-500 to-emerald-300"
+                              : "from-amber-500 to-amber-300"
+                          }`}
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {receiptStatus.map((s) => {
+                  const total = paidReceipts + pendingReceipts || 1;
                   const percent = Math.round((Number(s.value || 0) / total) * 100);
 
                   return (

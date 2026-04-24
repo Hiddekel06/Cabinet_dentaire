@@ -37,6 +37,7 @@ const SessionReceipts = () => {
   const [filters, setFilters] = useState({
     patient_id: '',
     search: '',
+    status: '',
   });
 
   const loadPatients = async () => {
@@ -60,6 +61,9 @@ const SessionReceipts = () => {
       if (filters.patient_id) {
         params.patient_id = filters.patient_id;
       }
+      if (filters.status) {
+        params.status = filters.status;
+      }
 
       const res = await sessionReceiptAPI.getAll(params);
       setReceipts(res.data?.data || []);
@@ -79,7 +83,7 @@ const SessionReceipts = () => {
 
   useEffect(() => {
     loadReceipts();
-  }, [page, filters.patient_id]);
+  }, [page, filters.patient_id, filters.status]);
 
   const filteredReceipts = useMemo(() => {
     const term = filters.search.trim().toLowerCase();
@@ -161,12 +165,25 @@ const SessionReceipts = () => {
               ))}
             </select>
 
+            <select
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={filters.status}
+              onChange={(e) => {
+                setPage(1);
+                setFilters((prev) => ({ ...prev, status: e.target.value }));
+              }}
+            >
+              <option value="">Tous les statuts</option>
+              <option value="pending">Non payé</option>
+              <option value="paid">Payé</option>
+            </select>
+
             <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => {
                   setPage(1);
-                  setFilters({ patient_id: '', search: '' });
+                  setFilters({ patient_id: '', search: '', status: '' });
                 }}
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-gray-50"
               >
@@ -194,6 +211,7 @@ const SessionReceipts = () => {
                     <th className="py-2 pr-3">Traitement</th>
                     <th className="py-2 pr-3">Séance</th>
                     <th className="py-2 pr-3">Total</th>
+                    <th className="py-2 pr-3">Statut</th>
                     <th className="py-2 pr-3">Téléchargements</th>
                     <th className="py-2 pr-3">Dernier téléchargement</th>
                     <th className="py-2 text-right">Actions</th>
@@ -208,6 +226,11 @@ const SessionReceipts = () => {
                       <td className="py-2 pr-3">{receipt.patient_treatment_id ? `#${receipt.patient_treatment_id}` : '-'}</td>
                       <td className="py-2 pr-3">#{receipt.medical_record_id}</td>
                       <td className="py-2 pr-3">{Number(receipt.total_amount || 0).toLocaleString('fr-FR')} FCFA</td>
+                      <td className="py-2 pr-3">
+                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${receipt.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {receipt.status === 'paid' ? 'Payé' : 'Non payé'}
+                        </span>
+                      </td>
                       <td className="py-2 pr-3">{Number(receipt.downloads_count || 0)}</td>
                       <td className="py-2 pr-3">{formatDateTime(receipt.last_downloaded_at)}</td>
                       <td className="py-2 text-right space-x-2">
@@ -219,6 +242,23 @@ const SessionReceipts = () => {
                         >
                           {downloadingReceiptId === receipt.id ? 'Téléchargement...' : 'Télécharger'}
                         </button>
+                        {receipt.status !== 'paid' && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm('Marquer ce reçu comme payé ?')) return;
+                              try {
+                                const res = await sessionReceiptAPI.markAsPaid(receipt.id);
+                                setReceipts((prev) => prev.map((item) => (item.id === receipt.id ? { ...item, ...res.data } : item)));
+                              } catch {
+                                alert('Impossible de marquer le reçu comme payé.');
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          >
+                            Marquer payé
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => navigate(`/patients/${receipt.patient_id}/dossier`)}

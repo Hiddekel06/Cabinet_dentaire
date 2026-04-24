@@ -45,6 +45,10 @@ class SessionReceiptController extends Controller
             $query->where('medical_record_id', $request->integer('medical_record_id'));
         }
 
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
         return response()->json($query->paginate($perPage));
     }
 
@@ -84,6 +88,8 @@ class SessionReceiptController extends Controller
                 'receipt_number' => 'TMP-' . uniqid('', true),
                 'issue_date' => now()->toDateString(),
                 'total_amount' => 0,
+                'status' => 'pending',
+                'paid_at' => null,
             ]);
 
             $total = 0;
@@ -216,6 +222,53 @@ class SessionReceiptController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="recu_seance_' . $sessionReceipt->receipt_number . '.pdf"',
         ]);
+    }
+
+    public function markAsPaid(Request $request, SessionReceipt $sessionReceipt)
+    {
+        if ($sessionReceipt->status === 'paid') {
+            $sessionReceipt->load(['items.dentalAct', 'patient', 'medicalRecord', 'patientTreatment']);
+            return response()->json($sessionReceipt);
+        }
+
+        $sessionReceipt->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+
+        $this->logReceiptEvent(
+            $sessionReceipt,
+            'paid',
+            $request->user()?->id,
+            [
+                'ip' => $request->ip(),
+                'user_agent' => (string) $request->userAgent(),
+            ]
+        );
+
+        $sessionReceipt->load([
+            'items.dentalAct',
+            'patient',
+            'medicalRecord',
+            'patientTreatment',
+            'events' => function ($query) {
+                $query->with('user:id,name,email')
+                    ->latest('created_at')
+                    ->limit(30);
+            },
+        ]);
+
+        $sessionReceipt->setAttribute(
+            'downloads_count',
+            $sessionReceipt->events()->where('event_type', 'downloaded')->count()
+        );
+
+        $sessionReceipt->setAttribute(
+            'last_downloaded_at',
+            $sessionReceipt->events()->where('event_type', 'downloaded')->max('created_at')
+        );
+
+        return response()->json($sessionReceipt);
     }
 
     private function normalizeCabinetName(string $name): string

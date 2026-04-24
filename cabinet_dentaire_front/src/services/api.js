@@ -136,6 +136,11 @@ export const sessionReceiptAPI = {
     clearCache('session-receipts');
     return api.post(`/api/session-receipts/${id}/generate`, {}, { responseType: 'blob' });
   },
+
+  markAsPaid: (id) => {
+    clearCache('session-receipts');
+    return api.post(`/api/session-receipts/${id}/mark-paid`);
+  },
 };
 
 // Endpoints pour les suggestions de médicaments

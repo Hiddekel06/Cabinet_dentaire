@@ -54,6 +54,10 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'cabinet_address' => env('CABINET_ADDRESS', 'parcelles'),
+
+    'cabinet_phone' => env('CABINET_PHONE', '+221 721 98 33'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

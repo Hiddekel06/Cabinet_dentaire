@@ -64,6 +64,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('session-receipts', [SessionReceiptController::class, 'store']);
     Route::get('session-receipts/{sessionReceipt}', [SessionReceiptController::class, 'show']);
     Route::post('session-receipts/{sessionReceipt}/generate', [SessionReceiptController::class, 'generate']);
+    Route::post('session-receipts/{sessionReceipt}/mark-paid', [SessionReceiptController::class, 'markAsPaid']);
 
     // Gestion des achats (produits)
     Route::get('products/statistics', [ProductController::class, 'statistics']);

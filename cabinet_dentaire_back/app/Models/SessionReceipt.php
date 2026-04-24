@@ -16,10 +16,13 @@ class SessionReceipt extends Model
         'receipt_number',
         'issue_date',
         'total_amount',
+        'status',
+        'paid_at',
     ];
 
     protected $casts = [
         'issue_date' => 'date',
+        'paid_at' => 'datetime',
         'total_amount' => 'decimal:2',
     ];
 

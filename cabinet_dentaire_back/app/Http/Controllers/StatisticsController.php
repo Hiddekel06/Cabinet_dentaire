@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Patient;
 use App\Models\Product;
+use App\Models\SessionReceipt;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -50,6 +51,29 @@ class StatisticsController extends Controller
                 ->where('status', '!=', 'cancelled')
                 ->sum(DB::raw('GREATEST(total_amount - paid_amount, 0)'));
 
+            $sessionReceiptsPaid = (float) SessionReceipt::query()
+                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->where('status', 'paid')
+                ->sum('total_amount');
+
+            $sessionReceiptsPending = (float) SessionReceipt::query()
+                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->where('status', 'pending')
+                ->sum('total_amount');
+
+            $prevSessionReceiptsPaid = (float) SessionReceipt::query()
+                ->whereBetween('issue_date', [$prevStartDate->toDateString(), $prevEndDate->toDateString()])
+                ->where('status', 'paid')
+                ->sum('total_amount');
+
+            $prevSessionReceiptsPending = (float) SessionReceipt::query()
+                ->whereBetween('issue_date', [$prevStartDate->toDateString(), $prevEndDate->toDateString()])
+                ->where('status', 'pending')
+                ->sum('total_amount');
+
+            $revenueCollected += $sessionReceiptsPaid;
+            $receivableAmount += $sessionReceiptsPending;
+
             $invoicesPaid = Invoice::query()
                 ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
                 ->where('status', 'paid')
@@ -66,6 +90,26 @@ class StatisticsController extends Controller
                 ->count();
 
             $prevInvoicesPending = Invoice::query()
+                ->whereBetween('issue_date', [$prevStartDate->toDateString(), $prevEndDate->toDateString()])
+                ->where('status', 'pending')
+                ->count();
+
+            $sessionReceiptsPaidCount = SessionReceipt::query()
+                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->where('status', 'paid')
+                ->count();
+
+            $sessionReceiptsPendingCount = SessionReceipt::query()
+                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->where('status', 'pending')
+                ->count();
+
+            $prevSessionReceiptsPaidCount = SessionReceipt::query()
+                ->whereBetween('issue_date', [$prevStartDate->toDateString(), $prevEndDate->toDateString()])
+                ->where('status', 'paid')
+                ->count();
+
+            $prevSessionReceiptsPendingCount = SessionReceipt::query()
                 ->whereBetween('issue_date', [$prevStartDate->toDateString(), $prevEndDate->toDateString()])
                 ->where('status', 'pending')
                 ->count();
@@ -118,6 +162,8 @@ class StatisticsController extends Controller
                     'receivable_amount' => $receivableAmount,
                     'invoices_paid' => $invoicesPaid,
                     'invoices_pending' => $invoicesPending,
+                    'session_receipts_paid' => $sessionReceiptsPaidCount,
+                    'session_receipts_pending' => $sessionReceiptsPendingCount,
                     'new_patients' => $newPatients,
                     'appointments_total' => $appointmentsTotal,
                     'appointments_cancelled' => $appointmentsCancelled,
@@ -128,6 +174,8 @@ class StatisticsController extends Controller
                     'net_result_percent' => $this->calculatePercentChange($netResult, $prevNet),
                     'invoices_paid_percent' => $this->calculatePercentChange($invoicesPaid, $prevInvoicesPaid),
                     'invoices_pending_percent' => $this->calculatePercentChange($invoicesPending, $prevInvoicesPending),
+                    'session_receipts_paid_percent' => $this->calculatePercentChange($sessionReceiptsPaidCount, $prevSessionReceiptsPaidCount),
+                    'session_receipts_pending_percent' => $this->calculatePercentChange($sessionReceiptsPendingCount, $prevSessionReceiptsPendingCount),
                     'new_patients_percent' => $this->calculatePercentChange($newPatients, $prevNewPatients),
                     'appointments_total_percent' => $this->calculatePercentChange($appointmentsTotal, $prevAppointmentsTotal),
                     'appointments_cancelled_percent' => $this->calculatePercentChange($appointmentsCancelled, $prevAppointmentsCancelled),
@@ -135,6 +183,10 @@ class StatisticsController extends Controller
                 'invoice_status' => [
                     ['key' => 'paid', 'label' => 'Payees', 'value' => $invoicesPaid, 'color' => 'emerald'],
                     ['key' => 'pending', 'label' => 'Non traitees', 'value' => $invoicesPending, 'color' => 'amber'],
+                ],
+                'receipt_status' => [
+                    ['key' => 'paid', 'label' => 'Reçus payés', 'value' => $sessionReceiptsPaidCount, 'color' => 'emerald'],
+                    ['key' => 'pending', 'label' => 'Reçus non payés', 'value' => $sessionReceiptsPendingCount, 'color' => 'amber'],
                 ],
                 'top_acts' => $this->buildTopActsSeries($startDate, $endDate),
                 'appointments_by_day' => $this->buildAppointmentsByDaySeries(),
@@ -175,9 +227,16 @@ class StatisticsController extends Controller
 
     private function sumRevenue(Carbon $from, Carbon $to): float
     {
-        return (float) Invoice::query()
+        $invoiceRevenue = (float) Invoice::query()
             ->whereBetween('issue_date', [$from->toDateString(), $to->toDateString()])
             ->sum('paid_amount');
+
+        $receiptRevenue = (float) SessionReceipt::query()
+            ->whereBetween('issue_date', [$from->toDateString(), $to->toDateString()])
+            ->where('status', 'paid')
+            ->sum('total_amount');
+
+        return $invoiceRevenue + $receiptRevenue;
     }
 
     private function sumExpenses(Carbon $from, Carbon $to): float
