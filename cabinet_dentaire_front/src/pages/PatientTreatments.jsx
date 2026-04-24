@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { patientAPI, patientTreatmentAPI, dentalActAPI } from '../services/api';
+import { patientAPI, patientTreatmentAPI, dentalActAPI, sessionReceiptAPI } from '../services/api';
 
 const PatientTreatments = () => {
   const navigate = useNavigate();
@@ -17,6 +17,12 @@ const PatientTreatments = () => {
   const [auditLogsByTreatment, setAuditLogsByTreatment] = useState({});
   const [openAuditByTreatment, setOpenAuditByTreatment] = useState({});
   const [loadingAuditByTreatment, setLoadingAuditByTreatment] = useState({});
+
+  // État pour les reçus de séance
+  const [sessionReceiptsByPatient, setSessionReceiptsByPatient] = useState({});
+  const [loadingReceiptsByPatient, setLoadingReceiptsByPatient] = useState({});
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
+  const [loadedReceiptPatientIds] = useState(new Set());
 
   const hasLoadedRef = useRef(false);
   
@@ -36,6 +42,16 @@ const PatientTreatments = () => {
       setDentalActs(res.data.data || res.data || []);
     }).catch(() => setDentalActs([]));
   }, []);
+
+  // Charger les reçus quand un traitement est étendu
+  useEffect(() => {
+    if (expandedTreatmentId) {
+      const expandedTreatment = patientTreatments.find(pt => pt.id === expandedTreatmentId);
+      if (expandedTreatment?.patient_id) {
+        loadSessionReceiptsForPatient(expandedTreatment.patient_id);
+      }
+    }
+  }, [expandedTreatmentId, patientTreatments]);
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -180,6 +196,46 @@ const PatientTreatments = () => {
       setAuditLogsByTreatment(prev => ({ ...prev, [treatmentId]: [] }));
     } finally {
       setLoadingAuditByTreatment(prev => ({ ...prev, [treatmentId]: false }));
+    }
+  };
+
+  const loadSessionReceiptsForPatient = async (patientId) => {
+    if (loadedReceiptPatientIds.has(patientId)) {
+      return;
+    }
+
+    setLoadingReceiptsByPatient(prev => ({ ...prev, [patientId]: true }));
+    try {
+      const res = await sessionReceiptAPI.getAll({ patient_id: patientId, per_page: 200 });
+      const receipts = res?.data?.data || res?.data || [];
+      setSessionReceiptsByPatient(prev => ({ ...prev, [patientId]: receipts }));
+      loadedReceiptPatientIds.add(patientId);
+    } catch {
+      setSessionReceiptsByPatient(prev => ({ ...prev, [patientId]: [] }));
+    } finally {
+      setLoadingReceiptsByPatient(prev => ({ ...prev, [patientId]: false }));
+    }
+  };
+
+  const downloadSessionReceipt = async (receiptId) => {
+    if (downloadingReceiptId) return;
+
+    setDownloadingReceiptId(receiptId);
+    try {
+      const res = await sessionReceiptAPI.generate(receiptId);
+      const url = window.URL.createObjectURL(res.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `recu-seance-${receiptId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur téléchargement reçu:', error);
+      alert('Impossible de télécharger le reçu');
+    } finally {
+      setDownloadingReceiptId(null);
     }
   };
 
@@ -586,6 +642,36 @@ const PatientTreatments = () => {
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-sky-100 text-sky-800 font-semibold">
                                   Facture en cours (brouillon): {Number(pt.invoice_preview.total_amount || 0).toFixed(2)} €
                                 </span>
+                              )}
+                            </div>
+                          )}
+                          {/* Section reçus de séance */}
+                          {(sessionReceiptsByPatient[pt.patient_id]?.length || 0) > 0 && (
+                            <div className="mt-3 rounded-lg border border-green-100 bg-green-50/40 p-3">
+                              <div className="font-semibold text-xs text-green-700 mb-2">Reçus de séance</div>
+                              {loadingReceiptsByPatient[pt.patient_id] ? (
+                                <div className="text-xs text-gray-500">Chargement reçus...</div>
+                              ) : (
+                                <ul className="text-xs space-y-2">
+                                  {sessionReceiptsByPatient[pt.patient_id].map((receipt) => (
+                                    <li key={receipt.id} className="flex items-center justify-between bg-white rounded p-2 border border-green-100">
+                                      <div className="flex-1">
+                                        <div className="font-medium text-gray-800">{receipt.receipt_number}</div>
+                                        <div className="text-gray-600">
+                                          {new Date(receipt.issue_date).toLocaleDateString('fr-FR')} • {Number(receipt.total_amount).toLocaleString('fr-FR')} FCFA
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => downloadSessionReceipt(receipt.id)}
+                                        disabled={downloadingReceiptId === receipt.id}
+                                        className="ml-2 px-3 py-1 rounded text-[11px] font-semibold text-green-700 bg-green-100 hover:bg-green-200 disabled:opacity-50 transition-colors"
+                                      >
+                                        {downloadingReceiptId === receipt.id ? 'Téléchargement...' : 'Télécharger'}
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
                               )}
                             </div>
                           )}

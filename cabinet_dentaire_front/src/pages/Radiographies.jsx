@@ -16,8 +16,10 @@ const getPatientName = (patient) => {
 
 const buildPublicFileUrl = (filePath) => {
   if (!filePath) return '#';
-  const base = (import.meta.env.VITE_API_URL || 'http://localhost:8088').replace(/\/+$/, '').replace(/\/api$/, '');
-  return `${base}/storage/${filePath}`;
+  const rawBase = (import.meta.env.VITE_API_URL || 'http://localhost:8088/api').replace(/\/+$/, '');
+  const base = rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`;
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  return `${base}/radiographies/file/${encodedPath}`;
 };
 
 const Radiographies = () => {

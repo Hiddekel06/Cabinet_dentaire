@@ -85,6 +85,27 @@ const ImportDentalActs = () => {
     }
   };
 
+  const handleEditTarif = async (act) => {
+    const currentTarif = Number(act.tarif || 0);
+    const nextTarifRaw = prompt(`Nouveau tarif pour ${act.code} - ${act.name}`, String(currentTarif));
+    if (nextTarifRaw === null) return;
+
+    const nextTarif = Number(nextTarifRaw);
+    if (!Number.isFinite(nextTarif) || nextTarif < 0) {
+      alert('Tarif invalide. Veuillez saisir un nombre positif.');
+      return;
+    }
+
+    try {
+      await api.patch(`/api/dental-acts/${act.id}`, { tarif: nextTarif });
+      await loadDentalActs();
+      alert('Tarif mis à jour avec succès.');
+    } catch (err) {
+      console.error('Erreur mise à jour tarif:', err);
+      alert(err.response?.data?.message || 'Impossible de mettre à jour le tarif.');
+    }
+  };
+
   return (
     <Layout>
       <div className="p-6 max-w-6xl mx-auto">
@@ -207,6 +228,7 @@ const ImportDentalActs = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sous-catégorie</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarif Level</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarif</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -219,6 +241,14 @@ const ImportDentalActs = () => {
                       <td className="px-4 py-3 text-sm text-gray-600">{act.tarif_level || '-'}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">
                         {act.tarif > 0 ? `${act.tarif.toLocaleString()} FCFA` : 'Sur devis'}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <button
+                          onClick={() => handleEditTarif(act)}
+                          className="px-3 py-1.5 text-xs rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100"
+                        >
+                          Modifier tarif
+                        </button>
                       </td>
                     </tr>
                   ))}

@@ -116,6 +116,26 @@ export const invoiceAPI = {
     api.post(`/api/invoices/${id}/generate`, {}, { responseType: 'blob' }),
 };
 
+// Endpoints pour les recus de seance (distincts des factures finales)
+export const sessionReceiptAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `session-receipts:${query}`;
+    return fetchWithCache(cacheKey, () => api.get(`/api/session-receipts?${query}`));
+  },
+
+  create: (data) => {
+    clearCache('session-receipts');
+    return api.post('/api/session-receipts', data);
+  },
+
+  getById: (id) =>
+    api.get(`/api/session-receipts/${id}`),
+
+  generate: (id) =>
+    api.post(`/api/session-receipts/${id}/generate`, {}, { responseType: 'blob' }),
+};
+
 // Endpoints pour les suggestions de médicaments
 export const medicationAPI = {
   suggestions: (query = '') =>

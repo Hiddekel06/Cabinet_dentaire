@@ -14,6 +14,8 @@ class SessionReceiptController extends Controller
 {
     public function index(Request $request)
     {
+        $perPage = max(1, min(200, (int) $request->input('per_page', 15)));
+
         $query = SessionReceipt::query()
             ->with(['patient:id,first_name,last_name', 'medicalRecord:id,date,patient_treatment_id'])
             ->latest('issue_date');
@@ -30,7 +32,7 @@ class SessionReceiptController extends Controller
             $query->where('medical_record_id', $request->integer('medical_record_id'));
         }
 
-        return response()->json($query->paginate(15));
+        return response()->json($query->paginate($perPage));
     }
 
     public function store(Request $request)

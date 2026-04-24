@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { medicalCertificateAPI, medicalRecordAPI, patientAPI, patientTreatmentAPI, radiographyAPI } from '../services/api';
+import { medicalCertificateAPI, medicalRecordAPI, patientAPI, patientTreatmentAPI, radiographyAPI, sessionReceiptAPI } from '../services/api';
 
 // Icônes
 const BackIcon = () => (
@@ -53,6 +53,12 @@ const CertificateIcon = () => (
   </svg>
 );
 
+const ReceiptIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6M8 4h8a2 2 0 012 2v14l-2-1-2 1-2-1-2 1-2-1-2 1V6a2 2 0 012-2z" />
+  </svg>
+);
+
 const RadiographyIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" />
@@ -62,8 +68,10 @@ const RadiographyIcon = () => (
 
 const buildPublicFileUrl = (filePath) => {
   if (!filePath) return '#';
-  const base = (import.meta.env.VITE_API_URL || 'http://localhost:8088').replace(/\/+$/, '').replace(/\/api$/, '');
-  return `${base}/storage/${filePath}`;
+  const rawBase = (import.meta.env.VITE_API_URL || 'http://localhost:8088/api').replace(/\/+$/, '');
+  const base = rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`;
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  return `${base}/radiographies/file/${encodedPath}`;
 };
 
 const PatientDossier = () => {
@@ -75,29 +83,34 @@ const PatientDossier = () => {
   const [certificates, setCertificates] = useState([]);
   const [patientTreatments, setPatientTreatments] = useState([]);
   const [radiographies, setRadiographies] = useState([]);
+  const [sessionReceipts, setSessionReceipts] = useState([]);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [patientRes, recordsRes, certificatesRes, treatmentsRes, radiographiesRes] = await Promise.all([
+        const [patientRes, recordsRes, certificatesRes, treatmentsRes, radiographiesRes, receiptsRes] = await Promise.all([
           patientAPI.getById(id),
           medicalRecordAPI.getByPatient(id),
           medicalCertificateAPI.getByPatient(id),
           patientTreatmentAPI.getAll({ patient_id: id }),
-          radiographyAPI.getAll({ patient_id: id })
+          radiographyAPI.getAll({ patient_id: id }),
+          sessionReceiptAPI.getAll({ patient_id: id, per_page: 200 })
         ]);
         setPatient(patientRes.data.data || patientRes.data || null);
         setRecords(recordsRes.data.data || recordsRes.data || []);
         setCertificates(certificatesRes.data.data || certificatesRes.data || []);
         setPatientTreatments(treatmentsRes.data.data || treatmentsRes.data || []);
         setRadiographies(radiographiesRes.data.data || radiographiesRes.data || []);
+        setSessionReceipts(receiptsRes.data.data || receiptsRes.data || []);
       } catch {
         setPatient(null);
         setRecords([]);
         setCertificates([]);
         setPatientTreatments([]);
         setRadiographies([]);
+        setSessionReceipts([]);
       } finally {
         setLoading(false);
       }
@@ -119,6 +132,32 @@ const PatientDossier = () => {
     });
     return acc;
   }, {});
+
+  const receiptByMedicalRecordId = sessionReceipts.reduce((acc, receipt) => {
+    acc[receipt.medical_record_id] = receipt;
+    return acc;
+  }, {});
+
+  const downloadSessionReceipt = async (receiptId) => {
+    if (!receiptId) return;
+
+    setDownloadingReceiptId(receiptId);
+    try {
+      const res = await sessionReceiptAPI.generate(receiptId);
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `recu_seance_${receiptId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Impossible de télécharger le reçu de séance.');
+    } finally {
+      setDownloadingReceiptId(null);
+    }
+  };
 
   // Fonction pour afficher les initiales du patient
   const getInitials = () => {
@@ -346,10 +385,16 @@ const PatientDossier = () => {
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Notes
                       </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Reçu
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {records.map((r) => (
+                      (() => {
+                        const receipt = receiptByMedicalRecordId[r.id];
+                        return (
                       <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {ptNameById[r.patient_treatment_id] || 'Traitement'}
@@ -381,6 +426,92 @@ const PatientDossier = () => {
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
                           {r.notes || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {receipt ? (
+                            <button
+                              type="button"
+                              onClick={() => downloadSessionReceipt(receipt.id)}
+                              disabled={downloadingReceiptId === receipt.id}
+                              className="px-3 py-1.5 text-xs rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                            >
+                              {downloadingReceiptId === receipt.id ? 'Téléchargement...' : 'Télécharger'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">Non généré</span>
+                          )}
+                        </td>
+                      </tr>
+                        );
+                      })()
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Reçus de séance */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <ReceiptIcon />
+              Reçus de séance
+            </h2>
+          </div>
+          <div className="p-6">
+            {sessionReceipts.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <ReceiptIcon />
+                <p className="mt-2">Aucun reçu de séance disponible pour ce patient.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Référence
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Séance
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {sessionReceipts.map((receipt) => (
+                      <tr key={receipt.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {receipt.receipt_number || `REC-${receipt.id}`}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {receipt.issue_date ? new Date(receipt.issue_date).toLocaleDateString('fr-FR') : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          #{receipt.medical_record_id}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {Number(receipt.total_amount || 0).toLocaleString()} FCFA
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          <button
+                            type="button"
+                            onClick={() => downloadSessionReceipt(receipt.id)}
+                            disabled={downloadingReceiptId === receipt.id}
+                            className="px-3 py-1.5 text-xs rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                          >
+                            {downloadingReceiptId === receipt.id ? 'Téléchargement...' : 'Télécharger'}
+                          </button>
                         </td>
                       </tr>
                     ))}

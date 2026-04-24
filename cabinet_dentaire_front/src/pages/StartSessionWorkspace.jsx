@@ -7,6 +7,7 @@ import {
   dentalActAPI,
   medicalRecordAPI,
   patientTreatmentAPI,
+  sessionReceiptAPI,
 } from '../services/api';
 
 const StartSessionWorkspace = () => {
@@ -26,6 +27,7 @@ const StartSessionWorkspace = () => {
     title: '',
     message: '',
     redirectToTreatments: false,
+    receiptId: null,
   });
 
   const [form, setForm] = useState({
@@ -49,13 +51,14 @@ const StartSessionWorkspace = () => {
     return parsed.toLocaleString('fr-FR');
   };
 
-  const showFeedback = (type, title, message, redirectToTreatments = false) => {
+  const showFeedback = (type, title, message, redirectToTreatments = false, receiptId = null) => {
     setFeedback({
       open: true,
       type,
       title,
       message,
       redirectToTreatments,
+      receiptId,
     });
   };
 
@@ -64,6 +67,25 @@ const StartSessionWorkspace = () => {
     setFeedback((prev) => ({ ...prev, open: false }));
     if (shouldRedirect) {
       navigate('/treatments');
+    }
+  };
+
+  const downloadSessionReceipt = async () => {
+    if (!feedback.receiptId) return;
+
+    try {
+      const res = await sessionReceiptAPI.generate(feedback.receiptId);
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `recu_seance_${feedback.receiptId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur generation recu de seance:', error);
+      alert('Impossible de générer le reçu de séance.');
     }
   };
 
@@ -177,7 +199,7 @@ const StartSessionWorkspace = () => {
       const newNextAppointmentId = appointmentRes?.data?.id || null;
       const consumedAppointmentId = treatment.next_appointment_id || null;
 
-      await medicalRecordAPI.create({
+      const medicalRecordRes = await medicalRecordAPI.create({
         patient_id: treatment.patient_id,
         patient_treatment_id: treatment.id,
         appointment_id: consumedAppointmentId || newNextAppointmentId,
@@ -191,11 +213,22 @@ const StartSessionWorkspace = () => {
         next_appointment_id: newNextAppointmentId,
       });
 
+      let sessionReceiptId = null;
       if (form.acts.length > 0) {
         await patientTreatmentAPI.addActs(treatment.id, form.acts);
+
+        const receiptRes = await sessionReceiptAPI.create({
+          medical_record_id: medicalRecordRes?.data?.id,
+          acts: form.acts,
+        });
+        sessionReceiptId = receiptRes?.data?.id || null;
       }
 
-      showFeedback('success', 'Séance enregistrée', 'La séance a été ajoutée avec succès.', true);
+      const successMessage = sessionReceiptId
+        ? 'La séance a été ajoutée avec succès. Vous pouvez télécharger le reçu de séance.'
+        : 'La séance a été ajoutée avec succès. Aucun acte sélectionné, donc aucun reçu de séance généré.';
+
+      showFeedback('success', 'Séance enregistrée', successMessage, true, sessionReceiptId);
     } catch (error) {
       console.error('Erreur ajout séance:', error);
       let message = 'Erreur lors de l\'ajout de la séance.';
@@ -495,6 +528,15 @@ const StartSessionWorkspace = () => {
                 <p className="text-sm text-gray-700 whitespace-pre-line">{feedback.message}</p>
               </div>
               <div className="px-5 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+                {feedback.receiptId && (
+                  <button
+                    type="button"
+                    onClick={downloadSessionReceipt}
+                    className="px-4 py-2 mr-2 text-sm font-semibold text-indigo-700 bg-indigo-100 rounded-lg hover:bg-indigo-200"
+                  >
+                    Télécharger le reçu
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={closeFeedback}

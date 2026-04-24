@@ -81,4 +81,25 @@ class RadiographyController extends Controller
 
         return response()->noContent();
     }
+
+    public function file(string $path)
+    {
+        $normalizedPath = ltrim($path, '/');
+
+        // Autoriser uniquement le dossier radiographies
+        if (!str_starts_with($normalizedPath, 'radiographies/')) {
+            abort(404);
+        }
+
+        if (!Storage::disk('public')->exists($normalizedPath)) {
+            abort(404);
+        }
+
+        // Some hosts inject output before binary responses; clear buffers to avoid corrupting image/PDF bytes.
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        return response()->file(Storage::disk('public')->path($normalizedPath));
+    }
 }

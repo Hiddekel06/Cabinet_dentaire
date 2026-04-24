@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthController::class, 'login']);
 Route::get('/dental-acts', [App\Http\Controllers\DentalActController::class, 'index']);
 Route::get('/dental-acts/search', [App\Http\Controllers\DentalActController::class, 'search']);
+Route::get('/radiographies/file/{path}', [RadiographyController::class, 'file'])->where('path', '.*');
 
 // Routes protégées
 Route::middleware(['auth:sanctum'])->group(function () {
