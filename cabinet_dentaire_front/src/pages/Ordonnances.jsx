@@ -109,11 +109,6 @@ const Ordonnances = () => {
   };
 
   const fetchSuggestions = async (index, query) => {
-    if (!query || query.length < 2) {
-      setSuggestionsByIndex((prev) => ({ ...prev, [index]: [] }));
-      return;
-    }
-
     try {
       const res = await medicationAPI.suggestions(query);
       setSuggestionsByIndex((prev) => ({ ...prev, [index]: res.data || [] }));
@@ -128,7 +123,7 @@ const Ordonnances = () => {
       items[index] = {
         ...items[index],
         medication_id: medication.id,
-        medication_name: medication.name,
+        medication_name: medication.name || medication.medication_name || '',
         frequency: items[index].frequency || medication.default_frequency || '',
         duration: items[index].duration || medication.default_duration || '',
       };
@@ -442,17 +437,23 @@ const Ordonnances = () => {
                             updateItem(index, 'medication_id', '');
                             fetchSuggestions(index, e.target.value);
                           }}
+                          onFocus={() => fetchSuggestions(index, item.medication_name || '')}
                         />
                         {(suggestionsByIndex[index] || []).length > 0 && (
                           <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow max-h-48 overflow-auto">
                             {(suggestionsByIndex[index] || []).map((m) => (
                               <button
-                                key={m.id}
+                                key={`${m.source || 'suggestion'}-${m.id || m.medication_name || m.name}`}
                                 type="button"
                                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
                                 onClick={() => selectSuggestion(index, m)}
                               >
-                                {m.name}
+                                <div className="flex items-center justify-between gap-2">
+                                  <span>{m.name || m.medication_name}</span>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${m.source === 'history' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {m.source === 'history' ? `Historique${m.used_count ? ` · ${m.used_count}` : ''}` : 'Catalogue'}
+                                  </span>
+                                </div>
                               </button>
                             ))}
                           </div>
