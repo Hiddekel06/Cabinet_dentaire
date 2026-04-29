@@ -30,6 +30,9 @@ const StartSessionWorkspace = () => {
     receiptId: null,
   });
 
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [actPrices, setActPrices] = useState({});
+
   const [form, setForm] = useState({
     treatment_performed: '',
     next_action: '',
@@ -127,9 +130,17 @@ const StartSessionWorkspace = () => {
 
   const selectedActsTotal = useMemo(() => {
     return selectedActs.reduce((sum, item) => {
-      return sum + ((Number(item.dentalAct?.tarif || 0)) * (Number(item.quantity || 1)));
+      const price = Number(item.unit_price ?? item.dentalAct?.tarif ?? 0);
+      return sum + (price * (Number(item.quantity || 1)));
     }, 0);
   }, [selectedActs]);
+
+  const totalActsWithCustomPrices = useMemo(() => {
+    return selectedActs.reduce((sum, item) => {
+      const price = Number(actPrices[item.dental_act_id] ?? item.dentalAct?.tarif ?? 0);
+      return sum + (price * (Number(item.quantity || 1)));
+    }, 0);
+  }, [selectedActs, actPrices]);
 
   const handleAddSession = async (e) => {
     e.preventDefault();
@@ -149,6 +160,20 @@ const StartSessionWorkspace = () => {
       return;
     }
 
+    // Initialize prices with current values and show modal
+    const initialPrices = {};
+    form.acts.forEach((selectedAct) => {
+      const act = dentalActs.find((item) => Number(item.id) === Number(selectedAct.dental_act_id));
+      initialPrices[selectedAct.dental_act_id] = Number(selectedAct.unit_price ?? act?.tarif ?? 0);
+    });
+    if (Object.keys(initialPrices).length > 0) {
+      setActPrices((prev) => ({ ...prev, ...initialPrices }));
+    }
+
+    setShowPricingModal(true);
+    return;
+
+    // Perform final validation before creating
     const currentAppointment = treatment?.nextAppointment || treatment?.next_appointment || null;
     const currentAppointmentDateRaw = currentAppointment?.appointment_date || null;
     const currentAppointmentTimeSpecified = typeof currentAppointment?.appointment_time_specified === 'boolean'
@@ -184,7 +209,9 @@ const StartSessionWorkspace = () => {
         return;
       }
     }
+  };
 
+  const confirmSession = async () => {
     setLoading(true);
     try {
       const appointmentDateTime = form.next_appointment_time
@@ -220,15 +247,23 @@ const StartSessionWorkspace = () => {
 
       await patientTreatmentAPI.addActs(treatment.id, form.acts);
 
+      // Use prices from modal
+      const receiptActsPayload = form.acts.map((item) => ({
+        dental_act_id: Number(item.dental_act_id),
+        quantity: Math.max(1, Number(item.quantity) || 1),
+        unit_price: Number(actPrices[item.dental_act_id] ?? item.dentalAct?.tarif ?? item.unit_price ?? 0),
+      }));
+
       const receiptRes = await sessionReceiptAPI.create({
         medical_record_id: medicalRecordRes?.data?.id,
-        acts: form.acts,
+        acts: receiptActsPayload,
       });
       const sessionReceiptId = receiptRes?.data?.id || null;
 
-      const successMessage = 'La séance a été ajoutée avec succès. Vous pouvez télécharger le reçu de séance.';
+      const successMessage = 'Votre reçu est prêt. Vous pouvez le télécharger maintenant.';
 
-      showFeedback('success', 'Séance enregistrée', successMessage, true, sessionReceiptId);
+      setShowPricingModal(false);
+      showFeedback('success', 'Reçu prêt', successMessage, true, sessionReceiptId);
     } catch (error) {
       console.error('Erreur ajout séance:', error);
       let message = 'Erreur lors de l\'ajout de la séance.';
@@ -365,7 +400,7 @@ const StartSessionWorkspace = () => {
                             if (e.target.checked) {
                               setForm((prev) => ({
                                 ...prev,
-                                acts: [...prev.acts, { dental_act_id: act.id, quantity: 1 }],
+                                acts: [...prev.acts, { dental_act_id: act.id, quantity: 1, unit_price: Number(act.tarif || 0) }],
                               }));
                             } else {
                               setForm((prev) => ({
@@ -380,22 +415,41 @@ const StartSessionWorkspace = () => {
                           <p className="text-xs text-gray-500">{Number(act.tarif || 0).toLocaleString()} FCFA</p>
                         </div>
                         {selected && (
-                          <input
-                            type="number"
-                            min="1"
-                            value={selected.quantity}
-                            disabled={isLocked}
-                            onChange={(e) => {
-                              const qty = Math.max(1, parseInt(e.target.value, 10) || 1);
-                              setForm((prev) => ({
-                                ...prev,
-                                acts: prev.acts.map((a) => (
-                                  Number(a.dental_act_id) === Number(act.id) ? { ...a, quantity: qty } : a
-                                )),
-                              }));
-                            }}
-                            className="w-14 px-2 py-1 text-xs border border-amber-300 rounded"
-                          />
+                          <>
+                            <input
+                              type="number"
+                              min="1"
+                              value={selected.quantity}
+                              disabled={isLocked}
+                              onChange={(e) => {
+                                const qty = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                setForm((prev) => ({
+                                  ...prev,
+                                  acts: prev.acts.map((a) => (
+                                    Number(a.dental_act_id) === Number(act.id) ? { ...a, quantity: qty } : a
+                                  )),
+                                }));
+                              }}
+                              className="w-14 px-2 py-1 text-xs border border-amber-300 rounded"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={selected.unit_price ?? selected.dentalAct?.tarif ?? ''}
+                              disabled={isLocked}
+                              onChange={(e) => {
+                                const price = Number(e.target.value || 0);
+                                setForm((prev) => ({
+                                  ...prev,
+                                  acts: prev.acts.map((a) => (
+                                    Number(a.dental_act_id) === Number(act.id) ? { ...a, unit_price: price } : a
+                                  )),
+                                }));
+                              }}
+                              className="w-28 px-2 py-1 text-xs border border-amber-300 rounded"
+                            />
+                          </>
                         )}
                       </div>
                     );
@@ -511,6 +565,87 @@ const StartSessionWorkspace = () => {
             </div>
           </div>
         </div>
+
+        {/* Modal de validation des prix */}
+        {showPricingModal && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl rounded-2xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-linear-to-r from-emerald-50 to-teal-50">
+                <h3 className="text-lg font-bold text-gray-900">Validation des prix des actes</h3>
+                <p className="text-sm text-gray-600 mt-1">Vérifiez et ajustez les prix unitaires si nécessaire</p>
+              </div>
+
+              <div className="px-6 py-4 max-h-96 overflow-y-auto space-y-3">
+                {selectedActs.map((item) => {
+                  const act = dentalActs.find((a) => Number(a.id) === Number(item.dental_act_id));
+                  const currentPrice = Number(actPrices[item.dental_act_id] ?? act?.tarif ?? 0);
+                  const lineTotal = currentPrice * item.quantity;
+
+                  return (
+                    <div key={item.dental_act_id} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {act?.code ? `${act.code} - ` : ''}{act?.name}
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">Quantité: {item.quantity}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="flex flex-col items-end">
+                          <label className="text-xs font-semibold text-gray-700 mb-1">Prix unitaire</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={actPrices[item.dental_act_id] ?? String(act?.tarif ?? 0)}
+                            onChange={(e) => {
+                              setActPrices((prev) => ({
+                                ...prev,
+                                [item.dental_act_id]: e.target.value,
+                              }));
+                            }}
+                            className="w-32 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <label className="text-xs font-semibold text-gray-700 mb-1">Sous-total</label>
+                          <div className="w-32 px-2 py-1 text-sm font-semibold text-gray-900 bg-white border border-gray-300 rounded-lg text-right">
+                            {lineTotal.toLocaleString()} FCFA
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+                <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <p className="text-sm text-gray-600">Total des actes :</p>
+                  <p className="text-2xl font-bold text-emerald-700">{selectedActsTotal.toLocaleString()} FCFA</p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowPricingModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Modifier les champs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmSession}
+                    disabled={loading}
+                    className="px-5 py-2 text-sm font-semibold text-white bg-linear-to-r from-emerald-600 to-teal-600 rounded-lg hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    {loading ? 'Enregistrement...' : 'Confirmer séance'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {feedback.open && (
           <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">

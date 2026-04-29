@@ -35,6 +35,8 @@ const PatientFormWorkspace = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [newPatientId, setNewPatientId] = useState(null);
 
   const [contactSearchTerm, setContactSearchTerm] = useState('');
   const [contactSearchResults, setContactSearchResults] = useState([]);
@@ -241,16 +243,18 @@ const PatientFormWorkspace = () => {
     try {
       if (isEdit) {
         await patientAPI.update(id, payload);
+        navigate('/patients', {
+          state: {
+            success: 'Patient mis a jour avec succes.'
+          },
+        });
       } else {
-        await patientAPI.create(payload);
+        const res = await patientAPI.create(payload);
+        const createdPatientId = res?.data?.id;
+        setNewPatientId(createdPatientId);
+        setShowSuccessModal(true);
+        return;
       }
-      navigate('/patients', {
-        state: {
-          success: isEdit
-            ? 'Patient mis a jour avec succes.'
-            : 'Patient cree avec succes.',
-        },
-      });
     } catch (err) {
       const apiErrors = err.response?.data?.errors || {};
       const apiMessage = apiErrors.phone?.[0]
@@ -270,8 +274,28 @@ const PatientFormWorkspace = () => {
   const hasPersonalPhone = form.phone.trim() !== '';
   const isContactSectionLocked = hasPersonalPhone;
 
+  const handleStartTreatment = () => {
+    setShowSuccessModal(false);
+    if (newPatientId) {
+      navigate('/treatments/new', {
+        state: { patientId: newPatientId },
+      });
+    }
+  };
+
+  const handleGoToPatients = () => {
+    setShowSuccessModal(false);
+    setNewPatientId(null);
+    navigate('/patients', {
+      state: {
+        success: 'Patient cree avec succes.',
+      },
+    });
+  };
+
   return (
-    <Layout>
+    <>
+      <Layout>
       <div className="p-6 space-y-6">
         <div className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 px-5 py-4 shadow-lg">
           <div className="flex items-center justify-between">
@@ -504,7 +528,38 @@ const PatientFormWorkspace = () => {
           )}
         </form>
       </div>
-    </Layout>
+      </Layout>
+
+    {showSuccessModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 space-y-4">
+          <div className="flex items-center justify-center w-12 h-12 mx-auto bg-green-100 rounded-full">
+            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 text-center">Patient ajouté avec succès</h2>
+          <p className="text-sm text-gray-600 text-center">
+            Le patient a été enregistré. Voulez-vous commencer un traitement avec lui dès maintenant ?
+          </p>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleGoToPatients}
+              className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Non, plus tard
+            </button>
+            <button
+              onClick={handleStartTreatment}
+              className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-blue-700 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-colors"
+            >
+              Oui, commencer
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

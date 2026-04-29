@@ -90,6 +90,7 @@ class PatientTreatmentController extends Controller
             'acts' => ['nullable', 'array'],
             'acts.*.dental_act_id' => ['required_with:acts', 'integer', 'exists:dental_acts,id'],
             'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'acts.*.unit_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $consultationSimple = $this->resolveConsultationSimpleAct();
@@ -166,10 +167,12 @@ class PatientTreatmentController extends Controller
                     continue;
                 }
 
+                $unitPrice = isset($act['unit_price']) ? (float) $act['unit_price'] : $dentalAct->tarif;
+
                 $patientTreatment->acts()->create([
                     'dental_act_id' => $dentalAct->id,
                     'quantity' => $act['quantity'] ?? 1,
-                    'tarif_snapshot' => $dentalAct->tarif,
+                    'tarif_snapshot' => $unitPrice,
                 ]);
             }
         }

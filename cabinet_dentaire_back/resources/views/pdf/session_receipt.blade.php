@@ -8,8 +8,8 @@
         .header-table, .items-table, .summary-table { width: 100%; border-collapse: collapse; }
         .header-table td { vertical-align: top; }
         .brand img { width: 34px; height: 34px; display: block; }
-        .cabinet-name { font-size: 12pt; font-weight: bold; color: #0f172a; margin: 0; }
-        .cabinet-subtitle { margin: 2px 0 0; font-size: 9pt; color: #334155; }
+        .cabinet-name { margin: 2px 0 0; font-size: 9pt; color: #334155; }
+        .cabinet-subtitle { font-size: 12pt; font-weight: bold; color: #0f172a; margin: 0; }
         .receipt-box { text-align: right; border: 1px solid #2563eb; border-radius: 4px; padding: 8px 10px; }
         .receipt-box .label { display: block; font-size: 8.5pt; color: #1d4ed8; text-transform: uppercase; }
         .receipt-box .value { display: block; margin-top: 4px; font-size: 12pt; font-weight: bold; color: #0f172a; }
@@ -32,8 +32,8 @@
             @endif
         </td>
         <td>
-            <p class="cabinet-name">{{ $cabinetName }}</p>
             <p class="cabinet-subtitle">Cabinet dentaire</p>
+            <p class="cabinet-name">{{ $cabinetName }}</p>
             <p class="cabinet-subtitle">{{ $cabinetAddress }}</p>
             <p class="cabinet-subtitle">Téléphone : {{ $cabinetPhone }}</p>
         </td>

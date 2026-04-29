@@ -59,6 +59,7 @@ class SessionReceiptController extends Controller
             'acts' => ['required', 'array', 'min:1'],
             'acts.*.dental_act_id' => ['required', 'integer', 'distinct', 'exists:dental_acts,id'],
             'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'acts.*.unit_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $existing = SessionReceipt::with(['items.dentalAct', 'patient', 'medicalRecord'])
@@ -100,7 +101,9 @@ class SessionReceiptController extends Controller
                 }
 
                 $quantity = max(1, (int) ($item['quantity'] ?? 1));
-                $unitPrice = (float) ($dentalAct->tarif ?? 0);
+                $unitPrice = array_key_exists('unit_price', $item)
+                    ? (float) $item['unit_price']
+                    : (float) ($dentalAct->tarif ?? 0);
                 $lineTotal = $quantity * $unitPrice;
 
                 $receipt->items()->create([

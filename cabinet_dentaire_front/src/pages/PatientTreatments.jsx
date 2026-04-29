@@ -27,6 +27,7 @@ const PatientTreatments = () => {
   const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
   const [loadedReceiptPatientIds] = useState(new Set());
   const [loadedMedicalRecordTreatmentIds] = useState(new Set());
+  // Price editing removed from treatments: prices are managed at invoice/receipt level
 
   const hasLoadedRef = useRef(false);
   
@@ -137,52 +138,6 @@ const PatientTreatments = () => {
     }
   };
 
-  const handleEditAct = async (treatmentId, act) => {
-    if (!treatmentId || !act?.id) {
-      alert('Acte introuvable.');
-      return;
-    }
-
-    const nextQuantityRaw = prompt('Nouvelle quantité', String(act.quantity || 1));
-    if (nextQuantityRaw === null) return;
-
-    const nextQuantity = parseInt(nextQuantityRaw, 10);
-    if (!Number.isInteger(nextQuantity) || nextQuantity < 1) {
-      alert('Quantité invalide.');
-      return;
-    }
-
-    const currentPrice = Number(act.tarif_snapshot ?? 0);
-    const nextPriceRaw = prompt('Nouveau tarif unitaire (snapshot)', String(currentPrice));
-    if (nextPriceRaw === null) return;
-
-    const nextPrice = Number(nextPriceRaw);
-    if (!Number.isFinite(nextPrice) || nextPrice < 0) {
-      alert('Tarif invalide.');
-      return;
-    }
-
-    const auditNote = prompt('Note d\'audit (optionnelle)', '') ?? '';
-
-    setLoading(true);
-    try {
-      await patientTreatmentAPI.updateAct(treatmentId, act.id, {
-        quantity: nextQuantity,
-        tarif_snapshot: nextPrice,
-        audit_note: auditNote || null,
-      });
-      await loadInitialData();
-      if (openAuditByTreatment[treatmentId]) {
-        await handleToggleAuditLogs(treatmentId, true);
-      }
-      alert('Acte modifié avec succès.');
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Modification impossible.';
-      alert(message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const isConsultationSimpleAct = (actFromCatalog, actFromTreatment) => {
     const catalogName = (actFromCatalog?.name || actFromCatalog?.label || '').toLowerCase();
@@ -254,6 +209,7 @@ const PatientTreatments = () => {
       .map((act) => ({
         dental_act_id: Number(act.dental_act_id),
         quantity: Math.max(1, Number(act.quantity) || 1),
+        unit_price: Number(act.tarif_snapshot ?? act?.dentalAct?.tarif ?? 0),
       }))
       .filter((act) => Number.isInteger(act.dental_act_id) && act.dental_act_id > 0);
 
@@ -697,33 +653,25 @@ const PatientTreatments = () => {
                                   const isMandatoryConsultation = isConsultationSimpleAct(act, a);
                                   const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
                                   return (
-                                    <li key={idx} className="flex items-center gap-2">
-                                      <span className="font-medium">{actLabel}</span>
-                                      <span>x{a.quantity}</span>
+                                    <li key={idx} className="flex flex-wrap items-center gap-3 rounded-md bg-white/70 px-2 py-1">
+                                      <span className="font-medium text-gray-900">{actLabel}</span>
+                                      <span className="text-gray-500">Qté: x{a.quantity}</span>
                                       {Number.isFinite(unitPrice) && (
-                                        <span className="ml-2 text-gray-500">{(unitPrice * a.quantity).toFixed(2)} €</span>
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800 font-semibold">
+                                          Prix unitaire: {Number(unitPrice).toFixed(2)} €
+                                        </span>
                                       )}
                                       {isMandatoryConsultation && (
                                         <span className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-amber-800 bg-amber-100">
                                           Obligatoire
                                         </span>
                                       )}
-                                      {isEditableTreatment && !isMandatoryConsultation && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleEditAct(pt.id, a)}
-                                          className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
-                                          title="Modifier quantité/prix"
-                                          disabled={loading}
-                                        >
-                                          Modifier
-                                        </button>
-                                      )}
+                                      {/* Prix modifiable depuis la création/édition de facture ou depuis le reçu de séance. */}
                                       {isEditableTreatment && !isMandatoryConsultation && (
                                         <button
                                           type="button"
                                           onClick={() => handleRemoveAct(pt.id, a)}
-                                          className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100"
+                                          className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100"
                                           title="Supprimer cet acte"
                                           disabled={loading}
                                         >

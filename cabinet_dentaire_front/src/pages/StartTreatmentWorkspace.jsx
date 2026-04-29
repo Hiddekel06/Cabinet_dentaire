@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { dentalActAPI, patientAPI, patientTreatmentAPI } from '../services/api';
+import { dentalActAPI, patientAPI, patientTreatmentAPI, medicalRecordAPI, sessionReceiptAPI } from '../services/api';
 
 const StartTreatmentWorkspace = () => {
   const navigate = useNavigate();
@@ -14,6 +14,8 @@ const StartTreatmentWorkspace = () => {
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [showPatientList, setShowPatientList] = useState(false);
   const [dentalActsSearchTerm, setDentalActsSearchTerm] = useState('');
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [actPrices, setActPrices] = useState({});
 
   const [form, setForm] = useState({
     patient_id: '',
@@ -24,6 +26,43 @@ const StartTreatmentWorkspace = () => {
     next_appointment_reason: '',
     notes: '',
   });
+
+  const [feedback, setFeedback] = useState({
+    open: false,
+    type: 'info',
+    title: '',
+    message: '',
+    redirectToTreatments: false,
+    receiptId: null,
+  });
+
+  const showFeedback = (type, title, message, redirectToTreatments = false, receiptId = null) => {
+    setFeedback({ open: true, type, title, message, redirectToTreatments, receiptId });
+  };
+
+  const closeFeedback = () => {
+    const shouldRedirect = feedback.redirectToTreatments;
+    setFeedback((prev) => ({ ...prev, open: false }));
+    if (shouldRedirect) navigate('/treatments');
+  };
+
+  const downloadSessionReceipt = async () => {
+    if (!feedback.receiptId) return;
+    try {
+      const res = await sessionReceiptAPI.generate(feedback.receiptId);
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `recu_seance_${feedback.receiptId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur generation recu initial:', error);
+      alert('Impossible de générer le reçu de séance.');
+    }
+  };
 
   useEffect(() => {
     const preload = async () => {
@@ -45,8 +84,28 @@ const StartTreatmentWorkspace = () => {
 
         const preselectedPatientId = Number(location.state?.patientId || 0);
         if (preselectedPatientId) {
-          const patient = patientsData.find((p) => Number(p.id) === preselectedPatientId);
-          if (patient) {
+          let patient = patientsData.find((p) => Number(p.id) === preselectedPatientId);
+
+          // Fallback: la liste peut etre paginee et ne pas contenir le patient fraichement cree.
+          if (!patient) {
+            try {
+              const patientByIdRes = await patientAPI.getById(preselectedPatientId);
+              patient = patientByIdRes?.data || null;
+
+              if (patient?.id) {
+                setPatients((prev) => {
+                  if (prev.some((p) => Number(p.id) === Number(patient.id))) {
+                    return prev;
+                  }
+                  return [patient, ...prev];
+                });
+              }
+            } catch (fetchError) {
+              console.error('Impossible de charger le patient preselectionne:', fetchError);
+            }
+          }
+
+          if (patient?.id) {
             setForm((prev) => ({ ...prev, patient_id: patient.id }));
             setPatientSearchTerm(`${patient.first_name || ''} ${patient.last_name || ''}`.trim());
           }
@@ -83,6 +142,14 @@ const StartTreatmentWorkspace = () => {
     }, 0);
   }, [form.acts, dentalActs]);
 
+  const totalActsWithCustomPrices = useMemo(() => {
+    return form.acts.reduce((sum, selectedAct) => {
+      const act = dentalActs.find((item) => Number(item.id) === Number(selectedAct.dental_act_id));
+      const price = Number(actPrices[selectedAct.dental_act_id] ?? act?.tarif ?? 0);
+      return sum + (price * (selectedAct.quantity || 1));
+    }, 0);
+  }, [form.acts, dentalActs, actPrices]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.patient_id || !form.name || !form.next_appointment_date) {
@@ -90,11 +157,176 @@ const StartTreatmentWorkspace = () => {
       return;
     }
 
+    // Initialize prices if not already set
+    const initialPrices = {};
+    form.acts.forEach((selectedAct) => {
+      if (!actPrices[selectedAct.dental_act_id]) {
+        const act = dentalActs.find((item) => Number(item.id) === Number(selectedAct.dental_act_id));
+        initialPrices[selectedAct.dental_act_id] = String(act?.tarif || 0);
+      }
+    });
+    if (Object.keys(initialPrices).length > 0) {
+      setActPrices((prev) => ({ ...prev, ...initialPrices }));
+    }
+
+    // Show pricing modal
+    setShowPricingModal(true);
+  };
+
+  const confirmTreatment = async () => {
     setLoading(true);
     try {
-      await patientTreatmentAPI.create(form);
-      alert('Suivi démarré avec succès !');
-      navigate('/treatments');
+      // Include custom prices in the acts payload
+      const actsWithPrices = form.acts.map((a) => ({
+        ...a,
+        unit_price: Number(actPrices[a.dental_act_id] ?? 0),
+      }));
+
+      const res = await patientTreatmentAPI.create({ ...form, acts: actsWithPrices });
+      const created = res?.data || null;
+
+      // Create a minimal medical record for this initial session so we can generate a session receipt
+      let sessionReceiptId = null;
+      let receiptResRef = null;
+      try {
+        if (created?.id) {
+          let appointmentId = Number(
+            created?.next_appointment_id
+            ?? created?.nextAppointment?.id
+            ?? created?.next_appointment?.id
+            ?? 0
+          ) || null;
+
+          if (!appointmentId) {
+            try {
+              const treatmentRefreshRes = await patientTreatmentAPI.getById(created.id);
+              const treatmentRefresh = treatmentRefreshRes?.data || {};
+              appointmentId = Number(
+                treatmentRefresh?.next_appointment_id
+                ?? treatmentRefresh?.nextAppointment?.id
+                ?? treatmentRefresh?.next_appointment?.id
+                ?? 0
+              ) || null;
+            } catch (appointmentLookupErr) {
+              console.error('Erreur récupération appointment_id initial:', appointmentLookupErr);
+            }
+          }
+
+          if (!appointmentId) {
+            receiptResRef = {
+              error: 'Rendez-vous initial introuvable pour créer le reçu.',
+            };
+            throw new Error('INITIAL_APPOINTMENT_NOT_FOUND');
+          }
+
+          const mrRes = await medicalRecordAPI.create({
+            patient_id: created.patient_id,
+            // Keep null here to bypass "future next appointment" lock that is intended for later sessions.
+            patient_treatment_id: null,
+            appointment_id: appointmentId,
+            treatment_performed: 'Démarrage du suivi',
+            next_action: form.notes || null,
+          });
+
+          const medicalRecord = mrRes?.data || null;
+          if (medicalRecord?.id) {
+            let receiptActsPayload = (actsWithPrices || []).map((item) => ({
+              dental_act_id: Number(item.dental_act_id),
+              quantity: Math.max(1, Number(item.quantity) || 1),
+              unit_price: Number(item.unit_price ?? 0),
+            }));
+
+            // Fallback: if no acts were selected in form, try to read acts from created treatment (includes defaults).
+            if (receiptActsPayload.length === 0 && created?.id) {
+              try {
+                const treatmentRes = await patientTreatmentAPI.getById(created.id);
+                const treatmentData = treatmentRes?.data || {};
+                const serverActs =
+                  treatmentData?.acts
+                  || treatmentData?.patient_treatment_acts
+                  || treatmentData?.dental_acts
+                  || [];
+
+                const mappedActs = (Array.isArray(serverActs) ? serverActs : []).map((item) => {
+                  const dentalActId = Number(
+                    item?.dental_act_id
+                    ?? item?.dentalAct?.id
+                    ?? item?.dental_act?.id
+                    ?? item?.id
+                    ?? 0
+                  );
+                  const quantity = Math.max(1, Number(item?.quantity) || 1);
+                  const unitPrice = Number(
+                    item?.unit_price
+                    ?? item?.tarif_snapshot
+                    ?? item?.dentalAct?.tarif
+                    ?? item?.dental_act?.tarif
+                    ?? item?.tarif
+                    ?? 0
+                  );
+
+                  return {
+                    dental_act_id: dentalActId,
+                    quantity,
+                    unit_price: unitPrice,
+                  };
+                }).filter((act) => act.dental_act_id > 0);
+
+                // Ensure unique dental acts if API already contains duplicates.
+                const uniqueByAct = new Map();
+                mappedActs.forEach((act) => {
+                  if (!uniqueByAct.has(act.dental_act_id)) {
+                    uniqueByAct.set(act.dental_act_id, act);
+                  }
+                });
+                receiptActsPayload = Array.from(uniqueByAct.values());
+              } catch (fallbackErr) {
+                console.error('Erreur fallback actes recu initial:', fallbackErr);
+              }
+            }
+
+            let receiptRes = null;
+            let receiptErrorMessage = null;
+            try {
+              receiptRes = await sessionReceiptAPI.create({
+                medical_record_id: medicalRecord.id,
+                acts: receiptActsPayload,
+              });
+            } catch (rErr) {
+              console.error('Erreur creation receipt API:', rErr);
+              console.error('Receipt error response data:', rErr.response?.data ?? rErr);
+              if (rErr.response?.data?.errors) {
+                receiptErrorMessage = Object.values(rErr.response.data.errors).flat().join(' | ');
+              } else if (rErr.response?.data?.message) {
+                receiptErrorMessage = rErr.response.data.message;
+              } else {
+                receiptErrorMessage = rErr.message || String(rErr);
+              }
+            }
+
+            // Be robust: some APIs return { id } or { data: { id } }
+            sessionReceiptId = receiptRes?.data?.id ?? receiptRes?.data?.data?.id ?? null;
+            // store raw response for debug if needed
+            receiptResRef = receiptRes ?? null;
+            // attach error message to ref for later user feedback
+            if (!sessionReceiptId && receiptErrorMessage) {
+              receiptResRef = { error: receiptErrorMessage };
+            }
+          }
+        }
+      } catch (innerErr) {
+        console.error('Erreur création reçu initial:', innerErr);
+      }
+
+      const successMsg = 'Votre suivi a été créé.' + (sessionReceiptId ? ' Le reçu est prêt et téléchargeable.' : '');
+      setShowPricingModal(false);
+      if (sessionReceiptId) {
+        showFeedback('success', 'Reçu prêt', successMsg, true, sessionReceiptId);
+      } else if (receiptResRef?.error) {
+        showFeedback('warning', 'Suivi créé (reçu non généré)', `Le suivi a été créé, mais le reçu n'a pas pu être généré: ${receiptResRef.error}`, true, null);
+      } else {
+        showFeedback('success', 'Suivi démarré', 'Suivi démarré avec succès.', true, null);
+      }
     } catch (error) {
       console.error('Erreur démarrage suivi:', error);
       if (error.response?.data?.error === 'PATIENT_HAS_ACTIVE_TREATMENT') {
@@ -151,7 +383,7 @@ const StartTreatmentWorkspace = () => {
           <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">1. Patient</span>
             <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800">2. Actes</span>
-            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">3. Premier RDV</span>
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">3. Prochain RDV</span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3">
             <section className="p-5 border-b lg:border-b-0 lg:border-r border-gray-200 bg-linear-to-b from-blue-50 to-white space-y-4">
@@ -309,7 +541,7 @@ const StartTreatmentWorkspace = () => {
             </section>
 
             <section className="p-5 bg-linear-to-b from-indigo-50 to-white space-y-4">
-              <h2 className="text-sm font-bold text-indigo-900">3. Premier rendez-vous</h2>
+              <h2 className="text-sm font-bold text-indigo-900">3. Prochain rendez-vous</h2>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -365,6 +597,123 @@ const StartTreatmentWorkspace = () => {
             </button>
           </div>
         </form>
+
+        {/* Modal de validation des prix */}
+        {showPricingModal && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl rounded-2xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-linear-to-r from-emerald-50 to-teal-50">
+                <h3 className="text-lg font-bold text-gray-900">Validation des prix des actes</h3>
+                <p className="text-sm text-gray-600 mt-1">Vérifiez et ajustez les prix unitaires si nécessaire</p>
+              </div>
+
+              <div className="px-6 py-4 max-h-96 overflow-y-auto space-y-3">
+                {form.acts.map((selectedAct) => {
+                  const act = dentalActs.find((item) => Number(item.id) === Number(selectedAct.dental_act_id));
+                  const currentPrice = Number(actPrices[selectedAct.dental_act_id] ?? act?.tarif ?? 0);
+                  const lineTotal = currentPrice * selectedAct.quantity;
+
+                  return (
+                    <div key={selectedAct.dental_act_id} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {act?.code ? `${act.code} - ` : ''}{act?.name}
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">Quantité: {selectedAct.quantity}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="flex flex-col items-end">
+                          <label className="text-xs font-semibold text-gray-700 mb-1">Prix unitaire</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={actPrices[selectedAct.dental_act_id] ?? String(act?.tarif ?? 0)}
+                            onChange={(e) => {
+                              setActPrices((prev) => ({
+                                ...prev,
+                                [selectedAct.dental_act_id]: e.target.value,
+                              }));
+                            }}
+                            className="w-32 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <label className="text-xs font-semibold text-gray-700 mb-1">Sous-total</label>
+                          <div className="w-32 px-2 py-1 text-sm font-semibold text-gray-900 bg-white border border-gray-300 rounded-lg text-right">
+                            {lineTotal.toLocaleString()} FCFA
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+                <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <p className="text-sm text-gray-600">Total des actes :</p>
+                  <p className="text-2xl font-bold text-emerald-700">{totalActsWithCustomPrices.toLocaleString()} FCFA</p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowPricingModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Modifier les champs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmTreatment}
+                    disabled={loading}
+                    className="px-5 py-2 text-sm font-semibold text-white bg-linear-to-r from-emerald-600 to-teal-600 rounded-lg hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    {loading ? 'Création...' : 'Confirmer et démarrer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {feedback.open && (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
+              <div className={`px-5 py-4 border-b ${
+                feedback.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : feedback.type === 'error'
+                    ? 'bg-rose-50 border-rose-200'
+                    : 'bg-amber-50 border-amber-200'
+              }`}>
+                <h3 className="text-sm font-bold text-gray-900">{feedback.title}</h3>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-gray-700 whitespace-pre-line">{feedback.message}</p>
+              </div>
+              <div className="px-5 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+                {feedback.receiptId && (
+                  <button
+                    type="button"
+                    onClick={downloadSessionReceipt}
+                    className="px-4 py-2 mr-2 text-sm font-semibold text-indigo-700 bg-indigo-100 rounded-lg hover:bg-indigo-200"
+                  >
+                    Télécharger le reçu
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={closeFeedback}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700"
+                >
+                  {feedback.redirectToTreatments ? 'Retour à la liste' : 'Fermer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

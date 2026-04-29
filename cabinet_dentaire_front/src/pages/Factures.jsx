@@ -7,6 +7,7 @@ const Factures = () => {
   const [patients, setPatients] = useState([]);
   const [billableActs, setBillableActs] = useState([]);
   const [selectedActs, setSelectedActs] = useState({});
+  const [actPrices, setActPrices] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,6 +94,9 @@ const Factures = () => {
       const acts = res.data?.billable_acts || [];
       setBillableActs(acts);
       setSelectedActs({});
+      const prices = {};
+      acts.forEach((a) => { prices[a.id] = String(a.unit_price || 0); });
+      setActPrices(prices);
     } catch {
       setBillableActs([]);
       setSelectedActs({});
@@ -102,7 +106,9 @@ const Factures = () => {
   const selectedTotal = useMemo(() => {
     return billableActs.reduce((sum, act) => {
       if (!selectedActs[act.id]) return sum;
-      return sum + (Number(act.subtotal) || 0);
+      const price = Number(actPrices[act.id] ?? act.unit_price ?? 0);
+      const qty = Number(act.quantity || 1);
+      return sum + price * qty;
     }, 0);
   }, [billableActs, selectedActs]);
 
@@ -196,7 +202,10 @@ const Factures = () => {
 
     const items = Object.entries(selectedActs)
       .filter(([, selected]) => selected)
-      .map(([id]) => ({ patient_treatment_act_id: Number(id) }));
+      .map(([id]) => ({
+        patient_treatment_act_id: Number(id),
+        unit_price: Number(actPrices[id] ?? 0),
+      }));
 
     if (!createForm.patient_id || items.length === 0) {
       alert('Selectionnez un patient et au moins un acte a facturer');
@@ -479,11 +488,22 @@ const Factures = () => {
                           <div className="text-sm font-medium text-gray-900">
                             {(act.dental_act_code ? `${act.dental_act_code} - ` : '') + (act.dental_act_name || 'Acte')}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            Suivi: {act.patient_treatment_name || '-'} | Qte: {act.quantity} | PU: {act.unit_price}
+                          <div className="text-xs text-gray-500 flex items-center gap-3">
+                            <span>Suivi: {act.patient_treatment_name || '-'}</span>
+                            <span>Qte: {act.quantity}</span>
+                            <span className="flex items-center gap-2">PU:
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={actPrices[act.id] ?? String(act.unit_price || 0)}
+                                onChange={(e) => setActPrices((prev) => ({ ...prev, [act.id]: e.target.value }))}
+                                className="w-24 px-2 py-1 text-xs border border-gray-200 rounded"
+                              />
+                            </span>
                           </div>
                         </div>
-                        <div className="text-sm font-semibold text-gray-800">{Number(act.subtotal || 0).toFixed(2)}</div>
+                        <div className="text-sm font-semibold text-gray-800">{(Number(actPrices[act.id] ?? act.unit_price ?? 0) * Number(act.quantity || 1)).toFixed(2)}</div>
                       </label>
                     ))}
                   </div>

@@ -32,16 +32,17 @@
         }
 
         .cabinet-name {
-            font-size: 12pt;
-            font-weight: bold;
-            margin: 0;
-            color: #0f172a;
+        margin: 2px 0 0;
+        font-size: 9.5pt;
+        color: #334155;          
         }
 
         .cabinet-subtitle {
-            margin: 2px 0 0;
-            font-size: 9.5pt;
-            color: #334155;
+             font-size: 12pt;
+            font-weight: bold;
+            margin: 0;
+            color: #0f172a;
+           
         }
 
         .title {
@@ -94,8 +95,9 @@
             <img src="{{ $logoDataUri }}" alt="Logo cabinet" width="64" height="64">
         @endif
     </div>
-    <p class="cabinet-name">{{ $cabinetName }}</p>
     <p class="cabinet-subtitle">Cabinet dentaire</p>
+    <p class="cabinet-name">{{ $cabinetName }}</p>
+
     <p class="cabinet-subtitle">Adresse : {{ $cabinetAddress }}</p>
     <p class="cabinet-subtitle">Téléphone : {{ $cabinetPhone }}</p>
 </div>

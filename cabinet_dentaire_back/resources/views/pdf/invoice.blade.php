@@ -52,18 +52,20 @@
         }
 
         .cabinet-name {
-            font-size: 12pt;
+         margin: 2px 0 0;
+         font-size: 10pt;
+          color: #334155;
+           
+        }
+
+        .cabinet-subtitle {
+             font-size: 12pt;
             font-weight: bold;
             color: #0f172a;
             margin: 0;
             line-height: 1.1;
             white-space: nowrap;
-        }
-
-        .cabinet-subtitle {
-            margin: 2px 0 0;
-            font-size: 10pt;
-            color: #334155;
+ 
         }
 
         .invoice-box {
@@ -195,8 +197,8 @@
                 @endif
             </td>
             <td class="header-main">
-                <p class="cabinet-name">{{ $cabinetName }}</p>
                 <p class="cabinet-subtitle">Cabinet Dentaire</p>
+                <p class="cabinet-name">{{ $cabinetName }}</p>               
                 <p class="cabinet-subtitle">{{ $cabinetAddress }}</p>
                 <p class="cabinet-subtitle">Téléphone : {{ $cabinetPhone }}</p>
             </td>

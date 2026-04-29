@@ -79,6 +79,7 @@ class InvoiceController extends Controller
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.patient_treatment_act_id' => ['required', 'integer', 'distinct', 'exists:patient_treatment_acts,id'],
+            'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $invoice = DB::transaction(function () use ($validated) {
@@ -147,9 +148,11 @@ class InvoiceController extends Controller
             ]);
 
             $total = 0;
+            $itemsByAct = collect($validated['items'])->keyBy('patient_treatment_act_id');
             foreach ($acts as $act) {
                 $quantity = (int) ($act->quantity ?? 1);
-                $unitPrice = (float) ($act->tarif_snapshot ?? $act->dentalAct?->tarif ?? 0);
+                $provided = $itemsByAct->get($act->id) ?? [];
+                $unitPrice = isset($provided['unit_price']) ? (float) $provided['unit_price'] : (float) ($act->tarif_snapshot ?? $act->dentalAct?->tarif ?? 0);
                 $subtotal = $quantity * $unitPrice;
 
                 $invoice->items()->create([
