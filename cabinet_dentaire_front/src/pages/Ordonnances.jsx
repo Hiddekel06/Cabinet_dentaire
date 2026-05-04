@@ -1,17 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { ordonnanceAPI, medicationAPI, patientAPI } from '../services/api';
 
 const emptyItem = { medication_id: '', medication_name: '', frequency: '', duration: '', instructions: '' };
 
 const Ordonnances = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isNewMode = location.pathname === '/ordonnances/new';
+  const queryParams = new URLSearchParams(location.search);
+  const patientIdFromQuery = queryParams.get('patient_id');
+  
   const [ordonnances, setOrdonnances] = useState([]);
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(isNewMode);
   const [saving, setSaving] = useState(false);
 
   const [filters, setFilters] = useState({
@@ -22,7 +29,7 @@ const Ordonnances = () => {
   });
 
   const [form, setForm] = useState({
-    patient_id: '',
+    patient_id: patientIdFromQuery || '',
     issue_date: new Date().toISOString().slice(0, 10),
     notes: '',
     items: [{ ...emptyItem }],
@@ -42,8 +49,12 @@ const Ordonnances = () => {
   }, []);
 
   useEffect(() => {
-    loadOrdonnances();
-  }, [page, filters.patient_id, filters.search, filters.date_from, filters.date_to]);
+    if (!isNewMode) {
+      loadOrdonnances();
+    } else {
+      setLoading(false);
+    }
+  }, [page, filters.patient_id, filters.search, filters.date_from, filters.date_to, isNewMode]);
 
   const loadPatients = async () => {
     try {
@@ -161,7 +172,11 @@ const Ordonnances = () => {
       await ordonnanceAPI.create(payload);
       setShowCreateModal(false);
       resetForm();
-      await loadOrdonnances();
+      if (isNewMode) {
+        navigate('/ordonnances');
+      } else {
+        await loadOrdonnances();
+      }
     } catch {
       alert('Erreur lors de la creation de l\'ordonnance');
     } finally {

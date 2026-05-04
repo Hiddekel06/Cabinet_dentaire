@@ -157,7 +157,23 @@ function App() {
             }
           />
           <Route
+            path="/ordonnances/new"
+            element={
+              <ProtectedRoute>
+                <Ordonnances />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/medical-certificates"
+            element={
+              <ProtectedRoute>
+                <MedicalCertificates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/medical-certificates/new"
             element={
               <ProtectedRoute>
                 <MedicalCertificates />

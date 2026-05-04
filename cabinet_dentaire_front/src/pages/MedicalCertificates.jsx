@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from "../components/Layout";
 import { medicalCertificateAPI } from '../services/api';
 import { patientAPI } from '../services/api';
@@ -17,11 +18,17 @@ const getCurrentHourTime = () => {
 };
 
 const MedicalCertificates = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isNewMode = location.pathname === '/medical-certificates/new';
+  const queryParams = new URLSearchParams(location.search);
+  const patientIdFromQuery = queryParams.get('patient_id');
+  
   const [certificates, setCertificates] = useState([]);
   const [patients, setPatients] = useState([]);
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(isNewMode);
   const [form, setForm] = useState({
-    patient_id: "",
+    patient_id: patientIdFromQuery || "",
     issue_date: getTodayLocalDate(),
     consultation_time: getCurrentHourTime(),
     rest_days: "",
@@ -34,8 +41,12 @@ const MedicalCertificates = () => {
   const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    loadCertificates();
-  }, [page]);
+    if (!isNewMode) {
+      loadCertificates();
+    } else {
+      setLoading(false);
+    }
+  }, [page, isNewMode]);
 
   const loadCertificates = async (withLoader = true) => {
     if (withLoader) {
@@ -100,6 +111,10 @@ const MedicalCertificates = () => {
         rest_days: "",
         rest_start_date: getTodayLocalDate(),
       });
+      
+      if (isNewMode) {
+        navigate('/medical-certificates');
+      }
     } catch (err) {
       alert("Erreur lors de l'ajout du certificat");
     } finally {
