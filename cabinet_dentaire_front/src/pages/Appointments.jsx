@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Layout } from "../components/Layout";
 import { appointmentAPI, patientAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const statusOptions = [
   { value: 'all', label: 'Tous les statuts', color: 'gray' },
@@ -24,6 +24,7 @@ const motifOptions = [
 const Appointments = () => {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -1459,6 +1460,43 @@ const Appointments = () => {
                                   </svg>
                                   Voir détails
                                 </button>
+                                <button
+                                  onClick={() => {
+                                    navigate('/treatments/new', { state: { patientId: a.patientId } });
+                                    setOpenMenu(null);
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  Commencer traitement
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    navigate(`/ordonnances/new?patient_id=${a.patientId}`);
+                                    setOpenMenu(null);
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-sm text-emerald-600 hover:bg-emerald-50 flex items-center gap-2 transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  Créer ordonnance
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    navigate(`/medical-certificates/new?patient_id=${a.patientId}`);
+                                    setOpenMenu(null);
+                                  }}
+                                  className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Créer certificat
+                                </button>
+                                <div className="border-t border-gray-200 my-1"></div>
                                 <button
                                   onClick={() => {
                                     handleEdit(a);
