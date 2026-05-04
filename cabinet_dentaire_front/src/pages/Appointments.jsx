@@ -566,7 +566,8 @@ const Appointments = () => {
       const dateStr = toDateStr(newDate);
       const payload = appointment.timeSpecified
         ? {
-            appointment_date: `${dateStr}T${(appointment.heureValue || '09:00')}:00`,
+            // Use space-separated datetime to be broadly acceptable by backend parsers
+            appointment_date: `${dateStr} ${(appointment.heureValue || '09:00')}:00`,
             appointment_time_specified: true,
           }
         : {
@@ -581,7 +582,8 @@ const Appointments = () => {
         payload.sync_treatments = true;
       }
 
-      const response = await fetch(endpoint, {
+      // Try primary method; if non-sync and server rejects PUT, fallback to PATCH
+      let response = await fetch(endpoint, {
         method: shouldSync ? 'PATCH' : 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -589,6 +591,18 @@ const Appointments = () => {
         },
         body: JSON.stringify(payload),
       });
+
+      if (!response.ok && !shouldSync) {
+        // fallback to PATCH for non-sync moves
+        response = await fetch(endpoint, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`Erreur HTTP: ${response.status}`);

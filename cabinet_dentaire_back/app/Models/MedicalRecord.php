@@ -20,6 +20,7 @@ class MedicalRecord extends Model
         'appointment_notes',
         'created_by',
         'date',
+        'amount_collected',
     ];
 
     protected $casts = [

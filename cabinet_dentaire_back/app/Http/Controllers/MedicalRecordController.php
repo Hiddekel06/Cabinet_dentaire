@@ -43,6 +43,7 @@ class MedicalRecordController extends Controller
             'observations' => ['nullable', 'string'],
             'next_action' => ['nullable', 'string'],
             'appointment_notes' => ['nullable', 'string'],
+            'amount_collected' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         // Valider que l'appointment appartient au bon patient
@@ -130,6 +131,7 @@ class MedicalRecordController extends Controller
             'appointment_notes' => ['nullable', 'string'],
             'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
             'patient_treatment_id' => ['nullable', 'integer', 'exists:patient_treatments,id'],
+            'amount_collected' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $medicalRecord->update($validated);

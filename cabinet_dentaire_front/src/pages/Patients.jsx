@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from "../components/Layout";
-import { patientAPI } from "../services/api";
+import { patientAPI, patientTreatmentAPI } from "../services/api";
 
 const statusOptions = [
   { value: 'all', label: 'Tous les statuts', color: 'gray' },
@@ -239,6 +239,23 @@ const Patients = () => {
     } else {
       setSortBy(field);
       setSortOrder('asc');
+    }
+  };
+
+  const handleRowClick = async (patient) => {
+    if (!patient?.apiId) return;
+    try {
+      const res = await patientTreatmentAPI.getAll({ patient_id: patient.apiId, status: 'in_progress', per_page: 1 });
+      const list = Array.isArray(res?.data?.data) ? res.data.data : (res?.data || []);
+      const active = Array.isArray(list) && list.length > 0 ? list[0] : null;
+      if (active && active.id) {
+        navigate(`/treatments/${active.id}/session`);
+      } else {
+        navigate('/treatments/new', { state: { patientId: patient.apiId } });
+      }
+    } catch (error) {
+      console.error('Erreur navigation traitements patient:', error);
+      navigate('/treatments', { state: { patientId: patient.apiId } });
     }
   };
 
@@ -573,7 +590,7 @@ const Patients = () => {
                 </tr>
               ) : filteredPatients.length > 0 ? (
                 filteredPatients.map((patient, index) => (
-                  <tr key={patient.apiId || index} className="hover:bg-gray-50 transition-colors duration-150 group">
+                    <tr key={patient.apiId || index} onClick={() => handleRowClick(patient)} className="hover:bg-gray-50 transition-colors duration-150 group cursor-pointer">
                     <td className="py-4 px-4">
                       <div className="flex items-center">
                         <div className="relative">
@@ -615,7 +632,7 @@ const Patients = () => {
                       <div className="relative inline-flex" data-patient-menu="true">
                         <button
                           className="text-gray-400 hover:text-gray-600 transition-colors"
-                          onClick={() => setOpenMenu(openMenu === patient.apiId ? null : patient.apiId)}
+                          onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === patient.apiId ? null : patient.apiId); }}
                           title="Actions"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -625,10 +642,7 @@ const Patients = () => {
                         {openMenu === patient.apiId && (
                           <div className="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                             <button
-                              onClick={() => {
-                                handleEdit(patient);
-                                setOpenMenu(null);
-                              }}
+                              onClick={(e) => { e.stopPropagation(); handleEdit(patient); setOpenMenu(null); }}
                               className="w-full text-left px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 transition-colors"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -637,10 +651,7 @@ const Patients = () => {
                               Modifier
                             </button>
                             <button
-                              onClick={() => {
-                                handleDelete(patient);
-                                setOpenMenu(null);
-                              }}
+                              onClick={(e) => { e.stopPropagation(); handleDelete(patient); setOpenMenu(null); }}
                               className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

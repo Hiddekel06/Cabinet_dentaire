@@ -32,6 +32,7 @@ const StartSessionWorkspace = () => {
 
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [actPrices, setActPrices] = useState({});
+  const [pastSessions, setPastSessions] = useState([]);
 
   const [form, setForm] = useState({
     treatment_performed: '',
@@ -39,6 +40,7 @@ const StartSessionWorkspace = () => {
     next_appointment_date: '',
     next_appointment_time: '',
     acts: [],
+    amount_collected: '',
   });
 
   const formatAppointmentForDisplay = (rawDate, timeSpecified = true) => {
@@ -100,7 +102,7 @@ const StartSessionWorkspace = () => {
           authAPI.getUser().catch(() => ({ data: null })),
           dentalActAPI.getAll(),
           patientTreatmentAPI.getById(treatmentId),
-          medicalRecordAPI.getAll({ patient_treatment_id: treatmentId }),
+          medicalRecordAPI.getAll({ patient_treatment_id: treatmentId, per_page: 100 }),
         ]);
 
         setCurrentUser(userRes?.data || null);
@@ -108,7 +110,13 @@ const StartSessionWorkspace = () => {
         setTreatment(treatmentRes?.data || null);
 
         const records = recordsRes?.data?.data || recordsRes?.data?.data?.data || [];
-        setLastMedicalRecord(records.length > 0 ? records[0] : null);
+        
+        // Charger les sessions passées (complètes) pour afficher l'historique
+        if (records.length > 0) {
+          const sortedRecords = records.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          setPastSessions(sortedRecords);
+          setLastMedicalRecord(sortedRecords[0]);
+        }
       } catch (error) {
         console.error('Erreur chargement espace séance:', error);
       } finally {
@@ -214,30 +222,54 @@ const StartSessionWorkspace = () => {
   const confirmSession = async () => {
     setLoading(true);
     try {
-      const appointmentDateTime = form.next_appointment_time
-        ? `${form.next_appointment_date} ${form.next_appointment_time}:00`
-        : form.next_appointment_date;
+      // Determine the consumed appointment (the one this session fulfills)
+      let consumedAppointmentId = treatment.next_appointment_id || null;
 
-      const appointmentRes = await appointmentAPI.create({
-        patient_id: treatment.patient_id,
-        dentist_id: currentUser?.id,
-        appointment_date: appointmentDateTime,
-        appointment_time_specified: !!form.next_appointment_time,
-        duration: null,
-        reason: null,
-        notes: null,
-      });
+      // If there's no scheduled appointment to consume, create a placeholder appointment at "now" to attach the medical record to.
+      if (!consumedAppointmentId) {
+        const now = new Date();
+        const nowIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:00`;
+        const placeholder = await appointmentAPI.create({
+          patient_id: treatment.patient_id,
+          dentist_id: currentUser?.id,
+          appointment_date: nowIso,
+          appointment_time_specified: true,
+          duration: null,
+          reason: null,
+          notes: 'Rendez-vous créé automatiquement pour saisir la séance',
+        });
+        consumedAppointmentId = placeholder?.data?.id || null;
+      }
 
-      const newNextAppointmentId = appointmentRes?.data?.id || null;
-      const consumedAppointmentId = treatment.next_appointment_id || null;
-
+      // Create the medical record for the consumed appointment
       const medicalRecordRes = await medicalRecordAPI.create({
         patient_id: treatment.patient_id,
         patient_treatment_id: treatment.id,
-        appointment_id: consumedAppointmentId || newNextAppointmentId,
+        appointment_id: consumedAppointmentId,
         treatment_performed: form.treatment_performed,
         next_action: form.next_action,
+        amount_collected: form.amount_collected ? Number(form.amount_collected) : null,
       });
+
+      // If a next appointment was provided, create it now and use it as next_appointment_id
+      let newNextAppointmentId = null;
+      if (form.next_appointment_date) {
+        const appointmentDateTime = form.next_appointment_time
+          ? `${form.next_appointment_date}T${form.next_appointment_time}:00`
+          : form.next_appointment_date;
+
+        const nextRes = await appointmentAPI.create({
+          patient_id: treatment.patient_id,
+          dentist_id: currentUser?.id,
+          appointment_date: appointmentDateTime,
+          appointment_time_specified: !!form.next_appointment_time,
+          duration: null,
+          reason: null,
+          notes: null,
+        });
+
+        newNextAppointmentId = nextRes?.data?.id || null;
+      }
 
       await patientTreatmentAPI.update(treatment.id, {
         status: 'in_progress',
@@ -363,10 +395,22 @@ const StartSessionWorkspace = () => {
               <textarea
                 value={form.treatment_performed}
                 onChange={(e) => setForm((prev) => ({ ...prev, treatment_performed: e.target.value }))}
-                rows="8"
+                rows="6"
                 className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="Décrivez les soins réalisés..."
                 required
+                disabled={isLocked}
+              />
+              
+              <label className="block text-xs font-semibold text-gray-700 mt-3">Montant encaissé (XOF)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.amount_collected}
+                onChange={(e) => setForm((prev) => ({ ...prev, amount_collected: e.target.value }))}
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Ex: 25000.00"
                 disabled={isLocked}
               />
             </section>
@@ -522,7 +566,52 @@ const StartSessionWorkspace = () => {
           </div>
         </form>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+        {/* Section: Historique des séances avec montants encaissés */}
+        {pastSessions.length > 0 && (
+          <div className="rounded-xl border border-green-200 bg-green-50/70 px-4 py-3 mt-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-green-800">Montants encaissés</h3>
+              <span className="text-[11px] text-green-600">Historique des séances</span>
+            </div>
+
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-xs text-green-900 border-collapse">
+                <thead>
+                  <tr className="bg-green-100 border-b border-green-200">
+                    <th className="px-3 py-2 text-left font-semibold">Séance</th>
+                    <th className="px-3 py-2 text-left font-semibold">Date</th>
+                    <th className="px-3 py-2 text-right font-semibold">Montant encaissé</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pastSessions.map((session, idx) => (
+                    <tr key={session.id} className="border-b border-green-100 hover:bg-green-100/50">
+                      <td className="px-3 py-2">#Séance {pastSessions.length - idx}</td>
+                      <td className="px-3 py-2">
+                        {new Date(session.created_at).toLocaleDateString('fr-FR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                        })}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold">
+                        {session.amount_collected ? `${Number(session.amount_collected).toFixed(2)} XOF` : '–'}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-green-100 border-t-2 border-green-200">
+                    <td colSpan="2" className="px-3 py-2 font-semibold text-right">Total encaissé :</td>
+                    <td className="px-3 py-2 text-right font-bold text-green-700">
+                      {(pastSessions.reduce((sum, s) => sum + (Number(s.amount_collected) || 0), 0)).toFixed(2)} XOF
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 mt-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Contexte précédent</h3>
             <span className="text-[11px] text-slate-500">Discret - lecture rapide</span>

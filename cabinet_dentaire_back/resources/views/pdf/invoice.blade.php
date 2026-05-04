@@ -268,10 +268,7 @@
 
     <table class="signature-table" style="margin-top: 16px;">
         <tr>
-            <td style="width: 50%;">
-                <div class="muted">Signature du patient</div>
-                <div class="signature-line"></div>
-            </td>
+
             <td style="width: 50%; text-align: right;">
                 <div class="muted">Signature et cachet du médecin</div>
                 <div class="signature-line" style="margin-left: auto;"></div>
