@@ -54,9 +54,9 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
-    'cabinet_address' => env('CABINET_ADDRESS', 'parcelles'),
+    'cabinet_address' => env('CABINET_ADDRESS', 'Cité Fadia , Guentaba n\'23, Dakar'),
 
-    'cabinet_phone' => env('CABINET_PHONE', '+221 721 98 33'),
+    'cabinet_phone' => env('CABINET_PHONE', '+221 77 721 98 33'),
 
     /*
     |--------------------------------------------------------------------------
