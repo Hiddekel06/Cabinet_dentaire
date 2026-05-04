@@ -566,7 +566,6 @@ const Appointments = () => {
       const dateStr = toDateStr(newDate);
       const payload = appointment.timeSpecified
         ? {
-            // Use space-separated datetime to be broadly acceptable by backend parsers
             appointment_date: `${dateStr} ${(appointment.heureValue || '09:00')}:00`,
             appointment_time_specified: true,
           }
@@ -575,37 +574,24 @@ const Appointments = () => {
             appointment_time_specified: false,
           };
       
-      // Choose endpoint based on whether to sync
-      let endpoint = `${import.meta.env.VITE_API_URL}/appointments/${appointmentId}`;
+      // Use API client instead of fetch
       if (shouldSync) {
-        endpoint = `${import.meta.env.VITE_API_URL}/appointments/${appointmentId}/reschedule-with-sync`;
-        payload.sync_treatments = true;
-      }
-
-      // Try primary method; if non-sync and server rejects PUT, fallback to PATCH
-      let response = await fetch(endpoint, {
-        method: shouldSync ? 'PATCH' : 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok && !shouldSync) {
-        // fallback to PATCH for non-sync moves
-        response = await fetch(endpoint, {
+        // For sync: POST to reschedule-with-sync endpoint
+        const syncResponse = await fetch(`${import.meta.env.VITE_API_URL}/appointments/${appointmentId}/reschedule-with-sync`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, sync_treatments: true }),
         });
-      }
 
-      if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status}`);
+        if (!syncResponse.ok) {
+          throw new Error(`Erreur HTTP: ${syncResponse.status}`);
+        }
+      } else {
+        // For simple update: use appointmentAPI.update
+        await appointmentAPI.update(appointmentId, payload);
       }
 
       // Mettre à jour l'état local

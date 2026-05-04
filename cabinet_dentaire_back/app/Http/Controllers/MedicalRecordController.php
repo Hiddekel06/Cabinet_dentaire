@@ -103,10 +103,16 @@ class MedicalRecordController extends Controller
 
         $record = MedicalRecord::create($validated);
         
-        // Mettre à jour le statut du rendez-vous associé à "completed"
+        // Mettre à jour le statut du rendez-vous associé: only completed si past
         $appointment = \App\Models\Appointment::find($validated['appointment_id']);
         if ($appointment) {
-            $appointment->update(['status' => 'completed']);
+            $isPast = $appointment->appointment_date && $appointment->appointment_date->isPast();
+            if ($isPast) {
+                $appointment->update(['status' => 'completed']);
+            } else {
+                // Future appointment: keep as-is (do not mark completed until it actually happens)
+                $appointment->update(['status' => 'pending']);
+            }
         }
         
         $record->load(['patient', 'appointment', 'patientTreatment', 'creator']);

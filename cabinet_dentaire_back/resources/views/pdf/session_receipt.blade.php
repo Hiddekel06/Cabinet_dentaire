@@ -92,6 +92,12 @@
         <td class="label" style="width: 70%;">Total de la séance</td>
         <td class="value">{{ number_format((float) $receipt->total_amount, 0, ',', ' ') }} FCFA</td>
     </tr>
+    @if($receipt->medicalRecord?->amount_collected)
+    <tr style="background: #ecfdf5; border-top: 2px solid #10b981;">
+        <td class="label" style="width: 70%; font-weight: bold; color: #059669;">Montant encaissé</td>
+        <td class="value" style="color: #059669;">{{ number_format((float) $receipt->medicalRecord->amount_collected, 0, ',', ' ') }} FCFA</td>
+    </tr>
+    @endif
 </table>
 </body>
 </html>

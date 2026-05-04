@@ -211,6 +211,7 @@ const SessionReceipts = () => {
                     <th className="py-2 pr-3">Traitement</th>
                     <th className="py-2 pr-3">Séance</th>
                     <th className="py-2 pr-3">Total</th>
+                    <th className="py-2 pr-3">Montant encaissé</th>
                     <th className="py-2 pr-3">Statut</th>
                     <th className="py-2 pr-3">Téléchargements</th>
                     <th className="py-2 pr-3">Dernier téléchargement</th>
@@ -226,6 +227,7 @@ const SessionReceipts = () => {
                       <td className="py-2 pr-3">{receipt.patient_treatment_id ? `#${receipt.patient_treatment_id}` : '-'}</td>
                       <td className="py-2 pr-3">#{receipt.medical_record_id}</td>
                       <td className="py-2 pr-3">{Number(receipt.total_amount || 0).toLocaleString('fr-FR')} FCFA</td>
+                      <td className="py-2 pr-3 text-green-600 font-semibold">{receipt.medical_record?.amount_collected ? `${Number(receipt.medical_record.amount_collected).toLocaleString('fr-FR')} XOF` : '–'}</td>
                       <td className="py-2 pr-3">
                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${receipt.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                           {receipt.status === 'paid' ? 'Payé' : 'Non payé'}

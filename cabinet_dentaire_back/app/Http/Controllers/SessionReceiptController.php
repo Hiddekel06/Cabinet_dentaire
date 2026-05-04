@@ -19,7 +19,7 @@ class SessionReceiptController extends Controller
         $perPage = max(1, min(200, (int) $request->input('per_page', 15)));
 
         $query = SessionReceipt::query()
-            ->with(['patient:id,first_name,last_name', 'medicalRecord:id,date,patient_treatment_id'])
+            ->with(['patient:id,first_name,last_name', 'medicalRecord:id,date,patient_treatment_id,amount_collected'])
             ->withCount([
                 'events as downloads_count' => function ($eventQuery) {
                     $eventQuery->where('event_type', 'downloaded');
