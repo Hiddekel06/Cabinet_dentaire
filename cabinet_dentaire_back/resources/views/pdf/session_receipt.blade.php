@@ -33,7 +33,7 @@
         </td>
         <td>
             <p class="cabinet-subtitle">Cabinet dentaire</p>
-            <p class="cabinet-subtile">{{ $cabinetName }}</p>
+            <p class="cabinet-subtitle">{{ $cabinetName }}</p>
             <p class="cabinet-name">{{ $cabinetAddress }}</p>
             <p class="cabinet-name">Téléphone : {{ $cabinetPhone }}</p>
         </td>

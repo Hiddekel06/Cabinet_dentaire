@@ -96,7 +96,7 @@
         @endif
     </div>
     <p class="cabinet-subtitle">Cabinet dentaire</p>
-    <p class="cabinet-subitle">{{ $cabinetName }}</p>
+    <p class="cabinet-subtitle">{{ $cabinetName }}</p>
 
     <p class="cabinet-name">Adresse : {{ $cabinetAddress }}</p>
     <p class="cabinet-name">Téléphone : {{ $cabinetPhone }}</p>
