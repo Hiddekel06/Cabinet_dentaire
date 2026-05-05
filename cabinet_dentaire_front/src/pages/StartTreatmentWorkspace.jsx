@@ -16,6 +16,7 @@ const StartTreatmentWorkspace = () => {
   const [dentalActsSearchTerm, setDentalActsSearchTerm] = useState('');
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [actPrices, setActPrices] = useState({});
+  const [paidAmount, setPaidAmount] = useState('');
 
   const [form, setForm] = useState({
     patient_id: '',
@@ -150,6 +151,9 @@ const StartTreatmentWorkspace = () => {
     }, 0);
   }, [form.acts, dentalActs, actPrices]);
 
+  const paidAmountValue = Number(paidAmount || 0);
+  const remainingAmount = Math.max(totalActsWithCustomPrices - paidAmountValue, 0);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.patient_id || !form.name || !form.next_appointment_date) {
@@ -170,6 +174,7 @@ const StartTreatmentWorkspace = () => {
     }
 
     // Show pricing modal
+    setPaidAmount('');
     setShowPricingModal(true);
   };
 
@@ -226,15 +231,33 @@ const StartTreatmentWorkspace = () => {
             appointment_id: appointmentId,
             treatment_performed: 'Démarrage du suivi',
             next_action: form.notes || null,
+            amount_collected: paidAmountValue > 0 ? paidAmountValue : undefined,
           });
 
-          const medicalRecord = mrRes?.data || null;
+          let medicalRecord = mrRes?.data || null;
           if (medicalRecord?.id) {
             let receiptActsPayload = (actsWithPrices || []).map((item) => ({
               dental_act_id: Number(item.dental_act_id),
               quantity: Math.max(1, Number(item.quantity) || 1),
               unit_price: Number(item.unit_price ?? 0),
             }));
+
+            // If the created medical record is not linked to the treatment (we created with null to bypass lock),
+            // attach it to the newly created treatment so receipts are linked to the treatment.
+            try {
+              if (!medicalRecord.patient_treatment_id && created?.id) {
+                await medicalRecordAPI.update(medicalRecord.id, { patient_treatment_id: created.id });
+                // Refresh medicalRecord reference
+                try {
+                  const refreshed = await medicalRecordAPI.getById(medicalRecord.id);
+                  if (refreshed?.data) medicalRecord = refreshed.data;
+                } catch (e) {
+                  // ignore
+                }
+              }
+            } catch (attachErr) {
+              console.error('Impossible d\u2019attacher le dossier medical au traitement:', attachErr);
+            }
 
             // Fallback: if no acts were selected in form, try to read acts from created treatment (includes defaults).
             if (receiptActsPayload.length === 0 && created?.id) {
@@ -288,10 +311,18 @@ const StartTreatmentWorkspace = () => {
             let receiptRes = null;
             let receiptErrorMessage = null;
             try {
-              receiptRes = await sessionReceiptAPI.create({
-                medical_record_id: medicalRecord.id,
-                acts: receiptActsPayload,
-              });
+              if (receiptActsPayload.length === 0 && paidAmountValue > 0) {
+                // Create a simple payment-only receipt (no acts)
+                receiptRes = await sessionReceiptAPI.create({
+                  medical_record_id: medicalRecord.id,
+                  amount_collected: paidAmountValue,
+                });
+              } else {
+                receiptRes = await sessionReceiptAPI.create({
+                  medical_record_id: medicalRecord.id,
+                  acts: receiptActsPayload,
+                });
+              }
             } catch (rErr) {
               console.error('Erreur creation receipt API:', rErr);
               console.error('Receipt error response data:', rErr.response?.data ?? rErr);
@@ -655,6 +686,25 @@ const StartTreatmentWorkspace = () => {
                 <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
                   <p className="text-sm text-gray-600">Total des actes :</p>
                   <p className="text-2xl font-bold text-emerald-700">{totalActsWithCustomPrices.toLocaleString()} FCFA</p>
+                </div>
+
+                <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg border border-blue-200 bg-blue-50">
+                    <label className="block text-xs font-semibold text-blue-800 mb-1">Montant encaissé</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={paidAmount}
+                      onChange={(e) => setPaidAmount(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="p-3 rounded-lg border border-amber-200 bg-amber-50">
+                    <p className="text-xs font-semibold text-amber-800 mb-1">Reste estimé</p>
+                    <p className="text-lg font-bold text-amber-700">{remainingAmount.toLocaleString()} FCFA</p>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-3">

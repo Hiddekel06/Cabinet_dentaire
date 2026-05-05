@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 const statusOptions = [
   { value: 'all', label: 'Tous les statuts', color: 'gray' },
   { value: 'À venir', label: 'À venir', color: 'emerald' },
+  { value: 'Aujourd\'hui', label: 'Aujourd\'hui', color: 'blue' },
   { value: 'En retard', label: 'En retard', color: 'amber' },
   { value: 'Terminé', label: 'Terminé', color: 'slate' },
   { value: 'Absent', label: 'Absent', color: 'orange' },
@@ -74,17 +75,29 @@ const Appointments = () => {
   });
   const menuRef = useRef(null);
 
-  // Fermer le menu quand on clique en dehors
-  const statusMap = {
-    pending: 'À venir',
-    confirmed: 'À venir',
-    completed: 'Terminé',
-    absent: 'Absent',
-    cancelled: 'Annulé',
+  const getAppointmentDisplayStatus = (appointmentDateStr, apiStatus) => {
+    if (apiStatus === 'absent') return 'Absent';
+    if (apiStatus === 'cancelled') return 'Annulé';
+    if (!appointmentDateStr) return 'À venir';
+    if (appointmentDateStr > todayDateStr) return 'À venir';
+    if (appointmentDateStr === todayDateStr) return apiStatus === 'completed' ? 'Terminé' : 'Aujourd\'hui';
+    if (apiStatus === 'completed') return 'Terminé';
+    if (appointmentDateStr < todayDateStr) return 'En retard';
+    return 'À venir';
+  };
+
+  const getStatusBadgeClasses = (status) => {
+    if (status === 'Aujourd\'hui') return 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700';
+    if (status === 'En retard') return 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700';
+    if (status === 'Terminé') return 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600';
+    if (status === 'Absent') return 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700';
+    if (status === 'Annulé') return 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-600';
+    return 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700';
   };
 
   const statusToApi = {
     'À venir': 'pending',
+    'Aujourd\'hui': 'pending',
     'Terminé': 'completed',
     'Absent': 'absent',
     'Annulé': 'cancelled',
@@ -109,8 +122,7 @@ const Appointments = () => {
           ? heureValue
           : '–';
         const patient = a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : '';
-        const baseStatus = statusMap[a.status] || 'À venir';
-        const statut = (baseStatus === 'À venir' && date && date < todayDateStr) ? 'En retard' : baseStatus;
+        const statut = getAppointmentDisplayStatus(date, a.status);
         return {
           apiId: a.id,
           id: a.id,
@@ -214,7 +226,7 @@ const Appointments = () => {
       patient_id: appointment.patientId || '',
       motif: appointment.motif || 'Consultation',
       praticien: appointment.praticien || (user?.name || 'Dentiste'),
-      statut: appointment.statut === 'En retard' ? 'À venir' : (appointment.statut || 'À venir'),
+      statut: appointment.statut || 'À venir',
     });
     setShowQuickCreate(true);
   };
@@ -768,7 +780,7 @@ const Appointments = () => {
                       onChange={handleQuickCreateChange}
                       className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
                     >
-                      {statusOptions.filter(s => ['À venir', 'Terminé', 'Absent', 'Annulé'].includes(s.value)).map(s => (
+                      {statusOptions.filter(s => ['À venir', 'Aujourd\'hui', 'Terminé', 'Absent', 'Annulé'].includes(s.value)).map(s => (
                         <option key={s.value} value={s.value}>{s.label}</option>
                       ))}
                     </select>
@@ -845,17 +857,7 @@ const Appointments = () => {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">Statut</span>
-                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                  selectedAppointment.statut === 'À venir'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : selectedAppointment.statut === 'En retard'
-                      ? 'bg-amber-100 text-amber-700'
-                    : selectedAppointment.statut === 'Terminé'
-                      ? 'bg-gray-100 text-gray-600'
-                      : selectedAppointment.statut === 'Absent'
-                        ? 'bg-orange-100 text-orange-700'
-                      : 'bg-red-100 text-red-600'
-                }`}>
+                <span className={getStatusBadgeClasses(selectedAppointment.statut).replace('inline-block ', 'text-xs font-semibold px-2 py-1 ')}>
                   {selectedAppointment.statut}
                 </span>
               </div>
@@ -1420,13 +1422,7 @@ const Appointments = () => {
                       <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">{a.motif}</td>
                       <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">{a.praticien}</td>
                       <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">
-                        <span className={
-                          a.statut === 'À venir' ? 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700' :
-                          a.statut === 'En retard' ? 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700' :
-                          a.statut === 'Terminé' ? 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600' :
-                          a.statut === 'Absent' ? 'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700' :
-                          'inline-block px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-600'
-                        }>
+                        <span className={getStatusBadgeClasses(a.statut)}>
                           {a.statut}
                         </span>
                       </td>
@@ -1719,6 +1715,8 @@ const Appointments = () => {
                                     className={`text-xs px-1.5 py-0.5 rounded truncate cursor-move transition-colors font-medium ${
                                       app.statut === 'À venir'
                                         ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                        : app.statut === 'Aujourd\'hui'
+                                        ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                                         : app.statut === 'En retard'
                                         ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
                                         : app.statut === 'Terminé'
@@ -1794,6 +1792,8 @@ const Appointments = () => {
                                 className={`text-xs px-1.5 py-0.5 rounded truncate font-medium ${
                                   app.statut === 'À venir'
                                     ? 'bg-emerald-100 text-emerald-700'
+                                    : app.statut === 'Aujourd\'hui'
+                                    ? 'bg-blue-100 text-blue-700'
                                     : app.statut === 'En retard'
                                     ? 'bg-amber-100 text-amber-700'
                                     : app.statut === 'Terminé'
@@ -1827,6 +1827,8 @@ const Appointments = () => {
                             className={`p-2 rounded-lg border ${
                               app.statut === 'À venir'
                                 ? 'bg-emerald-50 border-emerald-200'
+                                : app.statut === 'Aujourd\'hui'
+                                ? 'bg-blue-50 border-blue-200'
                                 : app.statut === 'En retard'
                                 ? 'bg-amber-50 border-amber-200'
                                 : app.statut === 'Terminé'
@@ -1863,6 +1865,8 @@ const Appointments = () => {
                       <span className={`mt-1 inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
                         app.statut === 'À venir'
                           ? 'bg-emerald-100 text-emerald-700'
+                          : app.statut === 'Aujourd\'hui'
+                          ? 'bg-blue-100 text-blue-700'
                           : app.statut === 'En retard'
                           ? 'bg-amber-100 text-amber-700'
                           : app.statut === 'Terminé'
@@ -1883,6 +1887,10 @@ const Appointments = () => {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-emerald-100 border border-emerald-300 rounded"></div>
                 <span className="text-sm text-gray-600">À venir</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-blue-100 border border-blue-300 rounded"></div>
+                <span className="text-sm text-gray-600">Aujourd'hui</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-amber-100 border border-amber-300 rounded"></div>

@@ -40,6 +40,14 @@ const MedicalCertificates = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  const selectedPatient = patients.find((patient) => String(patient.id) === String(form.patient_id)) || null;
+
+  useEffect(() => {
+    if (isNewMode) {
+      void loadPatientsOnDemand();
+    }
+  }, [isNewMode]);
+
   useEffect(() => {
     if (!isNewMode) {
       loadCertificates();
@@ -69,7 +77,20 @@ const MedicalCertificates = () => {
     if (patients.length === 0) {
       try {
         const patRes = await patientAPI.getAll(1);
-        setPatients(patRes.data.data || patRes.data || []);
+        const loadedPatients = patRes.data.data || patRes.data || [];
+        setPatients(loadedPatients);
+
+        if (patientIdFromQuery && !loadedPatients.some((patient) => String(patient.id) === String(patientIdFromQuery))) {
+          try {
+            const patientRes = await patientAPI.getById(patientIdFromQuery);
+            const patientData = patientRes.data?.data || patientRes.data;
+            if (patientData?.id) {
+              setPatients((prev) => [patientData, ...prev.filter((patient) => String(patient.id) !== String(patientData.id))]);
+            }
+          } catch {
+            // La saisie reste possible même si le patient n'a pas pu être rechargé explicitement.
+          }
+        }
       } catch {
         setError("Erreur de chargement des patients");
       }
@@ -272,6 +293,12 @@ const MedicalCertificates = () => {
             <div className="px-4 pt-6 pb-3 bg-linear-to-r from-blue-50 via-white to-blue-50 rounded-t-xl">
               <h3 className="text-lg font-bold text-gray-900">Nouveau certificat médical</h3>
               <p className="text-sm text-gray-500 mt-1">Remplir les informations</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                <span className="font-semibold text-gray-700">Patient sélectionné :</span>
+                <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-1 font-semibold text-blue-700">
+                  {selectedPatient ? `${selectedPatient.first_name || ''} ${selectedPatient.last_name || ''}`.trim() : (form.patient_id ? `ID ${form.patient_id}` : 'Aucun')}
+                </span>
+              </div>
             </div>
             <form onSubmit={handleSubmit} className="px-4 py-4 grid grid-cols-1 gap-3 overflow-y-auto max-h-[65vh]">
               <div>

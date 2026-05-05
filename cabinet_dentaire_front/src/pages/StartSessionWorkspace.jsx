@@ -33,6 +33,7 @@ const StartSessionWorkspace = () => {
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [actPrices, setActPrices] = useState({});
   const [pastSessions, setPastSessions] = useState([]);
+  const [collectedSoFar, setCollectedSoFar] = useState(0);
 
   const [form, setForm] = useState({
     treatment_performed: '',
@@ -116,6 +117,15 @@ const StartSessionWorkspace = () => {
           const sortedRecords = records.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
           setPastSessions(sortedRecords);
           setLastMedicalRecord(sortedRecords[0]);
+        }
+        // Load receipts summary for this treatment to show memo of collected amounts
+        try {
+          const receiptsRes = await sessionReceiptAPI.getAll({ patient_treatment_id: treatmentId, per_page: 200 });
+          const receipts = receiptsRes?.data?.data || receiptsRes?.data || [];
+          const sum = (receipts || []).reduce((s, r) => s + (Number(r.total_amount || 0)), 0);
+          setCollectedSoFar(sum);
+        } catch (e) {
+          setCollectedSoFar(0);
         }
       } catch (error) {
         console.error('Erreur chargement espace séance:', error);
@@ -413,6 +423,9 @@ const StartSessionWorkspace = () => {
                 placeholder="Ex: 25000.00"
                 disabled={isLocked}
               />
+              {collectedSoFar > 0 && (
+                <div className="text-sm text-gray-600 mt-2">Total encaissé jusqu'à présent: {collectedSoFar.toLocaleString('fr-FR')} XOF</div>
+              )}
             </section>
 
             <section className="p-5 border-b lg:border-b-0 lg:border-r border-gray-200 bg-linear-to-b from-amber-50 to-white space-y-3">

@@ -117,6 +117,20 @@ class MedicalRecordController extends Controller
         
         $record->load(['patient', 'appointment', 'patientTreatment', 'creator']);
 
+        // Compute collected sum for the related treatment (if any) to show a memo to the client
+        $collectedBefore = 0;
+        if (!empty($record->patient_treatment_id)) {
+            try {
+                $collectedBefore = \App\Models\SessionReceipt::query()
+                    ->where('patient_treatment_id', $record->patient_treatment_id)
+                    ->sum('total_amount');
+            } catch (\Throwable $e) {
+                $collectedBefore = 0;
+            }
+        }
+
+        $record->setAttribute('collected_before', (float) $collectedBefore);
+
         return response()->json($record, 201);
     }
 

@@ -56,10 +56,12 @@ class SessionReceiptController extends Controller
     {
         $validated = $request->validate([
             'medical_record_id' => ['required', 'integer', 'exists:medical_records,id'],
-            'acts' => ['required', 'array', 'min:1'],
-            'acts.*.dental_act_id' => ['required', 'integer', 'distinct', 'exists:dental_acts,id'],
+            // Either provide acts (detailed receipt) OR provide amount_collected (simple payment receipt)
+            'acts' => ['required_without:amount_collected', 'array', 'min:1'],
+            'acts.*.dental_act_id' => ['required_with:acts', 'integer', 'distinct', 'exists:dental_acts,id'],
             'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
             'acts.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'amount_collected' => ['required_without:acts', 'numeric', 'min:0'],
         ]);
 
         $existing = SessionReceipt::with(['items.dentalAct', 'patient', 'medicalRecord'])
@@ -72,16 +74,9 @@ class SessionReceiptController extends Controller
 
         $medicalRecord = MedicalRecord::with(['patient', 'patientTreatment'])->findOrFail($validated['medical_record_id']);
 
-        $actIds = collect($validated['acts'])->pluck('dental_act_id')->unique()->values();
-        $acts = DentalAct::query()->whereIn('id', $actIds)->get()->keyBy('id');
-
-        if ($acts->count() !== $actIds->count()) {
-            return response()->json([
-                'message' => 'Un ou plusieurs actes sont introuvables.',
-            ], 422);
-        }
-
-        $receipt = DB::transaction(function () use ($validated, $medicalRecord, $acts, $request) {
+        // If acts are provided, build a detailed receipt. Otherwise if amount_collected is provided,
+        // create a simple receipt representing the collected amount (no items).
+        $receipt = DB::transaction(function () use ($validated, $medicalRecord, $request) {
             $receipt = SessionReceipt::create([
                 'medical_record_id' => $medicalRecord->id,
                 'patient_id' => $medicalRecord->patient_id,
@@ -94,32 +89,68 @@ class SessionReceiptController extends Controller
             ]);
 
             $total = 0;
-            foreach ($validated['acts'] as $item) {
-                $dentalAct = $acts->get((int) $item['dental_act_id']);
-                if (!$dentalAct) {
-                    continue;
+
+            if (!empty($validated['acts'])) {
+                $actIds = collect($validated['acts'])->pluck('dental_act_id')->unique()->values();
+                $acts = DentalAct::query()->whereIn('id', $actIds)->get()->keyBy('id');
+
+                if ($acts->count() !== $actIds->count()) {
+                    throw new \RuntimeException('Un ou plusieurs actes sont introuvables.');
                 }
 
-                $quantity = max(1, (int) ($item['quantity'] ?? 1));
-                $unitPrice = array_key_exists('unit_price', $item)
-                    ? (float) $item['unit_price']
-                    : (float) ($dentalAct->tarif ?? 0);
-                $lineTotal = $quantity * $unitPrice;
+                foreach ($validated['acts'] as $item) {
+                    $dentalAct = $acts->get((int) $item['dental_act_id']);
+                    if (!$dentalAct) {
+                        continue;
+                    }
 
-                $receipt->items()->create([
-                    'dental_act_id' => $dentalAct->id,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'line_total' => $lineTotal,
+                    $quantity = max(1, (int) ($item['quantity'] ?? 1));
+                    $unitPrice = array_key_exists('unit_price', $item)
+                        ? (float) $item['unit_price']
+                        : (float) ($dentalAct->tarif ?? 0);
+                    $lineTotal = $quantity * $unitPrice;
+
+                    $receipt->items()->create([
+                        'dental_act_id' => $dentalAct->id,
+                        'quantity' => $quantity,
+                        'unit_price' => $unitPrice,
+                        'line_total' => $lineTotal,
+                    ]);
+
+                    $total += $lineTotal;
+                }
+            } elseif (array_key_exists('amount_collected', $validated)) {
+                // Simple payment receipt (no items). Mark as paid immediately.
+                $total = (float) $validated['amount_collected'];
+                $receipt->update([
+                    'total_amount' => $total,
+                    'status' => $total > 0 ? 'paid' : 'pending',
+                    'paid_at' => $total > 0 ? now() : null,
                 ]);
 
-                $total += $lineTotal;
+                // Also update medical record amount_collected if present
+                try {
+                    $medicalRecordModel = MedicalRecord::find($validated['medical_record_id']);
+                    if ($medicalRecordModel) {
+                        $medicalRecordModel->update(['amount_collected' => $total]);
+                    }
+                } catch (\Throwable $e) {
+                    // ignore failure to avoid breaking receipt creation
+                }
             }
 
-            $receipt->update([
-                'receipt_number' => sprintf('REC-%s-%06d', date('Y'), $receipt->id),
-                'total_amount' => $total,
-            ]);
+            if (empty($validated['acts'])) {
+                // If acts were not provided, ensure receipt_number and total_amount are set (may already be set above)
+                $receipt->update([
+                    'receipt_number' => sprintf('REC-%s-%06d', date('Y'), $receipt->id),
+                    'total_amount' => $receipt->total_amount ?: $total,
+                ]);
+            } else {
+                $receipt->update([
+                    'receipt_number' => sprintf('REC-%s-%06d', date('Y'), $receipt->id),
+                    'total_amount' => $total,
+                ]);
+            }
 
             $this->logReceiptEvent(
                 $receipt,
