@@ -34,8 +34,8 @@
         <td>
             <p class="cabinet-subtitle">Cabinet dentaire</p>
             <p class="cabinet-name">{{ $cabinetName }}</p>
-            <p class="cabinet-subtitle">{{ $cabinetAddress }}</p>
-            <p class="cabinet-subtitle">Téléphone : {{ $cabinetPhone }}</p>
+            <p class="cabinet-name">{{ $cabinetAddress }}</p>
+            <p class="cabinet-name">Téléphone : {{ $cabinetPhone }}</p>
         </td>
         <td style="width: 220px;">
             <div class="receipt-box">

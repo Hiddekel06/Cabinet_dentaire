@@ -198,9 +198,9 @@
             </td>
             <td class="header-main">
                 <p class="cabinet-subtitle">Cabinet Dentaire</p>
-                <p class="cabinet-name">{{ $cabinetName }}</p>               
-                <p class="cabinet-subtitle">{{ $cabinetAddress }}</p>
-                <p class="cabinet-subtitle">Téléphone : {{ $cabinetPhone }}</p>
+                <p class="cabinet-subitle">{{ $cabinetName }}</p>               
+                <p class="cabinet-name">{{ $cabinetAddress }}</p>
+                <p class="cabinet-name">Téléphone : {{ $cabinetPhone }}</p>
             </td>
             <td class="header-meta">
                 <div class="invoice-box">
