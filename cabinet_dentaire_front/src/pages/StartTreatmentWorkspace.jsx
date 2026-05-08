@@ -17,6 +17,7 @@ const StartTreatmentWorkspace = () => {
   const [patientHistory, setPatientHistory] = useState([]);
   const [pastTreatments, setPastTreatments] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showAutoCloseModal, setShowAutoCloseModal] = useState(false);
 
   const [form, setForm] = useState({
     patient_id: '',
@@ -164,24 +165,17 @@ const StartTreatmentWorkspace = () => {
     ) || null;
   }, [patientTreatments, form.patient_id]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.patient_id || !form.name || !form.planned_treatment || !form.next_appointment_date) {
-      showFeedback('warning', 'Champs obligatoires', 'Veuillez remplir les informations du patient, le nom du suivi, le traitement prévu et le prochain RDV.');
-      return;
-    }
-
+  const saveNewTreatment = async () => {
     setLoading(true);
     try {
-      // 1. Créer le traitement (le champ planned_treatment sera sauvegardé dans 'notes' pour l'instant)
       const res = await patientTreatmentAPI.create({ 
         patient_id: form.patient_id,
         name: form.name,
         start_date: form.start_date,
         next_appointment_date: form.next_appointment_date,
         next_appointment_reason: form.next_appointment_reason,
-        notes: form.planned_treatment, // On stocke la description ici
-        acts: [] // On envoie une liste vide d'actes structurés
+        notes: form.planned_treatment,
+        acts: [] 
       });
       
       const createdTreatment = res?.data || null;
@@ -190,13 +184,9 @@ const StartTreatmentWorkspace = () => {
         throw new Error('Erreur lors de la création du traitement.');
       }
 
-      // 2. Créer un dossier médical (medical_record) initial pour l'encaissement et le reçu
       let sessionReceiptId = null;
-      
-      // On récupère le RDV qui a été créé par le backend pour ce traitement
       let appointmentId = Number(createdTreatment.next_appointment_id || 0) || null;
 
-      // Création du medical_record initial
       const mrRes = await medicalRecordAPI.create({
         patient_id: createdTreatment.patient_id,
         patient_treatment_id: createdTreatment.id,
@@ -207,7 +197,6 @@ const StartTreatmentWorkspace = () => {
 
       const medicalRecord = mrRes?.data || null;
 
-      // 3. Générer le reçu si un montant a été encaissé
       if (medicalRecord?.id && form.amount_collected && Number(form.amount_collected) > 0) {
         const receiptRes = await sessionReceiptAPI.create({
           medical_record_id: medicalRecord.id,
@@ -227,6 +216,35 @@ const StartTreatmentWorkspace = () => {
       showFeedback('error', 'Échec', message);
     } finally {
       setLoading(false);
+      setShowAutoCloseModal(false);
+    }
+  };
+
+  const handleConfirmWithAutoClose = async () => {
+    setLoading(true);
+    try {
+      if (activePatientTreatment) {
+        await patientTreatmentAPI.update(activePatientTreatment.id, { status: 'completed' });
+      }
+      await saveNewTreatment();
+    } catch (error) {
+      console.error('Erreur lors de la clôture automatique:', error);
+      showFeedback('error', 'Erreur', 'Impossible de clôturer l\'ancien traitement.');
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.patient_id || !form.name || !form.planned_treatment || !form.next_appointment_date) {
+      showFeedback('warning', 'Champs obligatoires', 'Veuillez remplir les informations du patient, le nom du suivi, le traitement prévu et le prochain RDV.');
+      return;
+    }
+
+    if (activePatientTreatment) {
+      setShowAutoCloseModal(true);
+    } else {
+      await saveNewTreatment();
     }
   };
 
@@ -241,6 +259,41 @@ const StartTreatmentWorkspace = () => {
   return (
     <Layout>
       <div className="p-6 space-y-6">
+        {showAutoCloseModal && (
+          <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-amber-100 animate-in fade-in zoom-in duration-200">
+              <div className="bg-amber-50 px-6 py-6 text-center">
+                <div className="w-16 h-16 bg-amber-500 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-200">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">Traitement actif détecté</h3>
+                <p className="mt-2 text-sm text-slate-600 font-medium px-4">
+                  Le patient a déjà un traitement en cours : <span className="text-amber-700 font-bold">"{activePatientTreatment?.name}"</span>. 
+                  Démarrer ce nouveau suivi marquera l'ancien comme <span className="font-bold uppercase text-[10px] bg-slate-200 px-1.5 py-0.5 rounded">Terminé</span>.
+                </p>
+              </div>
+              <div className="p-6 space-y-3">
+                <button
+                  onClick={handleConfirmWithAutoClose}
+                  disabled={loading}
+                  className="w-full py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-amber-100 flex items-center justify-center gap-2"
+                >
+                  {loading ? 'Traitement en cours...' : 'Oui, clôturer et démarrer'}
+                </button>
+                <button
+                  onClick={() => setShowAutoCloseModal(false)}
+                  disabled={loading}
+                  className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-all"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 px-5 py-4 shadow-lg border border-slate-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -290,7 +343,6 @@ const StartTreatmentWorkspace = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
-            {/* Section 1: Patient */}
             <div className="p-6 space-y-4 bg-slate-50/30">
               <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
                 <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
@@ -365,7 +417,6 @@ const StartTreatmentWorkspace = () => {
                 />
               </div>
 
-              {/* Liste d'historique des soins récents */}
               {form.patient_id && (
                 <div className="pt-4 mt-4 border-t border-slate-200">
                   <h3 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -377,9 +428,8 @@ const StartTreatmentWorkspace = () => {
                     <div className="space-y-2 animate-pulse">
                       {[1, 2].map(i => <div key={i} className="h-12 bg-slate-100 rounded-lg"></div>)}
                     </div>
-                  ) : patientHistory.length > 0 ? (
+                  ) : (patientHistory.length > 0 || pastTreatments.length > 0) ? (
                     <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {/* Résumé des traitements passés */}
                       {pastTreatments.length > 0 && (
                         <div className="mb-4 pb-4 border-b border-slate-100">
                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-2">Derniers traitements terminés</p>
@@ -393,34 +443,37 @@ const StartTreatmentWorkspace = () => {
                         </div>
                       )}
 
-                      {/* Liste détaillée des séances */}
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-2">Séances récentes</p>
-                      {patientHistory.map((record) => (
-                        <div key={record.id} className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-blue-300 transition-colors">
-                          <div className="flex justify-between items-start mb-1.5">
-                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                              {new Date(record.created_at).toLocaleDateString('fr-FR')}
-                            </span>
-                            {record.amount_collected > 0 && (
-                              <span className="text-[10px] font-extrabold text-emerald-600">
-                                {Number(record.amount_collected).toLocaleString('fr-FR')} XOF
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] font-bold text-slate-800 line-clamp-1 mb-0.5">
-                            {record.patient_treatment?.name || 'Consultation'}
-                          </p>
-                          <p className="text-[10px] text-slate-500 italic line-clamp-2 leading-relaxed">
-                            "{record.treatment_performed}"
-                          </p>
-                          {record.next_action && (
-                            <div className="mt-1.5 pt-1.5 border-t border-blue-50 flex items-start gap-1">
-                              <span className="text-[9px] font-bold text-blue-400 uppercase">Suivi :</span>
-                              <p className="text-[9px] text-blue-600 font-medium line-clamp-1">{record.next_action}</p>
+                      {patientHistory.length > 0 && (
+                        <>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mb-2">Séances récentes</p>
+                          {patientHistory.map((record) => (
+                            <div key={record.id} className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-blue-300 transition-colors">
+                              <div className="flex justify-between items-start mb-1.5">
+                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                  {new Date(record.created_at).toLocaleDateString('fr-FR')}
+                                </span>
+                                {record.amount_collected > 0 && (
+                                  <span className="text-[10px] font-extrabold text-emerald-600">
+                                    {Number(record.amount_collected).toLocaleString('fr-FR')} XOF
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-bold text-slate-800 line-clamp-1 mb-0.5">
+                                {record.patient_treatment?.name || 'Consultation'}
+                              </p>
+                              <p className="text-[10px] text-slate-500 italic line-clamp-2 leading-relaxed">
+                                "{record.treatment_performed}"
+                              </p>
+                              {record.next_action && (
+                                <div className="mt-1.5 pt-1.5 border-t border-blue-50 flex items-start gap-1">
+                                  <span className="text-[9px] font-bold text-blue-400 uppercase">Suivi :</span>
+                                  <p className="text-[9px] text-blue-600 font-medium line-clamp-1">{record.next_action}</p>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      ))}
+                          ))}
+                        </>
+                      )}
                     </div>
                   ) : (
                     <p className="text-[10px] text-slate-400 italic bg-slate-50 p-3 rounded-lg border border-dashed border-slate-200">
@@ -431,7 +484,6 @@ const StartTreatmentWorkspace = () => {
               )}
             </div>
 
-            {/* Section 2: Plan de traitement */}
             <div className="p-6 space-y-6">
               <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
                 <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
@@ -468,7 +520,6 @@ const StartTreatmentWorkspace = () => {
               </div>
             </div>
 
-            {/* Section 3: Premier RDV */}
             <div className="p-6 space-y-4 bg-slate-50/30">
               <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
                 <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -513,7 +564,7 @@ const StartTreatmentWorkspace = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading || !!activePatientTreatment}
+                disabled={loading}
                 className="px-8 py-2.5 text-sm font-bold text-white bg-linear-to-r from-emerald-600 to-teal-600 rounded-xl hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"
               >
                 {loading ? (
@@ -532,7 +583,6 @@ const StartTreatmentWorkspace = () => {
           </div>
         </form>
 
-        {/* Feedback Modal */}
         {feedback.open && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
             <div className="w-full max-w-md rounded-3xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
