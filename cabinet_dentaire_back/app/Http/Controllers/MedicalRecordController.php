@@ -55,7 +55,7 @@ class MedicalRecordController extends Controller
             ], 422);
         }
 
-        // Verrou serveur: impossible d'ajouter une seance avant la date du rendez-vous courant du traitement.
+        // Vérification du patient_treatment_id si fourni
         if (!empty($validated['patient_treatment_id'])) {
             $patientTreatment = PatientTreatment::with('nextAppointment')->findOrFail($validated['patient_treatment_id']);
 
@@ -63,35 +63,6 @@ class MedicalRecordController extends Controller
                 return response()->json([
                     'message' => 'Le traitement ne correspond pas au patient.',
                     'errors' => ['patient_treatment_id' => ['Le traitement doit appartenir au patient sélectionné.']]
-                ], 422);
-            }
-
-            $currentNextAppointment = $patientTreatment->nextAppointment;
-            $recordAppointmentId = (int) $validated['appointment_id'];
-            $currentNextAppointmentId = (int) ($currentNextAppointment?->id ?? 0);
-
-            if (
-                $currentNextAppointment
-                && $currentNextAppointmentId === $recordAppointmentId
-                && $currentNextAppointment->appointment_date
-                && $currentNextAppointment->appointment_date->isFuture()
-            ) {
-                $appointmentDateLabel = $currentNextAppointment->appointment_date->format('d/m/Y H:i');
-                $timeSpecified = (bool) ($currentNextAppointment->appointment_time_specified ?? true);
-                if (!$timeSpecified) {
-                    $appointmentDateLabel = $currentNextAppointment->appointment_date->format('d/m/Y') . ' (heure non précisée)';
-                }
-
-                return response()->json([
-                    'message' => 'Séance non autorisée: le prochain rendez-vous du traitement n\'est pas encore atteint.',
-                    'errors' => [
-                        'patient_treatment_id' => [
-                            sprintf(
-                                'Vous pourrez ajouter une séance à partir du %s.',
-                                $appointmentDateLabel
-                            )
-                        ]
-                    ]
                 ], 422);
             }
         }
@@ -102,19 +73,16 @@ class MedicalRecordController extends Controller
         $validated['date'] = now()->toDateString();
 
         $record = MedicalRecord::create($validated);
-        
-        // Mettre à jour le statut du rendez-vous associé: only completed si past
+
+        // Marquer le rendez-vous associé comme terminé et mettre à jour sa date à 'aujourd'hui'
+        // pour refléter la date réelle de la visite
         $appointment = \App\Models\Appointment::find($validated['appointment_id']);
         if ($appointment) {
-            $isPast = $appointment->appointment_date && $appointment->appointment_date->isPast();
-            if ($isPast) {
-                $appointment->update(['status' => 'completed']);
-            } else {
-                // Future appointment: keep as-is (do not mark completed until it actually happens)
-                $appointment->update(['status' => 'pending']);
-            }
-        }
-        
+            $appointment->update([
+                'status' => 'completed',
+                'appointment_date' => now(), // Force la date à aujourd'hui
+            ]);
+        }        
         $record->load(['patient', 'appointment', 'patientTreatment', 'creator']);
 
         // Compute collected sum for the related treatment (if any) to show a memo to the client

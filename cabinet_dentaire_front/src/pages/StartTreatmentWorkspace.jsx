@@ -1,31 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { dentalActAPI, patientAPI, patientTreatmentAPI, medicalRecordAPI, sessionReceiptAPI } from '../services/api';
+import { patientAPI, patientTreatmentAPI, medicalRecordAPI, sessionReceiptAPI, authAPI } from '../services/api';
 
 const StartTreatmentWorkspace = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
   const [patients, setPatients] = useState([]);
   const [patientTreatments, setPatientTreatments] = useState([]);
-  const [dentalActs, setDentalActs] = useState([]);
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [showPatientList, setShowPatientList] = useState(false);
-  const [dentalActsSearchTerm, setDentalActsSearchTerm] = useState('');
-  const [showPricingModal, setShowPricingModal] = useState(false);
-  const [actPrices, setActPrices] = useState({});
-  const [paidAmount, setPaidAmount] = useState('');
+  const [patientHistory, setPatientHistory] = useState([]);
+  const [pastTreatments, setPastTreatments] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [form, setForm] = useState({
     patient_id: '',
-    name: '',
-    acts: [],
+    name: '', // Nom du traitement
+    planned_treatment: '', // Champ libre pour le traitement
+    amount_collected: '', // Premier encaissement
     start_date: new Date().toISOString().split('T')[0],
     next_appointment_date: '',
     next_appointment_reason: '',
-    notes: '',
   });
 
   const [feedback, setFeedback] = useState({
@@ -66,43 +66,71 @@ const StartTreatmentWorkspace = () => {
   };
 
   useEffect(() => {
-    const preload = async () => {
-      setLoading(true);
+    const loadPatientHistory = async () => {
+      if (!form.patient_id) {
+        setPatientHistory([]);
+        setPastTreatments([]);
+        return;
+      }
+
+      setLoadingHistory(true);
       try {
-        const [patientsRes, treatmentsRes, actsRes] = await Promise.all([
-          patientAPI.getAll(),
-          patientTreatmentAPI.getAll(),
-          dentalActAPI.getAll(),
+        const [recordsRes, treatmentsRes] = await Promise.all([
+          medicalRecordAPI.getAll({
+            patient_id: form.patient_id,
+            per_page: 5,
+          }),
+          patientTreatmentAPI.getAll({
+            patient_id: form.patient_id,
+            per_page: 5,
+          })
         ]);
 
+        const historyData = recordsRes.data?.data || recordsRes.data?.data?.data || [];
+        const treatsData = (treatmentsRes.data?.data || treatmentsRes.data || []).filter(t => t.status === 'completed');
+        
+        setPatientHistory(historyData);
+        setPastTreatments(treatsData);
+      } catch (error) {
+        console.error('Erreur chargement historique patient:', error);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    loadPatientHistory();
+  }, [form.patient_id]);
+
+  useEffect(() => {
+    const preload = async () => {
+      setLoadingData(true);
+      try {
+        const [userRes, patientsRes, treatmentsRes] = await Promise.all([
+          authAPI.getUser().catch(() => ({ data: null })),
+          patientAPI.getAll(),
+          patientTreatmentAPI.getAll(),
+        ]);
+
+        setCurrentUser(userRes?.data || null);
         const patientsData = patientsRes.data?.data || patientsRes.data || [];
         const treatmentsData = treatmentsRes.data?.data || treatmentsRes.data || [];
-        const actsData = actsRes.data?.data || actsRes.data || [];
 
         setPatients(patientsData);
         setPatientTreatments(treatmentsData);
-        setDentalActs(actsData);
 
         const preselectedPatientId = Number(location.state?.patientId || 0);
         if (preselectedPatientId) {
           let patient = patientsData.find((p) => Number(p.id) === preselectedPatientId);
 
-          // Fallback: la liste peut etre paginee et ne pas contenir le patient fraichement cree.
           if (!patient) {
             try {
               const patientByIdRes = await patientAPI.getById(preselectedPatientId);
               patient = patientByIdRes?.data || null;
-
               if (patient?.id) {
-                setPatients((prev) => {
-                  if (prev.some((p) => Number(p.id) === Number(patient.id))) {
-                    return prev;
-                  }
-                  return [patient, ...prev];
-                });
+                setPatients((prev) => [patient, ...prev]);
               }
-            } catch (fetchError) {
-              console.error('Impossible de charger le patient preselectionne:', fetchError);
+            } catch (e) {
+              console.error('Patient introuvable:', e);
             }
           }
 
@@ -114,7 +142,7 @@ const StartTreatmentWorkspace = () => {
       } catch (error) {
         console.error('Erreur chargement espace suivi:', error);
       } finally {
-        setLoading(false);
+        setLoadingData(false);
       }
     };
 
@@ -136,294 +164,141 @@ const StartTreatmentWorkspace = () => {
     ) || null;
   }, [patientTreatments, form.patient_id]);
 
-  const totalActs = useMemo(() => {
-    return form.acts.reduce((sum, selectedAct) => {
-      const act = dentalActs.find((item) => Number(item.id) === Number(selectedAct.dental_act_id));
-      return sum + ((act?.tarif || 0) * (selectedAct.quantity || 1));
-    }, 0);
-  }, [form.acts, dentalActs]);
-
-  const totalActsWithCustomPrices = useMemo(() => {
-    return form.acts.reduce((sum, selectedAct) => {
-      const act = dentalActs.find((item) => Number(item.id) === Number(selectedAct.dental_act_id));
-      const price = Number(actPrices[selectedAct.dental_act_id] ?? act?.tarif ?? 0);
-      return sum + (price * (selectedAct.quantity || 1));
-    }, 0);
-  }, [form.acts, dentalActs, actPrices]);
-
-  const paidAmountValue = Number(paidAmount || 0);
-  const remainingAmount = Math.max(totalActsWithCustomPrices - paidAmountValue, 0);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.patient_id || !form.name || !form.next_appointment_date) {
-      alert('Veuillez remplir les champs obligatoires.');
+    if (!form.patient_id || !form.name || !form.planned_treatment || !form.next_appointment_date) {
+      showFeedback('warning', 'Champs obligatoires', 'Veuillez remplir les informations du patient, le nom du suivi, le traitement prévu et le prochain RDV.');
       return;
     }
 
-    // Initialize prices if not already set
-    const initialPrices = {};
-    form.acts.forEach((selectedAct) => {
-      if (!actPrices[selectedAct.dental_act_id]) {
-        const act = dentalActs.find((item) => Number(item.id) === Number(selectedAct.dental_act_id));
-        initialPrices[selectedAct.dental_act_id] = String(act?.tarif || 0);
-      }
-    });
-    if (Object.keys(initialPrices).length > 0) {
-      setActPrices((prev) => ({ ...prev, ...initialPrices }));
-    }
-
-    // Show pricing modal
-    setPaidAmount('');
-    setShowPricingModal(true);
-  };
-
-  const confirmTreatment = async () => {
     setLoading(true);
     try {
-      // Include custom prices in the acts payload
-      const actsWithPrices = form.acts.map((a) => ({
-        ...a,
-        unit_price: Number(actPrices[a.dental_act_id] ?? 0),
-      }));
+      // 1. Créer le traitement (le champ planned_treatment sera sauvegardé dans 'notes' pour l'instant)
+      const res = await patientTreatmentAPI.create({ 
+        patient_id: form.patient_id,
+        name: form.name,
+        start_date: form.start_date,
+        next_appointment_date: form.next_appointment_date,
+        next_appointment_reason: form.next_appointment_reason,
+        notes: form.planned_treatment, // On stocke la description ici
+        acts: [] // On envoie une liste vide d'actes structurés
+      });
+      
+      const createdTreatment = res?.data || null;
 
-      const res = await patientTreatmentAPI.create({ ...form, acts: actsWithPrices });
-      const created = res?.data || null;
+      if (!createdTreatment?.id) {
+        throw new Error('Erreur lors de la création du traitement.');
+      }
 
-      // Create a minimal medical record for this initial session so we can generate a session receipt
+      // 2. Créer un dossier médical (medical_record) initial pour l'encaissement et le reçu
       let sessionReceiptId = null;
-      let receiptResRef = null;
-      try {
-        if (created?.id) {
-          let appointmentId = Number(
-            created?.next_appointment_id
-            ?? created?.nextAppointment?.id
-            ?? created?.next_appointment?.id
-            ?? 0
-          ) || null;
+      
+      // On récupère le RDV qui a été créé par le backend pour ce traitement
+      let appointmentId = Number(createdTreatment.next_appointment_id || 0) || null;
 
-          if (!appointmentId) {
-            try {
-              const treatmentRefreshRes = await patientTreatmentAPI.getById(created.id);
-              const treatmentRefresh = treatmentRefreshRes?.data || {};
-              appointmentId = Number(
-                treatmentRefresh?.next_appointment_id
-                ?? treatmentRefresh?.nextAppointment?.id
-                ?? treatmentRefresh?.next_appointment?.id
-                ?? 0
-              ) || null;
-            } catch (appointmentLookupErr) {
-              console.error('Erreur récupération appointment_id initial:', appointmentLookupErr);
-            }
-          }
+      // Création du medical_record initial
+      const mrRes = await medicalRecordAPI.create({
+        patient_id: createdTreatment.patient_id,
+        patient_treatment_id: createdTreatment.id,
+        appointment_id: appointmentId,
+        treatment_performed: 'Initialisation du suivi : ' + form.planned_treatment,
+        amount_collected: form.amount_collected ? Number(form.amount_collected) : null,
+      });
 
-          if (!appointmentId) {
-            receiptResRef = {
-              error: 'Rendez-vous initial introuvable pour créer le reçu.',
-            };
-            throw new Error('INITIAL_APPOINTMENT_NOT_FOUND');
-          }
+      const medicalRecord = mrRes?.data || null;
 
-          const mrRes = await medicalRecordAPI.create({
-            patient_id: created.patient_id,
-            // Keep null here to bypass "future next appointment" lock that is intended for later sessions.
-            patient_treatment_id: null,
-            appointment_id: appointmentId,
-            treatment_performed: 'Démarrage du suivi',
-            next_action: form.notes || null,
-            amount_collected: paidAmountValue > 0 ? paidAmountValue : undefined,
-          });
-
-          let medicalRecord = mrRes?.data || null;
-          if (medicalRecord?.id) {
-            let receiptActsPayload = (actsWithPrices || []).map((item) => ({
-              dental_act_id: Number(item.dental_act_id),
-              quantity: Math.max(1, Number(item.quantity) || 1),
-              unit_price: Number(item.unit_price ?? 0),
-            }));
-
-            // If the created medical record is not linked to the treatment (we created with null to bypass lock),
-            // attach it to the newly created treatment so receipts are linked to the treatment.
-            try {
-              if (!medicalRecord.patient_treatment_id && created?.id) {
-                await medicalRecordAPI.update(medicalRecord.id, { patient_treatment_id: created.id });
-                // Refresh medicalRecord reference
-                try {
-                  const refreshed = await medicalRecordAPI.getById(medicalRecord.id);
-                  if (refreshed?.data) medicalRecord = refreshed.data;
-                } catch (e) {
-                  // ignore
-                }
-              }
-            } catch (attachErr) {
-              console.error('Impossible d\u2019attacher le dossier medical au traitement:', attachErr);
-            }
-
-            // Fallback: if no acts were selected in form, try to read acts from created treatment (includes defaults).
-            if (receiptActsPayload.length === 0 && created?.id) {
-              try {
-                const treatmentRes = await patientTreatmentAPI.getById(created.id);
-                const treatmentData = treatmentRes?.data || {};
-                const serverActs =
-                  treatmentData?.acts
-                  || treatmentData?.patient_treatment_acts
-                  || treatmentData?.dental_acts
-                  || [];
-
-                const mappedActs = (Array.isArray(serverActs) ? serverActs : []).map((item) => {
-                  const dentalActId = Number(
-                    item?.dental_act_id
-                    ?? item?.dentalAct?.id
-                    ?? item?.dental_act?.id
-                    ?? item?.id
-                    ?? 0
-                  );
-                  const quantity = Math.max(1, Number(item?.quantity) || 1);
-                  const unitPrice = Number(
-                    item?.unit_price
-                    ?? item?.tarif_snapshot
-                    ?? item?.dentalAct?.tarif
-                    ?? item?.dental_act?.tarif
-                    ?? item?.tarif
-                    ?? 0
-                  );
-
-                  return {
-                    dental_act_id: dentalActId,
-                    quantity,
-                    unit_price: unitPrice,
-                  };
-                }).filter((act) => act.dental_act_id > 0);
-
-                // Ensure unique dental acts if API already contains duplicates.
-                const uniqueByAct = new Map();
-                mappedActs.forEach((act) => {
-                  if (!uniqueByAct.has(act.dental_act_id)) {
-                    uniqueByAct.set(act.dental_act_id, act);
-                  }
-                });
-                receiptActsPayload = Array.from(uniqueByAct.values());
-              } catch (fallbackErr) {
-                console.error('Erreur fallback actes recu initial:', fallbackErr);
-              }
-            }
-
-            let receiptRes = null;
-            let receiptErrorMessage = null;
-            try {
-              if (receiptActsPayload.length === 0 && paidAmountValue > 0) {
-                // Create a simple payment-only receipt (no acts)
-                receiptRes = await sessionReceiptAPI.create({
-                  medical_record_id: medicalRecord.id,
-                  amount_collected: paidAmountValue,
-                });
-              } else {
-                receiptRes = await sessionReceiptAPI.create({
-                  medical_record_id: medicalRecord.id,
-                  acts: receiptActsPayload,
-                });
-              }
-            } catch (rErr) {
-              console.error('Erreur creation receipt API:', rErr);
-              console.error('Receipt error response data:', rErr.response?.data ?? rErr);
-              if (rErr.response?.data?.errors) {
-                receiptErrorMessage = Object.values(rErr.response.data.errors).flat().join(' | ');
-              } else if (rErr.response?.data?.message) {
-                receiptErrorMessage = rErr.response.data.message;
-              } else {
-                receiptErrorMessage = rErr.message || String(rErr);
-              }
-            }
-
-            // Be robust: some APIs return { id } or { data: { id } }
-            sessionReceiptId = receiptRes?.data?.id ?? receiptRes?.data?.data?.id ?? null;
-            // store raw response for debug if needed
-            receiptResRef = receiptRes ?? null;
-            // attach error message to ref for later user feedback
-            if (!sessionReceiptId && receiptErrorMessage) {
-              receiptResRef = { error: receiptErrorMessage };
-            }
-          }
-        }
-      } catch (innerErr) {
-        console.error('Erreur création reçu initial:', innerErr);
+      // 3. Générer le reçu si un montant a été encaissé
+      if (medicalRecord?.id && form.amount_collected && Number(form.amount_collected) > 0) {
+        const receiptRes = await sessionReceiptAPI.create({
+          medical_record_id: medicalRecord.id,
+          amount_collected: Number(form.amount_collected),
+        });
+        sessionReceiptId = receiptRes?.data?.id || null;
       }
 
-      const successMsg = 'Votre suivi a été créé.' + (sessionReceiptId ? ' Le reçu est prêt et téléchargeable.' : '');
-      setShowPricingModal(false);
-      if (sessionReceiptId) {
-        showFeedback('success', 'Reçu prêt', successMsg, true, sessionReceiptId);
-      } else if (receiptResRef?.error) {
-        showFeedback('warning', 'Suivi créé (reçu non généré)', `Le suivi a été créé, mais le reçu n'a pas pu être généré: ${receiptResRef.error}`, true, null);
-      } else {
-        showFeedback('success', 'Suivi démarré', 'Suivi démarré avec succès.', true, null);
-      }
+      const successMsg = sessionReceiptId 
+        ? 'Le suivi a été créé et le reçu est prêt.' 
+        : 'Le suivi a été créé avec succès.';
+        
+      showFeedback('success', 'Suivi démarré', successMsg, true, sessionReceiptId);
     } catch (error) {
       console.error('Erreur démarrage suivi:', error);
-      if (error.response?.data?.error === 'PATIENT_HAS_ACTIVE_TREATMENT') {
-        const existing = error.response.data.existing_treatment;
-        alert(
-          `Ce patient a déjà un suivi actif:\n\n` +
-          `${existing.name} (${existing.status === 'planned' ? 'Planifié' : 'En cours'})\n` +
-          `Démarré le ${new Date(existing.start_date).toLocaleDateString('fr-FR')}`
-        );
-      } else {
-        alert(error.response?.data?.message || 'Erreur lors du démarrage du suivi.');
-      }
+      const message = error.response?.data?.message || 'Erreur lors du démarrage du suivi.';
+      showFeedback('error', 'Échec', message);
     } finally {
       setLoading(false);
     }
   };
 
+  if (loadingData) {
+    return (
+      <Layout>
+        <div className="p-6 text-sm text-gray-600 font-medium">Chargement de l'espace suivi...</div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="p-6 space-y-6">
-        <div className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 px-5 py-4 shadow-lg">
+        <div className="rounded-2xl bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 px-5 py-4 shadow-lg border border-slate-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center border border-emerald-400/30">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white">Nouveau suivi patient</h1>
-                <p className="text-xs text-slate-300 mt-0.5">Workspace traitement - saisie guidée en 3 sections</p>
+                <p className="text-xs text-slate-300 mt-0.5 font-medium">Initialisez le dossier de soins et planifiez la première étape.</p>
               </div>
             </div>
-            <span className="text-[11px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
-              Étape 1
+            <span className="text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
+              INITIALISATION
             </span>
           </div>
         </div>
 
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-600">Configure le traitement puis planifie le premier rendez-vous.</p>
-          </div>
+          <p className="text-sm text-gray-600 font-medium italic">Configurez le plan de traitement global du patient.</p>
           <button
             type="button"
             onClick={() => navigate('/treatments')}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
           >
             Retour à la liste
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden ring-1 ring-slate-100">
-          <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">1. Patient</span>
-            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800">2. Actes</span>
-            <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">3. Prochain RDV</span>
+        <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden ring-1 ring-slate-100">
+          <div className="px-5 py-3 border-b border-gray-200 bg-slate-50 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-[10px] text-white font-bold">1</span>
+              <span className="text-[11px] font-bold uppercase text-slate-600 tracking-tighter">Patient</span>
+            </div>
+            <div className="w-8 border-t border-slate-300"></div>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-[10px] text-white font-bold">2</span>
+              <span className="text-[11px] font-bold uppercase text-slate-600 tracking-tighter">Plan de traitement</span>
+            </div>
+            <div className="w-8 border-t border-slate-300"></div>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-[10px] text-white font-bold">3</span>
+              <span className="text-[11px] font-bold uppercase text-slate-600 tracking-tighter">Premier RDV</span>
+            </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3">
-            <section className="p-5 border-b lg:border-b-0 lg:border-r border-gray-200 bg-linear-to-b from-blue-50 to-white space-y-4">
-              <h2 className="text-sm font-bold text-blue-900">1. Patient et suivi</h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+            {/* Section 1: Patient */}
+            <div className="p-6 space-y-4 bg-slate-50/30">
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                1. Identification
+              </h2>
 
               <div className="relative">
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Patient <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Patient *</label>
                 <input
                   type="text"
                   value={patientSearchTerm}
@@ -433,11 +308,11 @@ const StartTreatmentWorkspace = () => {
                   }}
                   onFocus={() => setShowPatientList(true)}
                   placeholder="Rechercher un patient..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                 />
 
                 {showPatientList && patientSearchTerm && (
-                  <div className="absolute top-full left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                  <div className="absolute top-full left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl z-20">
                     {filteredPatients.length > 0 ? (
                       filteredPatients.map((p) => (
                         <button
@@ -448,315 +323,249 @@ const StartTreatmentWorkspace = () => {
                             setPatientSearchTerm(`${p.first_name || ''} ${p.last_name || ''}`.trim());
                             setShowPatientList(false);
                           }}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0"
+                          className="w-full text-left px-4 py-3 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
                         >
-                          <p className="font-medium text-gray-900">{p.first_name} {p.last_name}</p>
-                          {p.phone && <p className="text-xs text-gray-500">{p.phone}</p>}
+                          <p className="font-bold text-slate-900">{p.first_name} {p.last_name}</p>
+                          {p.phone && <p className="text-xs text-slate-500 mt-0.5">{p.phone}</p>}
                         </button>
                       ))
                     ) : (
-                      <div className="px-3 py-2 text-sm text-gray-500">Aucun patient trouvé</div>
+                      <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun patient trouvé</div>
                     )}
                   </div>
                 )}
               </div>
 
               {activePatientTreatment && (
-                <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-xs text-amber-800">
-                  Ce patient a déjà un suivi actif: <span className="font-semibold">{activePatientTreatment.name}</span>
+                <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-800 font-medium flex gap-2">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                  Ce patient a déjà un suivi actif : "{activePatientTreatment.name}"
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Nom du suivi <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nom du suivi *</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ex: Dévitalisation dent 36"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Date de début</label>
-                <input
-                  type="date"
-                  value={form.start_date}
-                  onChange={(e) => setForm((prev) => ({ ...prev, start_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </section>
-
-            <section className="p-5 border-b lg:border-b-0 lg:border-r border-gray-200 bg-linear-to-b from-amber-50 to-white space-y-4">
-              <h2 className="text-sm font-bold text-amber-900">2. Actes optionnels</h2>
-              <p className="text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded-lg px-2 py-1">
-                Consultation simple est ajoutée automatiquement.
-              </p>
-
-              <input
-                type="text"
-                value={dentalActsSearchTerm}
-                onChange={(e) => setDentalActsSearchTerm(e.target.value)}
-                placeholder="Rechercher un acte..."
-                className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-              />
-
-              <div className="max-h-64 overflow-y-auto space-y-2">
-                {dentalActsSearchTerm && dentalActs
-                  .filter((act) => {
-                    const term = dentalActsSearchTerm.toLowerCase();
-                    return (
-                      act.name?.toLowerCase().includes(term)
-                      || act.code?.toLowerCase().includes(term)
-                      || act.description?.toLowerCase().includes(term)
-                    );
-                  })
-                  .map((act) => {
-                    const selected = form.acts.find((a) => Number(a.dental_act_id) === Number(act.id));
-                    return (
-                      <div key={act.id} className="flex items-center gap-2 p-2 rounded-lg border border-amber-200 bg-white">
-                        <input
-                          type="checkbox"
-                          checked={!!selected}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setForm((prev) => ({
-                                ...prev,
-                                acts: [...prev.acts, { dental_act_id: act.id, quantity: 1 }],
-                              }));
-                            } else {
-                              setForm((prev) => ({
-                                ...prev,
-                                acts: prev.acts.filter((a) => Number(a.dental_act_id) !== Number(act.id)),
-                              }));
-                            }
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-gray-900 truncate">
-                            {act.code ? `${act.code} - ` : ''}{act.name}
-                          </p>
-                          <p className="text-xs text-gray-500">{Number(act.tarif || 0).toLocaleString()} FCFA</p>
-                        </div>
-                        {selected && (
-                          <input
-                            type="number"
-                            min="1"
-                            value={selected.quantity}
-                            onChange={(e) => {
-                              const qty = Math.max(1, parseInt(e.target.value, 10) || 1);
-                              setForm((prev) => ({
-                                ...prev,
-                                acts: prev.acts.map((a) => (
-                                  Number(a.dental_act_id) === Number(act.id) ? { ...a, quantity: qty } : a
-                                )),
-                              }));
-                            }}
-                            className="w-14 px-2 py-1 text-xs border border-amber-300 rounded"
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-
-              {form.acts.length > 0 && (
-                <div className="text-xs font-semibold text-amber-900 bg-amber-100 border border-amber-200 rounded-lg px-3 py-2">
-                  Total estimé: {totalActs.toLocaleString()} FCFA
-                </div>
-              )}
-            </section>
-
-            <section className="p-5 bg-linear-to-b from-indigo-50 to-white space-y-4">
-              <h2 className="text-sm font-bold text-indigo-900">3. Prochain rendez-vous</h2>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={form.next_appointment_date}
-                  onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                  placeholder="Ex: Prothèse dentaire complète"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Note de planification (optionnel)</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Date de début</label>
                 <input
-                  type="text"
-                  value={form.next_appointment_reason}
-                  onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_reason: e.target.value }))}
-                  className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ex: contrôle post-op, point de vigilance"
+                  type="date"
+                  value={form.start_date}
+                  onChange={(e) => setForm((prev) => ({ ...prev, start_date: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-white font-medium"
+                />
+              </div>
+
+              {/* Liste d'historique des soins récents */}
+              {form.patient_id && (
+                <div className="pt-4 mt-4 border-t border-slate-200">
+                  <h3 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Historique des soins récents
+                  </h3>
+                  
+                  {loadingHistory ? (
+                    <div className="space-y-2 animate-pulse">
+                      {[1, 2].map(i => <div key={i} className="h-12 bg-slate-100 rounded-lg"></div>)}
+                    </div>
+                  ) : patientHistory.length > 0 ? (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {/* Résumé des traitements passés */}
+                      {pastTreatments.length > 0 && (
+                        <div className="mb-4 pb-4 border-b border-slate-100">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mb-2">Derniers traitements terminés</p>
+                          <div className="flex flex-wrap gap-2">
+                            {pastTreatments.map(t => (
+                              <div key={t.id} className="px-2 py-1 rounded bg-slate-100 border border-slate-200 text-[10px] font-medium text-slate-600">
+                                {t.name}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Liste détaillée des séances */}
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mb-2">Séances récentes</p>
+                      {patientHistory.map((record) => (
+                        <div key={record.id} className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-blue-300 transition-colors">
+                          <div className="flex justify-between items-start mb-1.5">
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                              {new Date(record.created_at).toLocaleDateString('fr-FR')}
+                            </span>
+                            {record.amount_collected > 0 && (
+                              <span className="text-[10px] font-extrabold text-emerald-600">
+                                {Number(record.amount_collected).toLocaleString('fr-FR')} XOF
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-bold text-slate-800 line-clamp-1 mb-0.5">
+                            {record.patient_treatment?.name || 'Consultation'}
+                          </p>
+                          <p className="text-[10px] text-slate-500 italic line-clamp-2 leading-relaxed">
+                            "{record.treatment_performed}"
+                          </p>
+                          {record.next_action && (
+                            <div className="mt-1.5 pt-1.5 border-t border-blue-50 flex items-start gap-1">
+                              <span className="text-[9px] font-bold text-blue-400 uppercase">Suivi :</span>
+                              <p className="text-[9px] text-blue-600 font-medium line-clamp-1">{record.next_action}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 italic bg-slate-50 p-3 rounded-lg border border-dashed border-slate-200">
+                      Aucun antécédent enregistré pour ce patient.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Plan de traitement */}
+            <div className="p-6 space-y-6">
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                2. Plan de soins
+              </h2>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Description du traitement prévu *</label>
+                <textarea
+                  value={form.planned_treatment}
+                  onChange={(e) => setForm((prev) => ({ ...prev, planned_treatment: e.target.value }))}
+                  rows="5"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm bg-white"
+                  placeholder="Détaillez les actes prévus pour ce patient..."
+                  required
+                />
+              </div>
+
+              <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
+                <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wide mb-2">Premier encaissement (XOF)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.amount_collected}
+                    onChange={(e) => setForm((prev) => ({ ...prev, amount_collected: e.target.value }))}
+                    className="w-full pl-4 pr-12 py-3 border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 text-lg font-bold text-emerald-900 bg-white"
+                    placeholder="0.00"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-600 font-bold">XOF</span>
+                </div>
+                <p className="mt-2 text-[10px] text-emerald-600 font-medium">L'encaissement générera automatiquement un reçu de séance.</p>
+              </div>
+            </div>
+
+            {/* Section 3: Premier RDV */}
+            <div className="p-6 space-y-4 bg-slate-50/30">
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                3. Planification
+              </h2>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Date du 1er RDV *</label>
+                <input
+                  type="date"
+                  value={form.next_appointment_date}
+                  onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_date: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm bg-white font-medium"
+                  required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Note clinique de départ (optionnel)</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Note de planification (optionnel)</label>
                 <textarea
-                  rows="3"
-                  value={form.notes}
-                  onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ex: douleur initiale, examen clinique, contexte de départ"
+                  rows="4"
+                  value={form.next_appointment_reason}
+                  onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_reason: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                  placeholder="Objectif de la première séance..."
                 />
-              </div>
-            </section>
-          </div>
-
-          <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => navigate('/treatments')}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={loading || !!activePatientTreatment}
-              className="px-5 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-            >
-              {loading ? 'En cours...' : 'Démarrer le suivi'}
-            </button>
-          </div>
-        </form>
-
-        {/* Modal de validation des prix */}
-        {showPricingModal && (
-          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl rounded-2xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 bg-linear-to-r from-emerald-50 to-teal-50">
-                <h3 className="text-lg font-bold text-gray-900">Validation des prix des actes</h3>
-                <p className="text-sm text-gray-600 mt-1">Vérifiez et ajustez les prix unitaires si nécessaire</p>
-              </div>
-
-              <div className="px-6 py-4 max-h-96 overflow-y-auto space-y-3">
-                {form.acts.map((selectedAct) => {
-                  const act = dentalActs.find((item) => Number(item.id) === Number(selectedAct.dental_act_id));
-                  const currentPrice = Number(actPrices[selectedAct.dental_act_id] ?? act?.tarif ?? 0);
-                  const lineTotal = currentPrice * selectedAct.quantity;
-
-                  return (
-                    <div key={selectedAct.dental_act_id} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-gray-900">
-                          {act?.code ? `${act.code} - ` : ''}{act?.name}
-                        </p>
-                        <p className="text-xs text-gray-600 mt-1">Quantité: {selectedAct.quantity}</p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-col items-end">
-                          <label className="text-xs font-semibold text-gray-700 mb-1">Prix unitaire</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={actPrices[selectedAct.dental_act_id] ?? String(act?.tarif ?? 0)}
-                            onChange={(e) => {
-                              setActPrices((prev) => ({
-                                ...prev,
-                                [selectedAct.dental_act_id]: e.target.value,
-                              }));
-                            }}
-                            className="w-32 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                          />
-                        </div>
-                        <div className="flex flex-col items-end">
-                          <label className="text-xs font-semibold text-gray-700 mb-1">Sous-total</label>
-                          <div className="w-32 px-2 py-1 text-sm font-semibold text-gray-900 bg-white border border-gray-300 rounded-lg text-right">
-                            {lineTotal.toLocaleString()} FCFA
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-                <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                  <p className="text-sm text-gray-600">Total des actes :</p>
-                  <p className="text-2xl font-bold text-emerald-700">{totalActsWithCustomPrices.toLocaleString()} FCFA</p>
-                </div>
-
-                <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg border border-blue-200 bg-blue-50">
-                    <label className="block text-xs font-semibold text-blue-800 mb-1">Montant encaissé</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={paidAmount}
-                      onChange={(e) => setPaidAmount(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="p-3 rounded-lg border border-amber-200 bg-amber-50">
-                    <p className="text-xs font-semibold text-amber-800 mb-1">Reste estimé</p>
-                    <p className="text-lg font-bold text-amber-700">{remainingAmount.toLocaleString()} FCFA</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowPricingModal(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    Modifier les champs
-                  </button>
-                  <button
-                    type="button"
-                    onClick={confirmTreatment}
-                    disabled={loading}
-                    className="px-5 py-2 text-sm font-semibold text-white bg-linear-to-r from-emerald-600 to-teal-600 rounded-lg hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                  >
-                    {loading ? 'Création...' : 'Confirmer et démarrer'}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
-        )}
+
+          <div className="px-6 py-5 bg-slate-50 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-xs text-slate-500 font-medium">
+              * Champs obligatoires
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate('/treatments')}
+                className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !!activePatientTreatment}
+                className="px-8 py-2.5 text-sm font-bold text-white bg-linear-to-r from-emerald-600 to-teal-600 rounded-xl hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Démarrage...
+                  </>
+                ) : (
+                  'Démarrer le suivi'
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {/* Feedback Modal */}
         {feedback.open && (
-          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-2xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
-              <div className={`px-5 py-4 border-b ${
-                feedback.type === 'success'
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : feedback.type === 'error'
-                    ? 'bg-rose-50 border-rose-200'
-                    : 'bg-amber-50 border-amber-200'
+          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-3xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+              <div className={`px-6 py-8 text-center ${
+                feedback.type === 'success' ? 'bg-emerald-50' : feedback.type === 'error' ? 'bg-rose-50' : 'bg-amber-50'
               }`}>
-                <h3 className="text-sm font-bold text-gray-900">{feedback.title}</h3>
+                <div className={`w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-4 ${
+                  feedback.type === 'success' ? 'bg-emerald-500 text-white' : feedback.type === 'error' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-white'
+                }`}>
+                  {feedback.type === 'success' ? (
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                  ) : (
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                  )}
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">{feedback.title}</h3>
+                <p className="mt-2 text-sm text-slate-600 font-medium px-4">{feedback.message}</p>
               </div>
-              <div className="px-5 py-4">
-                <p className="text-sm text-gray-700 whitespace-pre-line">{feedback.message}</p>
-              </div>
-              <div className="px-5 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+              <div className="p-6 bg-white flex flex-col gap-2">
                 {feedback.receiptId && (
                   <button
                     type="button"
                     onClick={downloadSessionReceipt}
-                    className="px-4 py-2 mr-2 text-sm font-semibold text-indigo-700 bg-indigo-100 rounded-lg hover:bg-indigo-200"
+                    className="w-full py-3 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
                   >
-                    Télécharger le reçu
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Télécharger le reçu initial
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={closeFeedback}
-                  className="px-4 py-2 text-sm font-semibold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700"
+                  className="w-full py-3 text-sm font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-all"
                 >
                   {feedback.redirectToTreatments ? 'Retour à la liste' : 'Fermer'}
                 </button>

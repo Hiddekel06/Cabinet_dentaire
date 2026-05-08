@@ -83,24 +83,14 @@ class AppointmentController extends Controller
                 ]);
             } else {
                 $startDate = Carbon::parse($validated['appointment_date'])->toDateString();
-                $defaultTreatment = PatientTreatment::create([
+                PatientTreatment::create([
                     'patient_id' => $validated['patient_id'],
-                    'name' => 'Consultation simple',
+                    'name' => 'Consultation',
                     'start_date' => $startDate,
                     'status' => 'planned',
-                    'notes' => 'Traitement créé automatiquement depuis la vue rendez-vous.',
+                    'notes' => 'Traitement créé automatiquement.',
                     'next_appointment_id' => $appointment->id,
                 ]);
-
-                $consultationSimple = $this->resolveConsultationSimpleAct();
-                if ($consultationSimple) {
-                    PatientTreatmentAct::create([
-                        'patient_treatment_id' => $defaultTreatment->id,
-                        'dental_act_id' => $consultationSimple->id,
-                        'quantity' => 1,
-                        'tarif_snapshot' => $consultationSimple->tarif,
-                    ]);
-                }
             }
 
             return $appointment;

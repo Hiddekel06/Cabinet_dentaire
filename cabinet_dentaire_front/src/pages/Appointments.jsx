@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Layout } from "../components/Layout";
-import { appointmentAPI, patientAPI } from "../services/api";
+import { appointmentAPI, patientAPI, patientTreatmentAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -61,6 +61,9 @@ const Appointments = () => {
   const [absentRescheduleData, setAbsentRescheduleData] = useState({ appointment: null });
   const [newAbsentDate, setNewAbsentDate] = useState('');
   const [isMarkingAbsent, setIsMarkingAbsent] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validationData, setValidationData] = useState({ appointment: null, treatment: null });
+  const [isValidating, setIsValidating] = useState(false);
   const hasLoadedRef = useRef(false);
   const lastFocusedAppointmentRef = useRef(null);
   const flashTimerRef = useRef(null);
@@ -687,6 +690,50 @@ const Appointments = () => {
     setSelectedDate(new Date());
   };
 
+  const handleValidateInitiate = async (appointment) => {
+    try {
+      setIsValidating(true);
+      // 1. Mark appointment as completed
+      await appointmentAPI.update(appointment.apiId, { status: 'completed' });
+      
+      // 2. Load linked treatment
+      const { data: treatmentLink } = await appointmentAPI.getLinkedTreatment(appointment.apiId);
+      
+      if (treatmentLink && treatmentLink.linked) {
+        setValidationData({
+          appointment,
+          treatment: treatmentLink.treatment
+        });
+        setShowValidationModal(true);
+      } else {
+        // No treatment linked, just refresh
+        await loadAppointments();
+      }
+    } catch (error) {
+      console.error('Erreur validation rendez-vous:', error);
+      setAppointmentsError('Impossible de valider le rendez-vous.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const confirmFinishTreatment = async () => {
+    try {
+      setIsValidating(true);
+      if (validationData.treatment) {
+        await patientTreatmentAPI.update(validationData.treatment.id, { status: 'completed' });
+      }
+      await loadAppointments();
+      setShowValidationModal(false);
+      setValidationData({ appointment: null, treatment: null });
+    } catch (error) {
+      console.error('Erreur clôture traitement:', error);
+      setAppointmentsError('Impossible de terminer le traitement.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   return (
     <Layout>
       {showQuickCreate && (
@@ -1190,6 +1237,102 @@ const Appointments = () => {
         </div>
       )}
 
+      {/* Modale de validation de rendez-vous (Décision traitement) */}
+      {showValidationModal && validationData.appointment && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center"
+          style={{ backdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.4)' }}
+          onClick={() => setShowValidationModal(false)}
+        >
+          <div
+            className="relative w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl border border-emerald-100 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-emerald-600 px-6 py-4 flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Rendez-vous validé !</h3>
+                <p className="text-emerald-100 text-xs">Que souhaitez-vous faire pour le traitement ?</p>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-emerald-50 rounded-xl p-4 mb-6 border border-emerald-100">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-semibold text-emerald-700 uppercase">Patient</span>
+                  <span className="text-sm font-bold text-gray-900">{validationData.appointment.patient}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-emerald-700 uppercase">Traitement lié</span>
+                  <span className="text-sm font-medium text-gray-700">{validationData.treatment?.name || 'N/A'}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  onClick={() => navigate(`/treatments/${validationData.treatment.id}/session`)}
+                  className="w-full flex items-center justify-between p-4 bg-white border-2 border-emerald-100 rounded-xl hover:border-emerald-500 hover:bg-emerald-50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="bg-emerald-100 p-2 rounded-lg group-hover:bg-emerald-200 transition-colors">
+                      <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-bold text-gray-900">Continuer le traitement</p>
+                      <p className="text-xs text-gray-500">Ajouter une séance médicale</p>
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-emerald-300 group-hover:text-emerald-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={confirmFinishTreatment}
+                  disabled={isValidating}
+                  className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-100 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="bg-blue-100 p-2 rounded-lg group-hover:bg-blue-200 transition-colors">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="font-bold text-gray-900">Terminer le traitement</p>
+                      <p className="text-xs text-gray-500">Clôturer le dossier de soins</p>
+                    </div>
+                  </div>
+                  {isValidating ? (
+                    <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-blue-300 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowValidationModal(false)}
+                className="mt-6 w-full text-center text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-4"
+              >
+                Fermer sans action supplémentaire
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestion des rendez-vous</h1>
@@ -1427,7 +1570,18 @@ const Appointments = () => {
                         </span>
                       </td>
                       <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap">
-                        <div className="relative flex items-center" data-appointment-menu="true">
+                        <div className="relative flex items-center gap-2" data-appointment-menu="true">
+                          {/* Validation Button - only for non-completed/non-cancelled appointments */}
+                          {['À venir', 'Aujourd\'hui', 'En retard'].includes(a.statut) && (
+                            <button
+                              onClick={() => handleValidateInitiate(a)}
+                              disabled={isValidating}
+                              className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold text-black bg-yellow-200 hover:bg-yellow-300 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                              title="Valider le rendez-vous"
+                            >
+                              {isValidating ? '...' : 'Valider'}
+                            </button>
+                          )}
                           {/* Menu actions rapides */}
                           <div className="relative">
                             <button
@@ -1860,7 +2014,18 @@ const Appointments = () => {
                   )}
                   {selectedDate && selectedAppointments.map((app) => (
                     <div key={app.id} className="p-2 rounded-lg border border-gray-200">
-                      <div className="text-sm font-semibold text-gray-900">{app.heure} • {app.patient}</div>
+                      <div className="flex justify-between items-start">
+                        <div className="text-sm font-semibold text-gray-900">{app.heure} • {app.patient}</div>
+                        {['À venir', 'Aujourd\'hui', 'En retard'].includes(app.statut) && (
+                          <button
+                            onClick={() => handleValidateInitiate(app)}
+                            disabled={isValidating}
+                            className="text-[10px] px-1.5 py-0.5 font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition-colors shadow-sm disabled:opacity-50"
+                          >
+                            {isValidating ? '...' : 'Valider'}
+                          </button>
+                        )}
+                      </div>
                       <div className="text-xs text-gray-600">{app.motif} — {app.praticien}</div>
                       <span className={`mt-1 inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
                         app.statut === 'À venir'

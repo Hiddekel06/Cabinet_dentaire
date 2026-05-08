@@ -150,7 +150,7 @@ export const medicationAPI = {
 };
 import axios from 'axios';
 
-const rawApiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8088';
+const rawApiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const apiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '').replace(/\/api$/, '');
 
 const api = axios.create({
@@ -358,6 +358,9 @@ export const appointmentAPI = {
     clearCache('appointments');
     return api.delete(`/api/appointments/${id}`);
   },
+
+  getLinkedTreatment: (id) =>
+    api.get(`/api/appointments/${id}/treatment-link`),
 };
 
 // Endpoints pour les traitements (catalogue)
