@@ -58,12 +58,7 @@ class InvoiceController extends Controller
      */
     public function show(Invoice $invoice)
     {
-        $invoice->load([
-            'patient',
-            'items.patientTreatmentAct.dentalAct',
-            'items.patientTreatmentAct.patientTreatment',
-        ]);
-
+        $invoice->load(['patient', 'items']);
         return response()->json($invoice);
     }
 
@@ -75,102 +70,49 @@ class InvoiceController extends Controller
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
             'issue_date' => ['required', 'date'],
-            'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.patient_treatment_act_id' => ['required', 'integer', 'distinct', 'exists:patient_treatment_acts,id'],
-            'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.dent' => ['nullable', 'integer'],
+            'items.*.treatment_name' => ['required', 'string', 'max:255'],
+            'items.*.indice' => ['nullable', 'string', 'max:255'],
+            'items.*.amount' => ['required', 'numeric', 'min:0'],
         ]);
 
         $invoice = DB::transaction(function () use ($validated) {
-            $actIds = collect($validated['items'])
-                ->pluck('patient_treatment_act_id')
-                ->unique()
-                ->values();
-
-            $acts = PatientTreatmentAct::query()
-                ->with(['dentalAct:id,tarif', 'patientTreatment:id,patient_id'])
-                ->whereIn('id', $actIds)
-                ->lockForUpdate()
-                ->get();
-
-            if ($acts->count() !== $actIds->count()) {
-                throw ValidationException::withMessages([
-                    'items' => ['Un ou plusieurs actes sont introuvables.'],
-                ]);
-            }
-
-            $invalidPatientAct = $acts->first(function (PatientTreatmentAct $act) use ($validated) {
-                return (int) ($act->patientTreatment?->patient_id) !== (int) $validated['patient_id'];
-            });
-
-            if ($invalidPatientAct) {
-                throw ValidationException::withMessages([
-                    'items' => ['Des actes ne correspondent pas au patient selectionne.'],
-                ]);
-            }
-
-            $alreadyInvoiced = DB::table('invoice_items')
-                ->whereIn('patient_treatment_act_id', $actIds)
-                ->exists();
-
-            if ($alreadyInvoiced) {
-                throw ValidationException::withMessages([
-                    'items' => ['Un ou plusieurs actes sont deja factures.'],
-                ]);
-            }
-
-            // Verifier que les traitements associes n'ont pas deja une facture
-            $treatmentIds = $acts->pluck('patient_treatment_id')->unique()->filter();
-            if ($treatmentIds->isNotEmpty()) {
-                $treatmentsWithInvoice = DB::table('invoices')
-                    ->whereIn('patient_treatment_id', $treatmentIds)
-                    ->where('status', '!=', 'cancelled')
-                    ->pluck('patient_treatment_id')
-                    ->toArray();
-
-                if (!empty($treatmentsWithInvoice)) {
-                    throw ValidationException::withMessages([
-                        'items' => ['Un ou plusieurs traitements ont deja une facture associee.'],
-                    ]);
-                }
-            }
-
             $invoice = Invoice::create([
                 'patient_id' => $validated['patient_id'],
                 'invoice_number' => 'TMP-' . uniqid('', true),
                 'issue_date' => $validated['issue_date'],
-                'due_date' => $validated['due_date'] ?? $validated['issue_date'],
+                'due_date' => $validated['issue_date'],
                 'total_amount' => 0,
-                'paid_amount' => 0,
-                'status' => 'pending',
+                'paid_amount' => 0, 
+                'status' => 'paid',
                 'notes' => $validated['notes'] ?? null,
             ]);
 
             $total = 0;
-            $itemsByAct = collect($validated['items'])->keyBy('patient_treatment_act_id');
-            foreach ($acts as $act) {
-                $quantity = (int) ($act->quantity ?? 1);
-                $provided = $itemsByAct->get($act->id) ?? [];
-                $unitPrice = isset($provided['unit_price']) ? (float) $provided['unit_price'] : (float) ($act->tarif_snapshot ?? $act->dentalAct?->tarif ?? 0);
-                $subtotal = $quantity * $unitPrice;
-
+            foreach ($validated['items'] as $item) {
+                $amount = (float) $item['amount'];
+                
                 $invoice->items()->create([
-                    'patient_treatment_act_id' => $act->id,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'subtotal' => $subtotal,
+                    'dent' => $item['dent'] ?? null,
+                    'treatment_name' => $item['treatment_name'],
+                    'indice' => $item['indice'] ?? null,
+                    'unit_price' => $amount,
+                    'quantity' => 1,
+                    'subtotal' => $amount,
                 ]);
 
-                $total += $subtotal;
+                $total += $amount;
             }
 
             $invoice->update([
-                'invoice_number' => sprintf('FAC-%s-%06d', date('Y'), $invoice->id),
+                'invoice_number' => sprintf('REL-%s-%06d', date('Y'), $invoice->id),
                 'total_amount' => $total,
+                'paid_amount' => $total,
             ]);
 
-            return $invoice->fresh(['patient', 'items.patientTreatmentAct.dentalAct']);
+            return $invoice->fresh(['patient', 'items']);
         });
 
         return response()->json($invoice, 201);
@@ -181,17 +123,12 @@ class InvoiceController extends Controller
      */
     public function markAsPaid(Invoice $invoice)
     {
-        if ($invoice->status === 'paid' && (float) $invoice->paid_amount >= (float) $invoice->total_amount) {
-            $invoice->load(['patient', 'items.patientTreatmentAct.dentalAct']);
-            return response()->json($invoice);
-        }
-
         $invoice->update([
             'paid_amount' => $invoice->total_amount,
             'status' => 'paid',
         ]);
 
-        $invoice->load(['patient', 'items.patientTreatmentAct.dentalAct']);
+        $invoice->load(['patient', 'items']);
         return response()->json($invoice);
     }
 
@@ -200,10 +137,7 @@ class InvoiceController extends Controller
      */
     public function generate(Invoice $invoice)
     {
-        $invoice->load([
-            'patient',
-            'items.patientTreatmentAct.dentalAct',
-        ]);
+        $invoice->load(['patient', 'items']);
 
         $isDraft = $invoice->status !== 'paid';
 
@@ -211,8 +145,9 @@ class InvoiceController extends Controller
             ->map(function ($item) {
                 return implode(':', [
                     (string) $item->id,
-                    (string) $item->quantity,
-                    (string) $item->unit_price,
+                    (string) $item->dent,
+                    (string) $item->treatment_name,
+                    (string) $item->indice,
                     (string) $item->subtotal,
                     (string) ($item->updated_at?->timestamp ?? ''),
                 ]);
@@ -238,7 +173,7 @@ class InvoiceController extends Controller
         $cachedPdfPath = $cacheDir . DIRECTORY_SEPARATOR . 'facture_' . $invoice->id . '_' . $versionKey . '.pdf';
 
         if (file_exists($cachedPdfPath)) {
-            $downloadName = ($isDraft ? 'brouillon_' : 'facture_') . $invoice->invoice_number . '.pdf';
+            $downloadName = 'relevé_' . $invoice->invoice_number . '.pdf';
             return response()->download($cachedPdfPath, $downloadName);
         }
 
@@ -266,9 +201,9 @@ class InvoiceController extends Controller
                 'default_font_size' => 10,
             ]);
 
-            $mpdf->SetTitle('Facture ' . $invoice->invoice_number);
-            $mpdf->SetAuthor(config('app.cabinet_name', 'MATLABUL SHIFAH'));
-            $mpdf->SetSubject('Facture cabinet dentaire');
+            $mpdf->SetTitle('Relevé ' . $invoice->invoice_number);
+            $mpdf->SetAuthor(config('app.cabinet_name', 'Matlabul Shifah'));
+            $mpdf->SetSubject('Relevé de soins cabinet dentaire');
             $mpdf->WriteHTML($html);
             $mpdf->Output($tmpPdfPath, 'F');
 
@@ -284,7 +219,7 @@ class InvoiceController extends Controller
 
             File::move($tmpPdfPath, $cachedPdfPath);
 
-            $downloadName = ($isDraft ? 'brouillon_' : 'facture_') . $invoice->invoice_number . '.pdf';
+            $downloadName = 'relevé_' . $invoice->invoice_number . '.pdf';
             return response()->download($cachedPdfPath, $downloadName);
         } catch (\Throwable $e) {
             Log::error('Invoice PDF generation failed', [
@@ -293,7 +228,7 @@ class InvoiceController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'Erreur lors de la generation de la facture : ' . $e->getMessage(),
+                'error' => 'Erreur lors de la generation du relevé : ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -305,35 +240,32 @@ class InvoiceController extends Controller
         );
 
         $items = $invoice->items->map(function ($item) use ($patientName, $invoice) {
-            $dentalAct = $item->patientTreatmentAct?->dentalAct;
-
             return [
                 'patient_name' => $patientName,
                 'date' => (string) $invoice->issue_date,
-                'acte' => (string) ($dentalAct?->name ?? 'Acte'),
-                'indice' => (string) ($dentalAct?->code ?? ''),
+                'dent' => (string) ($item->dent ?? ''),
+                'acte' => (string) ($item->treatment_name ?? 'Soin'),
+                'indice' => (string) ($item->indice ?? ''),
                 'montant' => (float) $item->subtotal,
             ];
         })->values()->all();
 
         return [
             'cabinetName' => $this->normalizeCabinetName(
-                (string) config('app.cabinet_name', 'MATLABUL SHIFAH')
+                (string) config('app.cabinet_name', 'Matlabul Shifah')
             ),
             'cabinetAddress' => (string) config('app.cabinet_address', ''),
             'cabinetPhone' => (string) config('app.cabinet_phone', ''),
             'logoDataUri' => $this->fileToDataUri(public_path('images/logoCabinet.png')),
-            'invoiceNumber' => $isDraft
-                ? ('BROUILLON - ' . (string) $invoice->invoice_number)
-                : (string) $invoice->invoice_number,
+            'invoiceNumber' => $invoice->invoice_number,
             'issueDate' => (string) $invoice->issue_date,
-            'dueDate' => (string) ($invoice->due_date ?? $invoice->issue_date),
+            'dueDate' => (string) $invoice->issue_date,
             'patientName' => $patientName,
             'patientPhone' => (string) ($invoice->patient->phone ?? ''),
             'items' => $items,
             'totalAmount' => (float) $invoice->total_amount,
             'paidAmount' => (float) $invoice->paid_amount,
-            'remainingAmount' => max((float) $invoice->total_amount - (float) $invoice->paid_amount, 0),
+            'remainingAmount' => 0,
         ];
     }
 
@@ -352,7 +284,7 @@ class InvoiceController extends Controller
     {
         $normalized = trim(str_replace('_', ' ', $name));
 
-        return $normalized !== '' ? $normalized : 'MATLABUL SHIFAH';
+        return $normalized !== '' ? $normalized : 'Matlabul Shifah';
     }
 
     private function fileToDataUri(string $path): ?string

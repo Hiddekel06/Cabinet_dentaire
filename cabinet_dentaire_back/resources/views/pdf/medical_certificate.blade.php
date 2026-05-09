@@ -95,7 +95,7 @@
             <img src="{{ $logoDataUri }}" alt="Logo cabinet" width="64" height="64">
         @endif
     </div>
-    <p class="cabinet-subtitle">Cabinet dentaire</p>
+    <p class="cabinet-subtitle">Cabinet Dentaire</p>
     <p class="cabinet-subtitle">{{ $cabinetName }}</p>
 
     <p class="cabinet-name">Adresse : {{ $cabinetAddress }}</p>

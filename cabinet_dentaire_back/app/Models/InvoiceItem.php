@@ -12,12 +12,16 @@ class InvoiceItem extends Model
     protected $fillable = [
         'invoice_id',
         'patient_treatment_act_id',
+        'dent',
+        'treatment_name',
+        'indice',
         'quantity',
         'unit_price',
         'subtotal',
     ];
 
     protected $casts = [
+        'dent' => 'integer',
         'quantity' => 'integer',
         'unit_price' => 'decimal:2',
         'subtotal' => 'decimal:2',

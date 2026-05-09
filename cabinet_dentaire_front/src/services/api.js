@@ -297,6 +297,12 @@ export const patientAPI = {
     clearCache('patients');
     return api.delete(`/api/patients/${id}`);
   },
+
+  getTreatmentSummaries: (id) =>
+    api.get(`/api/patients/${id}/treatment-summaries`),
+
+  getBillableActs: (id) =>
+    api.get(`/api/patients/${id}/billable-acts`),
 };
 
 // Endpoints pour les radiographies

@@ -157,7 +157,7 @@
             @endif
         </td>
         <td class="header-main">
-            <p class="cabinet-subtitle">Cabinet dentaire</p>
+            <p class="cabinet-subtitle">Cabinet Dentaire</p>
             <p class="cabinet-subtitle">{{ $cabinetName }}</p>
             <p class="cabinet-name">{{ $cabinetAddress }}</p>
             <p class="cabinet-name">Téléphone : {{ $cabinetPhone }}</p>

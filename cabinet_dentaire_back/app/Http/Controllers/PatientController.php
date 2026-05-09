@@ -108,6 +108,30 @@ class PatientController extends Controller
         return response()->json($patient);
     }
 
+    /**
+     * Retourne le resume des traitements pour un patient (totaux encaisses).
+     */
+    public function treatmentSummaries(Patient $patient)
+    {
+        $summaries = $patient->patientTreatments()
+            ->with(['medicalRecords' => function($q) {
+                $q->select('id', 'patient_treatment_id', 'amount_collected');
+            }])
+            ->get()
+            ->map(function($treatment) {
+                $totalCollected = $treatment->medicalRecords->sum('amount_collected');
+                return [
+                    'id' => $treatment->id,
+                    'name' => $treatment->name,
+                    'status' => $treatment->status,
+                    'total_collected' => (float) $totalCollected,
+                    'start_date' => $treatment->start_date,
+                ];
+            });
+
+        return response()->json($summaries);
+    }
+
     public function update(Request $request, Patient $patient)
     {
         $validated = $request->validate([

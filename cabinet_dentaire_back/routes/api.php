@@ -101,5 +101,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/medical-folder/medical-records', [MedicalFolderController::class, 'medicalRecords']);
         Route::get('/medical-folder/treatments', [MedicalFolderController::class, 'treatments']);
         Route::get('/medical-folder/radiographies', [MedicalFolderController::class, 'radiographies']);
+        Route::get('/treatment-summaries', [PatientController::class, 'treatmentSummaries']);
     });
 });

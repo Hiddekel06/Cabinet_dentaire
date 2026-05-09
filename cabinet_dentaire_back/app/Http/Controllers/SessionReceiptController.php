@@ -213,7 +213,7 @@ class SessionReceiptController extends Controller
 
         $html = view('pdf.session_receipt', [
             'receipt' => $sessionReceipt,
-            'cabinetName' => $this->normalizeCabinetName((string) config('app.cabinet_name', 'MATLABUL SHIFAH')),
+            'cabinetName' => $this->normalizeCabinetName((string) config('app.cabinet_name', 'Matlabul Shifah')),
             'cabinetAddress' => (string) config('app.cabinet_address', ''),
             'cabinetPhone' => (string) config('app.cabinet_phone', ''),
             'logoDataUri' => $this->fileToDataUri(public_path('images/logoCabinet.png')),
@@ -309,7 +309,7 @@ class SessionReceiptController extends Controller
     {
         $normalized = trim(str_replace('_', ' ', $name));
 
-        return $normalized !== '' ? $normalized : 'MATLABUL SHIFAH';
+        return $normalized !== '' ? $normalized : 'Matlabul Shifah';
     }
 
     private function fileToDataUri(string $path): ?string
