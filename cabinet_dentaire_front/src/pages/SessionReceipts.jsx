@@ -38,7 +38,16 @@ const SessionReceipts = () => {
     patient_id: '',
     search: '',
     status: '',
+    period: 'today', // Par défaut sur aujourd'hui
   });
+
+  const periods = [
+    { label: 'Aujourd\'hui', value: 'today' },
+    { label: 'Cette semaine', value: 'week' },
+    { label: 'Ce mois-ci', value: 'month' },
+    { label: '2 derniers mois', value: 'last_2_months' },
+    { label: 'Tout l\'historique', value: 'all' },
+  ];
 
   const loadPatients = async () => {
     try {
@@ -86,71 +95,94 @@ const SessionReceipts = () => {
   }, [page, filters.patient_id, filters.status]);
 
   const filteredReceipts = useMemo(() => {
-    const term = filters.search.trim().toLowerCase();
-    if (!term) return receipts;
+    let result = [...receipts];
 
-    return receipts.filter((receipt) => {
-      const receiptNumber = String(receipt.receipt_number || '').toLowerCase();
-      const patientName = getPatientName(receipt.patient).toLowerCase();
-      const sessionLabel = String(receipt.medical_record_id || '');
-      return receiptNumber.includes(term) || patientName.includes(term) || sessionLabel.includes(term);
-    });
-  }, [receipts, filters.search]);
-
-  const handleDownload = async (receipt) => {
-    if (!receipt?.id) return;
-
-    setDownloadingReceiptId(receipt.id);
-    try {
-      const res = await sessionReceiptAPI.generate(receipt.id);
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `recu_seance_${receipt.receipt_number || receipt.id}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      const nowIso = new Date().toISOString();
-      setReceipts((prev) =>
-        prev.map((item) => {
-          if (item.id !== receipt.id) return item;
-          return {
-            ...item,
-            downloads_count: Number(item.downloads_count || 0) + 1,
-            last_downloaded_at: nowIso,
-          };
-        })
-      );
-    } catch {
-      alert('Impossible de télécharger le reçu.');
-    } finally {
-      setDownloadingReceiptId(null);
+    // 1. Filtrage par période
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    if (filters.period === 'today') {
+      result = result.filter(r => new Date(r.issue_date).getTime() === today);
+    } else if (filters.period === 'week') {
+      const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).setHours(0, 0, 0, 0);
+      result = result.filter(r => new Date(r.issue_date).getTime() >= startOfWeek);
+    } else if (filters.period === 'month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      result = result.filter(r => new Date(r.issue_date).getTime() >= startOfMonth);
+    } else if (filters.period === 'last_2_months') {
+      const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1).getTime();
+      result = result.filter(r => new Date(r.issue_date).getTime() >= twoMonthsAgo);
     }
-  };
+
+    // 2. Recherche textuelle
+    const term = filters.search.trim().toLowerCase();
+    if (term) {
+      result = result.filter((receipt) => {
+        const receiptNumber = String(receipt.receipt_number || '').toLowerCase();
+        const patientName = getPatientName(receipt.patient).toLowerCase();
+        return receiptNumber.includes(term) || patientName.includes(term);
+      });
+    }
+
+    return result;
+  }, [receipts, filters.search, filters.period]);
+
+  const totalCollected = useMemo(() => {
+    return filteredReceipts.reduce((sum, r) => sum + (Number(r.medical_record?.amount_collected || r.total_amount || 0)), 0);
+  }, [filteredReceipts]);
+
+  const periodLabel = useMemo(() => {
+    return periods.find(p => p.value === filters.period)?.label || 'Période';
+  }, [filters.period]);
 
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reçus de séance</h1>
-          <p className="text-gray-600 mt-1">Historique complet des reçus générés, consultables et téléchargeables à tout moment.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Reçus de séance</h1>
+            <p className="text-gray-600 mt-1">Historique complet des reçus générés, consultables et téléchargeables à tout moment.</p>
+          </div>
+          {!loading && (
+            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 shadow-sm flex items-center gap-4 transition-all">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-100">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest leading-tight">Total encaissé<br/>({periodLabel})</p>
+                <p className="text-xl font-black text-emerald-700">{totalCollected.toLocaleString()} XOF</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input
-              type="text"
-              value={filters.search}
-              onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-              placeholder="Rechercher (référence, patient, séance)"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="relative">
+              <input
+                type="text"
+                value={filters.search}
+                onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                placeholder="Rechercher (réf, patient...)"
+                className="w-full rounded-lg border border-gray-300 pl-3 pr-8 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+              />
+            </div>
 
             <select
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+              value={filters.period}
+              onChange={(e) => {
+                setPage(1);
+                setFilters((prev) => ({ ...prev, period: e.target.value }));
+              }}
+            >
+              {periods.map(p => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+
+            <select
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
               value={filters.patient_id}
               onChange={(e) => {
                 setPage(1);
@@ -166,7 +198,7 @@ const SessionReceipts = () => {
             </select>
 
             <select
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
               value={filters.status}
               onChange={(e) => {
                 setPage(1);
@@ -177,19 +209,19 @@ const SessionReceipts = () => {
               <option value="pending">Non payé</option>
               <option value="paid">Payé</option>
             </select>
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setPage(1);
-                  setFilters({ patient_id: '', search: '', status: '' });
-                }}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm hover:bg-gray-50"
-              >
-                Réinitialiser
-              </button>
-            </div>
+          </div>
+          
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setPage(1);
+                setFilters({ patient_id: '', search: '', status: '', period: 'today' });
+              }}
+              className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-emerald-600 transition-colors"
+            >
+              Réinitialiser les filtres
+            </button>
           </div>
         </div>
 

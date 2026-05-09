@@ -50,6 +50,12 @@ const initialData = {
     new_patients_period: { value: 0, trend_percent: 0 },
     invoices_pending: { value: 0, ratio_percent: 0 },
   },
+  finance_summary: {
+    today_collected: 0,
+    week_collected: 0,
+    month_collected: 0,
+    today_details: [],
+  },
   recent_patients: [],
   today_appointments: [],
   daily_summary: {
@@ -93,6 +99,7 @@ export const Dashboard = () => {
   const [error, setError] = useState('');
   const [selectedRecentPatient, setSelectedRecentPatient] = useState(null);
   const [continuingTreatment, setContinuingTreatment] = useState(false);
+  const [showCashModal, setShowCashModal] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -112,6 +119,7 @@ export const Dashboard = () => {
   }, [loadDashboard]);
 
   const cards = data.cards || initialData.cards;
+  const finance = data.finance_summary || initialData.finance_summary;
   const recentPatients = Array.isArray(data.recent_patients) ? data.recent_patients : [];
   const todayAppointments = Array.isArray(data.today_appointments) ? data.today_appointments : [];
   const summary = data.daily_summary || initialData.daily_summary;
@@ -181,7 +189,7 @@ export const Dashboard = () => {
       progress: Math.min(((cards.appointments_today?.value ?? 0) / 20) * 100, 100),
       progressGradient: 'from-teal-400 to-teal-600',
       circleGradient: 'from-emerald-300 to-emerald-100',
-      iconPath: 'M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z',
+      iconPath: 'M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75(1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z',
       iconColor: 'text-amber-600',
     },
     {
@@ -208,14 +216,134 @@ export const Dashboard = () => {
     },
   ];
 
+  const cashWidgets = [
+    {
+      label: 'Encaissé aujourd\'hui',
+      value: finance.today_collected,
+      color: 'emerald',
+      action: () => setShowCashModal(true),
+      actionLabel: 'Voir journal'
+    },
+    {
+      label: 'Cette semaine',
+      value: finance.week_collected,
+      color: 'blue'
+    },
+    {
+      label: 'Ce mois',
+      value: finance.month_collected,
+      color: 'indigo'
+    }
+  ];
+
   return (
     <Layout>
       <div className="min-h-screen bg-white p-6">
-        <div className="mb-4">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h1 className="text-base font-medium text-gray-600">
             Bienvenue, <span className="text-gray-700">Dr. {user?.name || 'Utilisateur'}</span>
           </h1>
+          <div className="text-sm font-bold text-slate-500 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
         </div>
+
+        {/* Widgets de Caisse (Nouveau) */}
+        {!loading && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {cashWidgets.map((widget) => (
+              <div 
+                key={widget.label} 
+                className={`relative overflow-hidden rounded-2xl border bg-white p-5 shadow-sm transition-all hover:shadow-md ${
+                  widget.color === 'emerald' ? 'border-emerald-100 hover:border-emerald-200' :
+                  widget.color === 'blue' ? 'border-blue-100 hover:border-blue-200' :
+                  'border-indigo-100 hover:border-indigo-200'
+                }`}
+              >
+                <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-10 ${
+                  widget.color === 'emerald' ? 'bg-emerald-500' :
+                  widget.color === 'blue' ? 'bg-blue-500' :
+                  'bg-indigo-500'
+                }`} />
+                
+                <div className="relative z-10 flex items-start justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">{widget.label}</p>
+                    <h3 className={`text-2xl font-black ${
+                      widget.color === 'emerald' ? 'text-emerald-600' :
+                      widget.color === 'blue' ? 'text-blue-600' :
+                      'text-indigo-600'
+                    }`}>
+                      {Number(widget.value).toLocaleString()} <span className="text-xs font-bold">XOF</span>
+                    </h3>
+                  </div>
+                  <div className={`p-2 rounded-xl ${
+                    widget.color === 'emerald' ? 'bg-emerald-50 text-emerald-500' :
+                    widget.color === 'blue' ? 'bg-blue-50 text-blue-500' :
+                    'bg-indigo-50 text-indigo-500'
+                  }`}>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                </div>
+
+                {widget.action && (
+                  <button 
+                    onClick={widget.action}
+                    className="mt-4 flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-700 transition-colors uppercase tracking-tight"
+                  >
+                    {widget.actionLabel}
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Modal Journal de Caisse du jour */}
+        {showCashModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowCashModal(false)}>
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-5 bg-emerald-600 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-white uppercase tracking-wider">Journal de caisse</h3>
+                  <p className="text-emerald-100 text-xs">Paiements reçus aujourd'hui</p>
+                </div>
+                <button onClick={() => setShowCashModal(false)} className="text-white/80 hover:text-white text-2xl font-bold">&times;</button>
+              </div>
+              <div className="p-6 max-h-[60vh] overflow-y-auto">
+                {finance.today_details.length === 0 ? (
+                  <p className="text-center text-slate-400 py-8 italic">Aucun encaissement pour le moment.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {finance.today_details.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[10px] font-bold text-slate-400 border border-slate-100 shadow-xs">
+                            {item.time}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{item.patient_name}</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Encaissement séance</p>
+                          </div>
+                        </div>
+                        <div className="text-sm font-black text-emerald-600">
+                          +{Number(item.amount).toLocaleString()} <span className="text-[10px]">XOF</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total du jour</span>
+                <span className="text-xl font-black text-emerald-600">{Number(finance.today_collected).toLocaleString()} XOF</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 flex items-center justify-between">
@@ -378,7 +506,7 @@ export const Dashboard = () => {
 
                   <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
                     <p className="text-gray-500 text-sm">Affichage de {recentPatients.length} patient{recentPatients.length > 1 ? 's' : ''}</p>
-                    <button className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 rounded-lg transition-all duration-200">
+                    <button onClick={() => navigate('/patients')} className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 rounded-lg transition-all duration-200">
                       Voir patients
                     </button>
                   </div>

@@ -1,153 +1,3 @@
-// Endpoints pour les actes dentaires
-export const dentalActAPI = {
-  getAll: () => {
-    const cacheKey = 'dental-acts:all';
-    const cached = getCachedData(cacheKey);
-    if (cached) return Promise.resolve(cached);
-    return api.get('/api/dental-acts').then(res => {
-      setCachedData(cacheKey, res);
-      return res;
-    });
-  },
-};
-// Endpoints pour les certificats médicaux
-export const medicalCertificateAPI = {
-    generate: (id) =>
-      api.post(`/api/medical-certificates/${id}/generate`, {}, { responseType: 'blob' }),
-  getAll: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    const cacheKey = `medical-certificates:${query}`;
-    const cached = getCachedData(cacheKey);
-    if (cached) return Promise.resolve(cached);
-    return api.get(`/api/medical-certificates?${query}`).then(res => {
-      setCachedData(cacheKey, res);
-      return res;
-    });
-  },
-
-  getById: (id) =>
-    api.get(`/api/medical-certificates/${id}`),
-  
-  getByPatient: (patientId) =>
-    api.get(`/api/medical-certificates?patient_id=${patientId}`),
-
-  create: (data) => {
-    clearCache('medical-certificates');
-    return api.post('/api/medical-certificates', data);
-  },
-
-  update: (id, data) => {
-    clearCache('medical-certificates');
-    return api.put(`/api/medical-certificates/${id}`, data);
-  },
-
-  delete: (id) => {
-    clearCache('medical-certificates');
-    return api.delete(`/api/medical-certificates/${id}`);
-  },
-};
-
-// Endpoints pour les ordonnances
-export const ordonnanceAPI = {
-  getAll: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    const cacheKey = `ordonnances:${query}`;
-    const cached = getCachedData(cacheKey);
-    if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/ordonnances?${query}`).then(res => {
-      setCachedData(cacheKey, res);
-      return res;
-    });
-  },
-
-  getById: (id) =>
-    api.get(`/api/ordonnances/${id}`),
-
-  create: (data) => {
-    clearCache('ordonnances');
-    return api.post('/api/ordonnances', data);
-  },
-
-  delete: (id) => {
-    clearCache('ordonnances');
-    return api.delete(`/api/ordonnances/${id}`);
-  },
-
-  generate: (id, data = {}) =>
-    api.post(`/api/ordonnances/${id}/generate`, data, { responseType: 'blob' }),
-};
-
-// Endpoints pour les factures
-export const invoiceAPI = {
-  getAll: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    const cacheKey = `invoices:${query}`;
-    const cached = getCachedData(cacheKey);
-    if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/invoices?${query}`).then(res => {
-      setCachedData(cacheKey, res);
-      return res;
-    });
-  },
-
-  getById: (id) =>
-    api.get(`/api/invoices/${id}`),
-
-  getBillableActs: (patientId) =>
-    api.get(`/api/patients/${patientId}/billable-acts`),
-
-  create: (data) => {
-    clearCache('invoices');
-    clearCache('statistics:overview');
-    clearCache('dashboard:overview');
-    return api.post('/api/invoices', data);
-  },
-
-  markAsPaid: (id) => {
-    clearCache('invoices');
-    clearCache('statistics:overview');
-    clearCache('dashboard:overview');
-    return api.post(`/api/invoices/${id}/mark-paid`);
-  },
-
-  generate: (id) =>
-    api.post(`/api/invoices/${id}/generate`, {}, { responseType: 'blob' }),
-};
-
-// Endpoints pour les recus de seance (distincts des factures finales)
-export const sessionReceiptAPI = {
-  getAll: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    const cacheKey = `session-receipts:${query}`;
-    return fetchWithCache(cacheKey, () => api.get(`/api/session-receipts?${query}`));
-  },
-
-  create: (data) => {
-    clearCache('session-receipts');
-    return api.post('/api/session-receipts', data);
-  },
-
-  getById: (id) =>
-    api.get(`/api/session-receipts/${id}`),
-
-  generate: (id) => {
-    clearCache('session-receipts');
-    return api.post(`/api/session-receipts/${id}/generate`, {}, { responseType: 'blob' });
-  },
-
-  markAsPaid: (id) => {
-    clearCache('session-receipts');
-    return api.post(`/api/session-receipts/${id}/mark-paid`);
-  },
-};
-
-// Endpoints pour les suggestions de médicaments
-export const medicationAPI = {
-  suggestions: (query = '') =>
-    api.get(`/api/medications/suggestions?query=${encodeURIComponent(query)}`),
-};
 import axios from 'axios';
 
 const rawApiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -279,6 +129,9 @@ export const patientAPI = {
       return res;
     });
   },
+
+  search: (term) =>
+    api.get(`/api/patients?search=${encodeURIComponent(term)}&per_page=10`),
 
   getById: (id) =>
     api.get(`/api/patients/${id}`),
@@ -496,6 +349,149 @@ export const medicalRecordAPI = {
   },
 };
 
+// Endpoints pour les actes dentaires
+export const dentalActAPI = {
+  getAll: () => {
+    const cacheKey = 'dental-acts:all';
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+    return api.get('/api/dental-acts').then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+};
+
+// Endpoints pour les certificats médicaux
+export const medicalCertificateAPI = {
+  generate: (id) =>
+    api.post(`/api/medical-certificates/${id}/generate`, {}, { responseType: 'blob' }),
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `medical-certificates:${query}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+    return api.get(`/api/medical-certificates?${query}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+
+  getById: (id) =>
+    api.get(`/api/medical-certificates/${id}`),
+  
+  getByPatient: (patientId) =>
+    api.get(`/api/medical-certificates?patient_id=${patientId}`),
+
+  create: (data) => {
+    clearCache('medical-certificates');
+    return api.post('/api/medical-certificates', data);
+  },
+
+  update: (id, data) => {
+    clearCache('medical-certificates');
+    return api.put(`/api/medical-certificates/${id}`, data);
+  },
+
+  delete: (id) => {
+    clearCache('medical-certificates');
+    return api.delete(`/api/medical-certificates/${id}`);
+  },
+};
+
+// Endpoints pour les ordonnances
+export const ordonnanceAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `ordonnances:${query}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    return api.get(`/api/ordonnances?${query}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+
+  getById: (id) =>
+    api.get(`/api/ordonnances/${id}`),
+
+  create: (data) => {
+    clearCache('ordonnances');
+    return api.post('/api/ordonnances', data);
+  },
+
+  delete: (id) => {
+    clearCache('ordonnances');
+    return api.delete(`/api/ordonnances/${id}`);
+  },
+
+  generate: (id, data = {}) =>
+    api.post(`/api/ordonnances/${id}/generate`, data, { responseType: 'blob' }),
+};
+
+// Endpoints pour les factures
+export const invoiceAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `invoices:${query}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    return api.get(`/api/invoices?${query}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+
+  getById: (id) =>
+    api.get(`/api/invoices/${id}`),
+
+  create: (data) => {
+    clearCache('invoices');
+    clearCache('statistics:overview');
+    clearCache('dashboard:overview');
+    return api.post('/api/invoices', data);
+  },
+
+  markAsPaid: (id) => {
+    clearCache('invoices');
+    clearCache('statistics:overview');
+    clearCache('dashboard:overview');
+    return api.post(`/api/invoices/${id}/mark-paid`);
+  },
+
+  generate: (id) =>
+    api.post(`/api/invoices/${id}/generate`, {}, { responseType: 'blob' }),
+};
+
+// Endpoints pour les recus de seance (distincts des factures finales)
+export const sessionReceiptAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `session-receipts:${query}`;
+    return fetchWithCache(cacheKey, () => api.get(`/api/session-receipts?${query}`));
+  },
+
+  create: (data) => {
+    clearCache('session-receipts');
+    return api.post('/api/session-receipts', data);
+  },
+
+  getById: (id) =>
+    api.get(`/api/session-receipts/${id}`),
+
+  generate: (id) => {
+    clearCache('session-receipts');
+    return api.post(`/api/session-receipts/${id}/generate`, {}, { responseType: 'blob' });
+  },
+
+  markAsPaid: (id) => {
+    clearCache('session-receipts');
+    return api.post(`/api/session-receipts/${id}/mark-paid`);
+  },
+};
+
 // Endpoints pour les types de produits
 export const productTypeAPI = {
   getAll: () => {
@@ -579,6 +575,12 @@ export const productAPI = {
       return res;
     });
   },
+};
+
+// Endpoints pour les suggestions de médicaments
+export const medicationAPI = {
+  suggestions: (query = '') =>
+    api.get(`/api/medications/suggestions?query=${encodeURIComponent(query)}`),
 };
 
 // Endpoint pour le tableau de bord statistiques

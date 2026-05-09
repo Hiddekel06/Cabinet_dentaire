@@ -30,17 +30,41 @@ const Factures = () => {
   const [loadingSummaries, setLoadingSummaries] = useState(false);
   const [pdfLoadingId, setPdfLoadingId] = useState(null);
 
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [showPatientList, setShowPatientList] = useState(false);
+
   const selectedPatient = useMemo(() => {
     return patients.find(p => String(p.id) === String(createForm.patient_id)) || null;
   }, [patients, createForm.patient_id]);
+
+  const filteredPatients = useMemo(() => {
+    const term = patientSearchTerm.toLowerCase();
+    return patients.filter((p) => {
+      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
+      return fullName.includes(term) || (p.phone && p.phone.includes(patientSearchTerm));
+    });
+  }, [patients, patientSearchTerm]);
+
+  useEffect(() => {
+    if (selectedPatient) {
+      setPatientSearchTerm(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
+    }
+  }, [selectedPatient]);
 
   useEffect(() => {
     loadInvoices();
   }, [page, filters.search, filters.patient_id, filters.date_from, filters.date_to]);
 
   useEffect(() => {
-    loadPatients();
-  }, []);
+    // Recherche serveur debouncée
+    const delayDebounceFn = setTimeout(() => {
+      if (patientSearchTerm && showPatientList) {
+        searchPatients(patientSearchTerm);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [patientSearchTerm]);
 
   const loadInvoices = async () => {
     setLoading(true);
@@ -58,12 +82,12 @@ const Factures = () => {
     }
   };
 
-  const loadPatients = async () => {
+  const searchPatients = async (term) => {
     try {
-      const res = await patientAPI.getAll(1, { per_page: 200 });
+      const res = await patientAPI.search(term);
       setPatients(res.data?.data || []);
-    } catch {
-      setPatients([]);
+    } catch (error) {
+      console.error('Erreur recherche patients:', error);
     }
   };
 
@@ -146,14 +170,21 @@ const Factures = () => {
     }
   };
 
-  const closeCreateModal = () => {
-    setShowCreateModal(false);
+  const resetForm = () => {
     setCreateForm({
       patient_id: '',
       issue_date: new Date().toISOString().slice(0, 10),
       notes: '',
       items: [],
     });
+    setPatientSearchTerm('');
+    setShowPatientList(false);
+    setTreatmentSummaries([]);
+  };
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    resetForm();
   };
 
   const downloadPdf = async (invoice) => {
@@ -354,19 +385,44 @@ const Factures = () => {
 
             <form onSubmit={handleCreateInvoice} className="px-4 py-4 space-y-4 overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Patient</label>
-                  <select
+                <div className="relative">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Patient *</label>
+                  <input
+                    type="text"
                     required
+                    placeholder="Rechercher un patient..."
                     className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300 font-medium"
-                    value={createForm.patient_id}
-                    onChange={(e) => handlePatientChange(e.target.value)}
-                  >
-                    <option value="">Sélectionner un patient</option>
-                    {patients.map((p) => (
-                      <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
-                    ))}
-                  </select>
+                    value={patientSearchTerm}
+                    onChange={(e) => {
+                      setPatientSearchTerm(e.target.value);
+                      setShowPatientList(true);
+                    }}
+                    onFocus={() => setShowPatientList(true)}
+                  />
+
+                  {showPatientList && patientSearchTerm && (
+                    <div className="absolute top-full left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl z-20">
+                      {filteredPatients.length > 0 ? (
+                        filteredPatients.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              handlePatientChange(p.id);
+                              setPatientSearchTerm(`${p.first_name || ''} ${p.last_name || ''}`.trim());
+                              setShowPatientList(false);
+                            }}
+                            className="w-full text-left px-4 py-3 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                          >
+                            <p className="font-bold text-slate-900">{p.first_name} {p.last_name}</p>
+                            {p.phone && <p className="text-xs text-slate-500 mt-0.5">{p.phone}</p>}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun patient trouvé</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>

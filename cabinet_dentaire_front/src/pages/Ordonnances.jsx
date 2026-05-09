@@ -21,6 +21,10 @@ const Ordonnances = () => {
   const [showCreateModal, setShowCreateModal] = useState(isNewMode);
   const [saving, setSaving] = useState(false);
 
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [showPatientList, setShowPatientList] = useState(false);
+  const [suggestionsByIndex, setSuggestionsByIndex] = useState({});
+
   const [filters, setFilters] = useState({
     patient_id: '',
     search: '',
@@ -35,18 +39,35 @@ const Ordonnances = () => {
     items: [{ ...emptyItem }],
   });
 
-  const [suggestionsByIndex, setSuggestionsByIndex] = useState({});
-
-  const patientNameById = useMemo(() => {
-    return patients.reduce((acc, p) => {
-      acc[p.id] = `${p.first_name || ''} ${p.last_name || ''}`.trim();
-      return acc;
-    }, {});
-  }, [patients]);
+  const selectedPatient = useMemo(() => {
+    return patients.find((p) => String(p.id) === String(form.patient_id)) || null;
+  }, [patients, form.patient_id]);
 
   useEffect(() => {
-    loadPatients();
-  }, []);
+    if (selectedPatient) {
+      setPatientSearchTerm(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
+    }
+  }, [selectedPatient]);
+
+  useEffect(() => {
+    // Recherche serveur debouncée
+    const delayDebounceFn = setTimeout(() => {
+      if (patientSearchTerm && showPatientList) {
+        searchPatients(patientSearchTerm);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [patientSearchTerm]);
+
+  const searchPatients = async (term) => {
+    try {
+      const res = await patientAPI.search(term);
+      setPatients(res.data?.data || []);
+    } catch (error) {
+      console.error('Erreur recherche patients:', error);
+    }
+  };
 
   useEffect(() => {
     if (!isNewMode) {
@@ -55,15 +76,6 @@ const Ordonnances = () => {
       setLoading(false);
     }
   }, [page, filters.patient_id, filters.search, filters.date_from, filters.date_to, isNewMode]);
-
-  const loadPatients = async () => {
-    try {
-      const res = await patientAPI.getAll(1);
-      setPatients(res.data.data || res.data || []);
-    } catch {
-      setPatients([]);
-    }
-  };
 
   const loadOrdonnances = async () => {
     setLoading(true);
@@ -405,35 +417,66 @@ const Ordonnances = () => {
 
             <form onSubmit={createOrdonnance} className="px-4 py-4 space-y-4 overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <select
-                  required
-                  className="w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
-                  value={form.patient_id}
-                  onChange={(e) => setForm((prev) => ({ ...prev, patient_id: e.target.value }))}
-                >
-                  <option value="">Selectionner un patient</option>
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.first_name} {p.last_name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Patient *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Rechercher un patient..."
+                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300 font-medium"
+                    value={patientSearchTerm}
+                    onChange={(e) => {
+                      setPatientSearchTerm(e.target.value);
+                      setShowPatientList(true);
+                    }}
+                    onFocus={() => setShowPatientList(true)}
+                  />
 
-                <input
-                  required
-                  type="date"
-                  className="w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
-                  value={form.issue_date}
-                  onChange={(e) => setForm((prev) => ({ ...prev, issue_date: e.target.value }))}
-                />
+                  {showPatientList && patientSearchTerm && (
+                    <div className="absolute top-full left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl z-20">
+                      {patients.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => ({ ...prev, patient_id: p.id }));
+                            setPatientSearchTerm(`${p.first_name || ''} ${p.last_name || ''}`.trim());
+                            setShowPatientList(false);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                        >
+                          <p className="font-bold text-slate-900">{p.first_name} {p.last_name}</p>
+                          {p.phone && <p className="text-xs text-slate-500 mt-0.5">{p.phone}</p>}
+                        </button>
+                      ))}
+                      {patients.length === 0 && (
+                        <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun patient trouvé</div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-                <input
-                  type="text"
-                  placeholder="Notes generales"
-                  className="w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
-                  value={form.notes}
-                  onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                />
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Date d'émission</label>
+                  <input
+                    required
+                    type="date"
+                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300 font-medium"
+                    value={form.issue_date}
+                    onChange={(e) => setForm((prev) => ({ ...prev, issue_date: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Notes générales</label>
+                  <input
+                    type="text"
+                    placeholder="Notes (optionnel)"
+                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300 font-medium"
+                    value={form.notes}
+                    onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  />
+                </div>
               </div>
 
               <div className="space-y-3">

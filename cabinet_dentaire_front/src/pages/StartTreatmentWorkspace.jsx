@@ -19,6 +19,26 @@ const StartTreatmentWorkspace = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showAutoCloseModal, setShowAutoCloseModal] = useState(false);
 
+  useEffect(() => {
+    // Recherche serveur debouncée
+    const delayDebounceFn = setTimeout(() => {
+      if (patientSearchTerm && showPatientList) {
+        searchPatients(patientSearchTerm);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [patientSearchTerm]);
+
+  const searchPatients = async (term) => {
+    try {
+      const res = await patientAPI.search(term);
+      setPatients(res.data?.data || []);
+    } catch (error) {
+      console.error('Erreur recherche patients:', error);
+    }
+  };
+
   const [form, setForm] = useState({
     patient_id: '',
     name: '', // Nom du traitement

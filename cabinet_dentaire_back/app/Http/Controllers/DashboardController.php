@@ -141,6 +141,33 @@ class DashboardController extends Controller
             $patientsBySlot = $this->buildPatientsBySlotSeries($today);
             $actsBreakdown = $this->buildActsBreakdownSeries($startDate, $endDate);
 
+            // Calcul des encaissements (Finance Summary)
+            $todayCollected = (float) DB::table('medical_records')
+                ->whereBetween('created_at', [$todayStart, $todayEnd])
+                ->sum('amount_collected');
+
+            $weekCollected = (float) DB::table('medical_records')
+                ->whereBetween('created_at', [Carbon::now()->startOfWeek(), $todayEnd])
+                ->sum('amount_collected');
+
+            $monthCollected = (float) DB::table('medical_records')
+                ->whereBetween('created_at', [Carbon::now()->startOfMonth(), $todayEnd])
+                ->sum('amount_collected');
+
+            $todayDetails = DB::table('medical_records')
+                ->join('patients', 'patients.id', '=', 'medical_records.patient_id')
+                ->whereBetween('medical_records.created_at', [$todayStart, $todayEnd])
+                ->where('amount_collected', '>', 0)
+                ->select('patients.first_name', 'patients.last_name', 'medical_records.amount_collected', 'medical_records.created_at')
+                ->get()
+                ->map(function($record) {
+                    return [
+                        'patient_name' => trim($record->first_name . ' ' . $record->last_name),
+                        'amount' => (float) $record->amount_collected,
+                        'time' => Carbon::parse($record->created_at)->format('H:i'),
+                    ];
+                });
+
             $attendanceRate = $appointmentsToday > 0
                 ? (int) round((($appointmentsToday - $appointmentsCancelledToday) / $appointmentsToday) * 100)
                 : 0;
@@ -190,6 +217,12 @@ class DashboardController extends Controller
                         'vs_yesterday_percent' => $this->calculatePercentChange($appointmentsToday, $appointmentsYesterday),
                         'appointments_completed_today' => $appointmentsCompletedToday,
                     ],
+                ],
+                'finance_summary' => [
+                    'today_collected' => $todayCollected,
+                    'week_collected' => $weekCollected,
+                    'month_collected' => $monthCollected,
+                    'today_details' => $todayDetails,
                 ],
             ];
         });

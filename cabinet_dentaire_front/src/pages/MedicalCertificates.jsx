@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from "../components/Layout";
 import { medicalCertificateAPI } from '../services/api';
@@ -40,13 +40,32 @@ const MedicalCertificates = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  const selectedPatient = patients.find((patient) => String(patient.id) === String(form.patient_id)) || null;
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [showPatientList, setShowPatientList] = useState(false);
+
+  const selectedPatient = useMemo(() => {
+    return patients.find((p) => String(p.id) === String(form.patient_id)) || null;
+  }, [patients, form.patient_id]);
+
+  const filteredPatients = useMemo(() => {
+    const term = patientSearchTerm.toLowerCase();
+    return patients.filter((p) => {
+      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
+      return fullName.includes(term) || (p.phone && p.phone.includes(patientSearchTerm));
+    });
+  }, [patients, patientSearchTerm]);
 
   useEffect(() => {
     if (isNewMode) {
       void loadPatientsOnDemand();
     }
   }, [isNewMode]);
+
+  useEffect(() => {
+    if (selectedPatient) {
+      setPatientSearchTerm(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
+    }
+  }, [selectedPatient]);
 
   useEffect(() => {
     if (!isNewMode) {
@@ -103,6 +122,24 @@ const MedicalCertificates = () => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const resetForm = () => {
+    setForm({
+      patient_id: "",
+      issue_date: getTodayLocalDate(),
+      consultation_time: getCurrentHourTime(),
+      rest_days: "",
+      rest_start_date: getTodayLocalDate(),
+    });
+    setPatientSearchTerm('');
+    setShowPatientList(false);
+  };
+
+  const closeCreateModal = () => {
+    setShowModal(false);
+    resetForm();
+    if (isNewMode) navigate('/medical-certificates');
   };
 
   const handleSubmit = async (e) => {
@@ -301,14 +338,47 @@ const MedicalCertificates = () => {
               </div>
             </div>
             <form onSubmit={handleSubmit} className="px-4 py-4 grid grid-cols-1 gap-3 overflow-y-auto max-h-[65vh]">
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Patient</label>
-                <select name="patient_id" value={form.patient_id} onChange={handleChange} className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300" required>
-                  <option value="">Sélectionner un patient</option>
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
-                  ))}
-                </select>
+              <div className="relative">
+                <label className="text-xs font-semibold text-gray-700">Patient *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Rechercher un patient..."
+                  className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                  value={patientSearchTerm}
+                  onChange={(e) => {
+                    setPatientSearchTerm(e.target.value);
+                    setShowPatientList(true);
+                  }}
+                  onFocus={() => {
+                    setShowPatientList(true);
+                    void loadPatientsOnDemand();
+                  }}
+                />
+
+                {showPatientList && patientSearchTerm && (
+                  <div className="absolute top-full left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl z-20">
+                    {filteredPatients.length > 0 ? (
+                      filteredPatients.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => ({ ...prev, patient_id: p.id }));
+                            setPatientSearchTerm(`${p.first_name || ''} ${p.last_name || ''}`.trim());
+                            setShowPatientList(false);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                        >
+                          <p className="font-bold text-slate-900">{p.first_name} {p.last_name}</p>
+                          {p.phone && <p className="text-xs text-slate-500 mt-0.5">{p.phone}</p>}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-3 text-sm text-gray-500 italic">Aucun patient trouvé</div>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-700">Date</label>
