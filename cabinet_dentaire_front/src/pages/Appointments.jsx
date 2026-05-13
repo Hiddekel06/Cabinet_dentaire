@@ -6,20 +6,14 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const statusOptions = [
-  { value: 'all', label: 'Tous les statuts', color: 'gray' },
+  { value: 'all', label: 'Tous les actifs', color: 'gray' },
   { value: 'À venir', label: 'À venir', color: 'emerald' },
   { value: 'Aujourd\'hui', label: 'Aujourd\'hui', color: 'blue' },
   { value: 'En retard', label: 'En retard', color: 'amber' },
   { value: 'Terminé', label: 'Terminé', color: 'slate' },
   { value: 'Absent', label: 'Absent', color: 'orange' },
   { value: 'Annulé', label: 'Annulé', color: 'red' },
-];
-
-const motifOptions = [
-  { value: 'all', label: 'Tous les motifs' },
-  { value: 'Consultation', label: 'Consultation' },
-  { value: 'Détartrage', label: 'Détartrage' },
-  { value: 'Implant', label: 'Implant' },
+  { value: 'everything', label: 'Tout afficher', color: 'gray' },
 ];
 
 const Appointments = () => {
@@ -320,6 +314,20 @@ const Appointments = () => {
     }
   };
 
+  // Génération dynamique des motifs à partir des rendez-vous chargés
+  const motifOptions = useMemo(() => {
+    const baseMotifs = ['Consultation'];
+    const loadedMotifs = appointments.map(a => a.motif).filter(Boolean);
+    
+    // Fusionner, supprimer les doublons et trier
+    const uniqueMotifs = Array.from(new Set([...baseMotifs, ...loadedMotifs])).sort();
+    
+    return [
+      { value: 'all', label: 'Tous les motifs' },
+      ...uniqueMotifs.map(m => ({ value: m, label: m }))
+    ];
+  }, [appointments]);
+
   const filteredAppointments = useMemo(() => {
     let results = [...appointments];
 
@@ -334,7 +342,10 @@ const Appointments = () => {
     }
 
     // Filtre par statut
-    if (selectedStatus !== 'all') {
+    if (selectedStatus === 'all') {
+      // Option 2: Par défaut, masquer les rendez-vous Terminés, Absents et Annulés
+      results = results.filter(app => !['Terminé', 'Absent', 'Annulé'].includes(app.statut));
+    } else if (selectedStatus !== 'everything') {
       results = results.filter(app => app.statut === selectedStatus);
     }
 

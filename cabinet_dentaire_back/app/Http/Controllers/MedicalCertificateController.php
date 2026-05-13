@@ -188,7 +188,7 @@ class MedicalCertificateController extends Controller {
             'adresse' => config('app.cabinet_address', 'Parcelle'),
             'telephone' => config('app.cabinet_phone', '0600000000'),
             'nom du docteur' => (string) ($medicalCertificate->issuer->name ?? ''),
-            'MATLABUL SHIFAH' => $this->normalizeCabinetName((string) config('app.cabinet_name', 'MATLABUL SHIFAH')),
+            'MATLABUL SHIFAH' => $this->normalizeCabinetName((string) config('app.cabinet_name', 'Matlabul Shifah')),
             'nom de la personne' => $patientFullName,
             'date' => (string) $medicalCertificate->issue_date,
             'heure' => (string) ($medicalCertificate->consultation_time ?? ''),
@@ -256,7 +256,7 @@ class MedicalCertificateController extends Controller {
         $personName = (string) ($variables['nom de la personne'] ?? '');
 
         return [
-            'cabinetName' => $this->normalizeCabinetName((string) ($variables['MATLABUL SHIFAH'] ?? 'MATLABUL SHIFAH')),
+            'cabinetName' => $this->normalizeCabinetName((string) ($variables['MATLABUL SHIFAH'] ?? 'Matlabul Shifah')),
             'cabinetAddress' => (string) ($variables['adresse'] ?? ''),
             'cabinetPhone' => (string) ($variables['telephone'] ?? ''),
             'logoDataUri' => $this->fileToDataUri(public_path('images/logoCabinet.png')),
@@ -284,7 +284,7 @@ class MedicalCertificateController extends Controller {
     {
         $normalized = trim(str_replace('_', ' ', $name));
 
-        return $normalized !== '' ? $normalized : 'MATLABUL SHIFAH';
+        return $normalized !== '' ? $normalized : 'Matlabul Shifah';
     }
 
     private function fileToDataUri(string $path): ?string
