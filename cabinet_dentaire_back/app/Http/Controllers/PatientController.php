@@ -245,6 +245,8 @@ class PatientController extends Controller
         // A missed/no-show appointment without validated session is not counted.
         $lastVisitDate = $patient->medicalRecords()
             ->join('appointments', 'medical_records.appointment_id', '=', 'appointments.id')
+            ->where('appointments.appointment_date', '<=', now())
+            ->where('appointments.status', 'completed')
             ->max('appointments.appointment_date');
 
         $hasActiveTreatment = $patient->patientTreatments()
