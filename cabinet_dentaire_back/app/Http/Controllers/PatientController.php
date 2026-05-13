@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Patient;
 use App\Models\PatientTreatmentAct;
+use App\Models\MedicalRecord;
+use App\Models\PatientTreatment;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +32,8 @@ class PatientController extends Controller
                 }
             });
         }
+
+        $this->applySummaryScopes($patientsQuery);
 
         $patients = $patientsQuery
             ->with([
@@ -94,14 +98,18 @@ class PatientController extends Controller
 
     public function show(Patient $patient)
     {
-        $patient->load([
+        // On recharge le patient avec les scopes optimisés
+        $query = Patient::query()->where('id', $patient->id);
+        $this->applySummaryScopes($query);
+        
+        $patient = $query->with([
             'appointments' => function ($query) {
                 $query->latest('appointment_date')->limit(1);
             },
             'medicalRecords' => function ($query) {
                 $query->latest()->limit(1);
             },
-        ]);
+        ])->firstOrFail();
 
         $this->buildPatientSummary($patient);
 
@@ -228,47 +236,51 @@ class PatientController extends Controller
     }
 
     /**
+     * Applique les sous-requetes SQL pour eviter le probleme N+1
+     */
+    private function applySummaryScopes($query): void
+    {
+        $query->select('patients.*')
+            ->addSelect([
+                'last_visit_date_precalc' => MedicalRecord::select('appointments.appointment_date')
+                    ->join('appointments', 'medical_records.appointment_id', '=', 'appointments.id')
+                    ->whereColumn('medical_records.patient_id', 'patients.id')
+                    ->where('appointments.appointment_date', '<=', now())
+                    ->where('appointments.status', 'completed')
+                    ->latest('appointments.appointment_date')
+                    ->limit(1),
+            ])
+        ->withExists(['patientTreatments as has_active_treatment' => function($q) {
+            $q->whereIn('status', ['planned', 'in_progress']);
+        }])
+        ->withExists(['medicalRecords as has_medical_history'])
+        ->withExists(['patientTreatments as has_completed_treatment' => function($q) {
+            $q->where('status', 'completed');
+        }]);
+    }
+
+    /**
      * Build patient dashboard summary with business-driven status.
-     *
-     * Rules:
-     * - last_visit_date = latest COMPLETED appointment only
-     * - status = En traitement if active treatment exists (planned/in_progress)
-     * - status = Suivi if completed history exists (appointment/treatment)
-     * - otherwise = Nouveau
+     * Uses pre-calculated fields from applySummaryScopes for maximum performance.
      */
     private function buildPatientSummary(Patient $patient): void
     {
         $lastAppointment = $patient->appointments->first();
         $lastRecord = $patient->medicalRecords->first();
 
-        // Last visit = last validated session only (medical record exists).
-        // A missed/no-show appointment without validated session is not counted.
-        $lastVisitDate = $patient->medicalRecords()
-            ->join('appointments', 'medical_records.appointment_id', '=', 'appointments.id')
-            ->where('appointments.appointment_date', '<=', now())
-            ->where('appointments.status', 'completed')
-            ->max('appointments.appointment_date');
-
-        $hasActiveTreatment = $patient->patientTreatments()
-            ->whereIn('status', ['planned', 'in_progress'])
-            ->exists();
-
-        $hasCompletedHistory = $patient->medicalRecords()->exists()
-            || $patient->patientTreatments()
-                ->where('status', 'completed')
-                ->exists();
-
-        $patient->last_visit_date = $lastVisitDate;
+        // On utilise la date pre-calculee par SQL (N+1 safe)
+        $patient->last_visit_date = $patient->last_visit_date_precalc;
+        
         $patient->last_appointment_date = $lastAppointment?->appointment_date;
         $patient->last_appointment_status = $lastAppointment?->status;
         $patient->last_treatment = $lastRecord?->treatment_performed;
 
-        if ($hasActiveTreatment) {
+        if ($patient->has_active_treatment) {
             $patient->status = 'En traitement';
             return;
         }
 
-        if ($hasCompletedHistory) {
+        if ($patient->has_medical_history || $patient->has_completed_treatment) {
             $patient->status = 'Suivi';
             return;
         }
