@@ -269,7 +269,9 @@ class PatientController extends Controller
         $lastRecord = $patient->medicalRecords->first();
 
         // On utilise la date pre-calculee par SQL (N+1 safe)
-        $patient->last_visit_date = $patient->last_visit_date_precalc;
+        $patient->last_visit_date = $patient->last_visit_date_precalc 
+            ? Carbon::parse($patient->last_visit_date_precalc)->toDateString() 
+            : null;
         
         $patient->last_appointment_date = $lastAppointment?->appointment_date;
         $patient->last_appointment_status = $lastAppointment?->status;

@@ -55,7 +55,10 @@ class SessionReceiptController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'medical_record_id' => ['required', 'integer', 'exists:medical_records,id'],
+            'medical_record_id' => ['nullable', 'integer', 'exists:medical_records,id'],
+            'patient_id' => ['required_without:medical_record_id', 'nullable', 'integer', 'exists:patients,id'],
+            'issue_date' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string', 'max:500'],
             // Either provide acts (detailed receipt) OR provide amount_collected (simple payment receipt)
             'acts' => ['required_without:amount_collected', 'array', 'min:1'],
             'acts.*.dental_act_id' => ['required_with:acts', 'integer', 'distinct', 'exists:dental_acts,id'],
@@ -64,25 +67,24 @@ class SessionReceiptController extends Controller
             'amount_collected' => ['required_without:acts', 'numeric', 'min:0'],
         ]);
 
-        $existing = SessionReceipt::with(['items.dentalAct', 'patient', 'medicalRecord'])
-            ->where('medical_record_id', $validated['medical_record_id'])
-            ->first();
+        $medicalRecordId = $validated['medical_record_id'] ?? null;
 
-        if ($existing) {
-            return response()->json($existing);
-        }
+        $medicalRecord = $medicalRecordId 
+            ? MedicalRecord::with(['patient', 'patientTreatment'])->findOrFail($medicalRecordId)
+            : null;
 
-        $medicalRecord = MedicalRecord::with(['patient', 'patientTreatment'])->findOrFail($validated['medical_record_id']);
+        $patientId = $medicalRecord ? $medicalRecord->patient_id : $validated['patient_id'];
 
         // If acts are provided, build a detailed receipt. Otherwise if amount_collected is provided,
         // create a simple receipt representing the collected amount (no items).
-        $receipt = DB::transaction(function () use ($validated, $medicalRecord, $request) {
+        $receipt = DB::transaction(function () use ($validated, $medicalRecord, $patientId, $request) {
             $receipt = SessionReceipt::create([
-                'medical_record_id' => $medicalRecord->id,
-                'patient_id' => $medicalRecord->patient_id,
-                'patient_treatment_id' => $medicalRecord->patient_treatment_id,
+                'medical_record_id' => $medicalRecord?->id,
+                'patient_id' => $patientId,
+                'patient_treatment_id' => $medicalRecord?->patient_treatment_id,
                 'receipt_number' => 'TMP-' . uniqid('', true),
-                'issue_date' => now()->toDateString(),
+                'issue_date' => $validated['issue_date'] ?? now()->toDateString(),
+                'notes' => $validated['notes'] ?? null,
                 'total_amount' => 0,
                 'status' => 'pending',
                 'paid_at' => null,
@@ -122,35 +124,28 @@ class SessionReceiptController extends Controller
             } elseif (array_key_exists('amount_collected', $validated)) {
                 // Simple payment receipt (no items). Mark as paid immediately.
                 $total = (float) $validated['amount_collected'];
+                
+                // Add this amount to the total already collected for this session (if session exists)
+                if ($medicalRecord) {
+                    try {
+                        $currentCollected = (float) ($medicalRecord->amount_collected ?? 0);
+                        $medicalRecord->update(['amount_collected' => $currentCollected + $total]);
+                    } catch (\Throwable $e) {
+                        // ignore failure
+                    }
+                }
+
                 $receipt->update([
                     'total_amount' => $total,
                     'status' => $total > 0 ? 'paid' : 'pending',
                     'paid_at' => $total > 0 ? now() : null,
                 ]);
-
-                // Also update medical record amount_collected if present
-                try {
-                    $medicalRecordModel = MedicalRecord::find($validated['medical_record_id']);
-                    if ($medicalRecordModel) {
-                        $medicalRecordModel->update(['amount_collected' => $total]);
-                    }
-                } catch (\Throwable $e) {
-                    // ignore failure to avoid breaking receipt creation
-                }
             }
 
-            if (empty($validated['acts'])) {
-                // If acts were not provided, ensure receipt_number and total_amount are set (may already be set above)
-                $receipt->update([
-                    'receipt_number' => sprintf('REC-%s-%06d', date('Y'), $receipt->id),
-                    'total_amount' => $receipt->total_amount ?: $total,
-                ]);
-            } else {
-                $receipt->update([
-                    'receipt_number' => sprintf('REC-%s-%06d', date('Y'), $receipt->id),
-                    'total_amount' => $total,
-                ]);
-            }
+            $receipt->update([
+                'receipt_number' => sprintf('REC-%s-%06d', date('Y'), $receipt->id),
+                'total_amount' => $receipt->total_amount ?: $total,
+            ]);
 
             $this->logReceiptEvent(
                 $receipt,

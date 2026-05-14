@@ -448,10 +448,12 @@ export const invoiceAPI = {
     api.get(`/api/invoices/${id}`),
 
   create: (data) => {
-    clearCache('invoices');
-    clearCache('statistics:overview');
-    clearCache('dashboard:overview');
-    return api.post('/api/invoices', data);
+    return api.post('/api/invoices', data).then(res => {
+      clearCache('invoices');
+      clearCache('statistics:overview');
+      clearCache('dashboard:overview');
+      return res;
+    });
   },
 
   markAsPaid: (id) => {

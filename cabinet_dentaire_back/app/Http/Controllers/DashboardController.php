@@ -141,30 +141,34 @@ class DashboardController extends Controller
             $patientsBySlot = $this->buildPatientsBySlotSeries($today);
             $actsBreakdown = $this->buildActsBreakdownSeries($startDate, $endDate);
 
-            // Calcul des encaissements (Finance Summary)
-            $todayCollected = (float) DB::table('medical_records')
-                ->whereBetween('created_at', [$todayStart, $todayEnd])
-                ->sum('amount_collected');
+            // Calcul des encaissements (Finance Summary) - Basé sur les reçus de séance (inclut les manuels)
+            $todayCollected = (float) DB::table('session_receipts')
+                ->whereBetween('issue_date', [$todayStart->toDateString(), $todayEnd->toDateString()])
+                ->where('status', 'paid')
+                ->sum('total_amount');
 
-            $weekCollected = (float) DB::table('medical_records')
-                ->whereBetween('created_at', [Carbon::now()->startOfWeek(), $todayEnd])
-                ->sum('amount_collected');
+            $weekCollected = (float) DB::table('session_receipts')
+                ->whereBetween('issue_date', [Carbon::now()->startOfWeek()->toDateString(), $todayEnd->toDateString()])
+                ->where('status', 'paid')
+                ->sum('total_amount');
 
-            $monthCollected = (float) DB::table('medical_records')
-                ->whereBetween('created_at', [Carbon::now()->startOfMonth(), $todayEnd])
-                ->sum('amount_collected');
+            $monthCollected = (float) DB::table('session_receipts')
+                ->whereBetween('issue_date', [Carbon::now()->startOfMonth()->toDateString(), $todayEnd->toDateString()])
+                ->where('status', 'paid')
+                ->sum('total_amount');
 
-            $todayDetails = DB::table('medical_records')
-                ->join('patients', 'patients.id', '=', 'medical_records.patient_id')
-                ->whereBetween('medical_records.created_at', [$todayStart, $todayEnd])
-                ->where('amount_collected', '>', 0)
-                ->select('patients.first_name', 'patients.last_name', 'medical_records.amount_collected', 'medical_records.created_at')
+            $todayDetails = DB::table('session_receipts')
+                ->join('patients', 'patients.id', '=', 'session_receipts.patient_id')
+                ->whereBetween('session_receipts.issue_date', [$todayStart->toDateString(), $todayEnd->toDateString()])
+                ->where('session_receipts.status', 'paid')
+                ->where('total_amount', '>', 0)
+                ->select('patients.first_name', 'patients.last_name', 'session_receipts.total_amount', 'session_receipts.created_at')
                 ->get()
-                ->map(function($record) {
+                ->map(function($receipt) {
                     return [
-                        'patient_name' => trim($record->first_name . ' ' . $record->last_name),
-                        'amount' => (float) $record->amount_collected,
-                        'time' => Carbon::parse($record->created_at)->format('H:i'),
+                        'patient_name' => trim($receipt->first_name . ' ' . $receipt->last_name),
+                        'amount' => (float) $receipt->total_amount,
+                        'time' => Carbon::parse($receipt->created_at)->format('H:i'),
                     ];
                 });
 

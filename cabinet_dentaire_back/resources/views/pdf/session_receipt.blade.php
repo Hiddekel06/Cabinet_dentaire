@@ -53,14 +53,14 @@
         <tr>
             <td style="width: 25%; font-weight: bold; background: #f8fafc;">Patient</td>
             <td>{{ $patientName ?: '-' }}</td>
-            <td style="width: 25%; font-weight: bold; background: #f8fafc;">Traitement</td>
-            <td>{{ $receipt->patientTreatment?->name ?: '-' }}</td>
+            <td style="width: 25%; font-weight: bold; background: #f8fafc;">Traitement / Motif</td>
+            <td>{{ $receipt->notes ?: ($receipt->patientTreatment?->name ?: '-') }}</td>
         </tr>
         <tr>
             <td style="font-weight: bold; background: #f8fafc;">Date séance</td>
             <td>{{ $receipt->medicalRecord?->date ? \Carbon\Carbon::parse($receipt->medicalRecord->date)->format('d/m/Y') : '-' }}</td>
             <td style="font-weight: bold; background: #f8fafc;">Référence séance</td>
-            <td>#{{ $receipt->medical_record_id }}</td>
+            <td>{{ $receipt->medical_record_id ? '#' . $receipt->medical_record_id : 'Saisie libre' }}</td>
         </tr>
     </tbody>
 </table>

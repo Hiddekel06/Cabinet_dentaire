@@ -150,7 +150,7 @@ const Factures = () => {
 
     setSaving(true);
     try {
-      await invoiceAPI.create({
+      const response = await invoiceAPI.create({
         patient_id: Number(createForm.patient_id),
         issue_date: createForm.issue_date,
         notes: createForm.notes || null,
@@ -161,10 +161,15 @@ const Factures = () => {
           amount: Number(it.amount)
         })),
       });
-      closeCreateModal();
-      loadInvoices();
+
+      if (response && response.status === 201) {
+        closeCreateModal();
+        await loadInvoices();
+      }
     } catch (err) {
-      alert(err?.response?.data?.message || 'Erreur lors de la création');
+      console.error('Erreur lors de la création de facture:', err);
+      const msg = err?.response?.data?.message || 'Erreur lors de la création de la facture. Veuillez vérifier votre connexion.';
+      alert(msg);
     } finally {
       setSaving(false);
     }
@@ -179,7 +184,6 @@ const Factures = () => {
     });
     setPatientSearchTerm('');
     setShowPatientList(false);
-    setTreatmentSummaries([]);
   };
 
   const closeCreateModal = () => {
@@ -356,11 +360,31 @@ const Factures = () => {
           )}
         </div>
 
+        {/* Pagination style Patients */}
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-center gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 rounded border disabled:opacity-50 hover:bg-gray-100 transition">Précédent</button>
-            <span className="text-sm text-gray-600 font-medium">Page {page} sur {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="px-3 py-1 rounded border disabled:opacity-50 hover:bg-gray-100 transition">Suivant</button>
+          <div className="px-8 py-4 border-t border-blue-100 flex items-center justify-between mt-2">
+            <p className="text-gray-500 text-sm">
+              Page {page} sur {totalPages} | Affichage de {invoices.length} facture{invoices.length !== 1 ? 's' : ''}
+            </p>
+            <div className="flex space-x-2">
+              <button
+                className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                disabled={page <= 1}
+                onClick={() => setPage(page - 1)}
+              >
+                ← Précédent
+              </button>
+              <button
+                className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 hover:shadow-md rounded-lg transition-all duration-200 flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none"
+                disabled={page >= totalPages}
+                onClick={() => setPage(page + 1)}
+              >
+                <span>Suivant</span>
+                <svg className="w-4 h-4 text-blue-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
           </div>
         )}
       </div>

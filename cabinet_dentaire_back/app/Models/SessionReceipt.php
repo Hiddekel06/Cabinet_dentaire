@@ -15,6 +15,7 @@ class SessionReceipt extends Model
         'patient_treatment_id',
         'receipt_number',
         'issue_date',
+        'notes',
         'total_amount',
         'status',
         'paid_at',
