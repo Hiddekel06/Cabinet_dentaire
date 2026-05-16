@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Layout } from "../components/Layout";
-import { appointmentAPI, patientAPI, patientTreatmentAPI } from "../services/api";
+import { appointmentAPI, patientAPI, patientTreatmentAPI, doctorAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -27,9 +27,11 @@ const Appointments = () => {
   const [appointmentsError, setAppointmentsError] = useState('');
   const [patients, setPatients] = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(true);
+  const [doctors, setDoctors] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedMotif, setSelectedMotif] = useState('all');
+  const [selectedDoctorId, setSelectedDoctorId] = useState('');
   const [openMenu, setOpenMenu] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
@@ -67,7 +69,8 @@ const Appointments = () => {
     heure: '',
     patient_id: '',
     motif: 'Consultation',
-    praticien: 'Dr. Ndiaye',
+    assigned_doctor_id: '',
+    praticien: '',
     statut: 'À venir',
   });
   const menuRef = useRef(null);
@@ -100,11 +103,24 @@ const Appointments = () => {
     'Annulé': 'cancelled',
   };
 
+  const loadDoctors = async () => {
+    try {
+      const { data } = await doctorAPI.getAll();
+      setDoctors(data || []);
+    } catch (error) {
+      console.error('Erreur chargement médecins:', error);
+    }
+  };
+
   const loadAppointments = async () => {
     setAppointmentsLoading(true);
     setAppointmentsError('');
     try {
-      const { data } = await appointmentAPI.getAll(page);
+      const params = { page };
+      if (selectedDoctorId) {
+        params.assigned_doctor_id = selectedDoctorId;
+      }
+      const { data } = await appointmentAPI.getAll(params);
       const list = Array.isArray(data?.data) ? data.data : [];
       const mapped = list.map((a) => {
         const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
@@ -120,6 +136,10 @@ const Appointments = () => {
           : '–';
         const patient = a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : '';
         const statut = getAppointmentDisplayStatus(date, a.status);
+        
+        // Use assigned doctor name, fallback to dentist (creator) name
+        const praticien = a.assigned_doctor?.name || a.dentist?.name || 'Praticien';
+
         return {
           apiId: a.id,
           id: a.id,
@@ -130,7 +150,8 @@ const Appointments = () => {
           patient,
           patientId: a.patient?.id,
           motif: a.reason || 'Consultation',
-          praticien: a.dentist?.name || 'Dentiste',
+          assigned_doctor_id: a.assigned_doctor_id,
+          praticien,
           statut,
         };
       });
@@ -157,6 +178,10 @@ const Appointments = () => {
     }
   };
 
+  // Détection dynamique du mode (Solo vs Multi)
+  // On est en mode Multi si plus d'un médecin est enregistré
+  const isMultiDoctorMode = useMemo(() => doctors.length > 1, [doctors]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       const isInsideMenu = event.target.closest('[data-appointment-menu="true"]');
@@ -174,8 +199,9 @@ const Appointments = () => {
   useEffect(() => {
     loadAppointments();
     loadPatients();
+    loadDoctors();
     // eslint-disable-next-line
-  }, [page]);
+  }, [page, selectedDoctorId]);
 
   useEffect(() => {
     const focusAppointmentId = location.state?.focusAppointmentId;
@@ -222,6 +248,7 @@ const Appointments = () => {
       heure: appointment.timeSpecified ? (appointment.heureValue || '') : '',
       patient_id: appointment.patientId || '',
       motif: appointment.motif || 'Consultation',
+      assigned_doctor_id: appointment.assigned_doctor_id || '',
       praticien: appointment.praticien || (user?.name || 'Dentiste'),
       statut: appointment.statut || 'À venir',
     });
@@ -361,6 +388,7 @@ const Appointments = () => {
     setSearchTerm('');
     setSelectedStatus('all');
     setSelectedMotif('all');
+    setSelectedDoctorId('');
   };
 
   const toDateStr = (date) => {
@@ -437,6 +465,7 @@ const Appointments = () => {
       heure: '',
       patient_id: '',
       motif: 'Consultation',
+      assigned_doctor_id: '',
       praticien: user?.name || 'Dentiste',
       statut: 'À venir',
     });
@@ -475,7 +504,8 @@ const Appointments = () => {
       const timeSpecified = Boolean(quickForm.heure);
       const payload = {
         patient_id: Number(quickForm.patient_id),
-        dentist_id: user?.id,
+        dentist_id: user?.id, // Created by
+        assigned_doctor_id: quickForm.assigned_doctor_id ? Number(quickForm.assigned_doctor_id) : null,
         appointment_date: timeSpecified
           ? `${quickForm.date}T${quickForm.heure}:00`
           : quickForm.date,
@@ -849,15 +879,26 @@ const Appointments = () => {
                   )}
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Praticien</label>
-                <input
-                  name="praticien"
-                  value={quickForm.praticien}
-                  onChange={handleQuickCreateChange}
-                  className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
-                />
-              </div>
+              
+              {isMultiDoctorMode && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-700">Praticien / Médecin assigné</label>
+                  <select
+                    name="assigned_doctor_id"
+                    value={quickForm.assigned_doctor_id}
+                    onChange={handleQuickCreateChange}
+                    className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
+                  >
+                    <option value="">Sélectionner un médecin</option>
+                    {doctors.map((doc) => (
+                      <option key={doc.id} value={doc.id}>
+                        {doc.name} {doc.specialty ? `(${doc.specialty})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
@@ -1458,6 +1499,20 @@ const Appointments = () => {
                 </option>
               ))}
             </select>
+
+            {isMultiDoctorMode && (
+              <select
+                value={selectedDoctorId}
+                onChange={(e) => setSelectedDoctorId(e.target.value)}
+                className="px-3 py-1.5 text-sm font-medium border border-blue-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white shadow-sm hover:border-blue-400"
+                style={{ minWidth: 170, fontFamily: 'Inter, Arial, sans-serif' }}
+              >
+                <option value="">Tous les praticiens</option>
+                {doctors.map(doc => (
+                  <option key={doc.id} value={doc.id}>{doc.name}</option>
+                ))}
+              </select>
+            )}
 
             <button
               onClick={clearFilters}

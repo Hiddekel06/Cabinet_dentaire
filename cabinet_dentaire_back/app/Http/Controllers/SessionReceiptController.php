@@ -49,6 +49,31 @@ class SessionReceiptController extends Controller
             $query->where('status', $request->input('status'));
         }
 
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function($q) use ($search) {
+                $q->where('receipt_number', 'like', "%{$search}%")
+                  ->orWhereHas('patient', function($pq) use ($search) {
+                      $pq->where('first_name', 'like', "%{$search}%")
+                         ->orWhere('last_name', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        if ($request->filled('period')) {
+            $period = $request->input('period');
+            $now = now();
+            if ($period === 'today') {
+                $query->whereDate('issue_date', $now->toDateString());
+            } elseif ($period === 'week') {
+                $query->whereBetween('issue_date', [$now->startOfWeek()->toDateString(), $now->endOfWeek()->toDateString()]);
+            } elseif ($period === 'month') {
+                $query->whereBetween('issue_date', [$now->startOfMonth()->toDateString(), $now->endOfMonth()->toDateString()]);
+            } elseif ($period === 'last_2_months') {
+                $query->whereBetween('issue_date', [$now->subMonths(2)->startOfMonth()->toDateString(), now()->toDateString()]);
+            }
+        }
+
         return response()->json($query->paginate($perPage));
     }
 

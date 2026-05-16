@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { patientAPI, sessionReceiptAPI, medicalRecordAPI } from '../services/api';
@@ -10,13 +10,6 @@ const formatDate = (value) => {
   return date.toLocaleDateString('fr-FR');
 };
 
-const formatDateTime = (value) => {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('fr-FR');
-};
-
 const getPatientName = (patient) => {
   if (!patient) return 'Patient';
   return `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Patient';
@@ -25,20 +18,21 @@ const getPatientName = (patient) => {
 const SessionReceipts = () => {
   const navigate = useNavigate();
 
+  // États principaux
   const [receipts, setReceipts] = useState([]);
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
-
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Filtres
   const [filters, setFilters] = useState({
     patient_id: '',
     search: '',
     status: '',
-    period: 'today', // Par défaut sur aujourd'hui
+    period: 'today',
   });
 
   // États pour le reçu manuel
@@ -71,33 +65,30 @@ const SessionReceipts = () => {
     }
   };
 
-  const loadReceipts = async () => {
+  const loadReceipts = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const params = {
         page,
-        per_page: 20,
+        per_page: 15,
+        search: filters.search,
+        period: filters.period,
+        patient_id: filters.patient_id,
+        status: filters.status
       };
-
-      if (filters.patient_id) {
-        params.patient_id = filters.patient_id;
-      }
-      if (filters.status) {
-        params.status = filters.status;
-      }
 
       const res = await sessionReceiptAPI.getAll(params);
       setReceipts(res.data?.data || []);
       setTotalPages(res.data?.last_page || 1);
-    } catch {
+    } catch (err) {
+      console.error('Erreur chargement reçus:', err);
       setReceipts([]);
-      setTotalPages(1);
       setError('Impossible de charger les reçus de séance.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, filters]);
 
   useEffect(() => {
     loadPatients();
@@ -105,7 +96,7 @@ const SessionReceipts = () => {
 
   useEffect(() => {
     loadReceipts();
-  }, [page, filters.patient_id, filters.status]);
+  }, [loadReceipts]);
 
   const handleDownload = async (receipt) => {
     setDownloadingReceiptId(receipt.id);
@@ -140,7 +131,6 @@ const SessionReceipts = () => {
     setPatientSearchTerm(`${patient.first_name} ${patient.last_name}`);
     setShowPatientList(false);
     setLoadingRecords(true);
-    // Reset selection when changing patient
     setSelectedRecordId(null);
     setManualDesignation('');
     try {
@@ -164,7 +154,7 @@ const SessionReceipts = () => {
     try {
       await sessionReceiptAPI.create({
         patient_id: selectedPatientForManual.id,
-        medical_record_id: selectedRecordId, // Can be null
+        medical_record_id: selectedRecordId,
         amount_collected: Number(manualAmount),
         issue_date: manualDate,
         notes: manualDesignation || null
@@ -190,41 +180,11 @@ const SessionReceipts = () => {
     setManualDesignation('');
   };
 
-  const filteredReceipts = useMemo(() => {
-    let result = [...receipts];
-
-    // 1. Filtrage par période
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    
-    if (filters.period === 'today') {
-      result = result.filter(r => new Date(r.issue_date).getTime() === today);
-    } else if (filters.period === 'week') {
-      const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).setHours(0, 0, 0, 0);
-      result = result.filter(r => new Date(r.issue_date).getTime() >= startOfWeek);
-    } else if (filters.period === 'month') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      result = result.filter(r => new Date(r.issue_date).getTime() >= startOfMonth);
-    } else if (filters.period === 'last_2_months') {
-      const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1).getTime();
-      result = result.filter(r => new Date(r.issue_date).getTime() >= twoMonthsAgo);
-    }
-
-    // 2. Recherche textuelle
-    const term = filters.search.trim().toLowerCase();
-    if (term) {
-      result = result.filter((receipt) => {
-        const receiptNumber = String(receipt.receipt_number || '').toLowerCase();
-        const patientName = getPatientName(receipt.patient).toLowerCase();
-        return receiptNumber.includes(term) || patientName.includes(term);
-      });
-    }
-
-    return result;
-  }, [receipts, filters.search, filters.period]);
+  // Variable de rendu pour éviter les ReferenceError
+  const filteredReceipts = receipts;
 
   const totalCollected = useMemo(() => {
-    return filteredReceipts.reduce((sum, r) => sum + (Number(r.medical_record?.amount_collected || r.total_amount || 0)), 0);
+    return filteredReceipts.reduce((sum, r) => sum + (Number(r.total_amount || 0)), 0);
   }, [filteredReceipts]);
 
   const periodLabel = useMemo(() => {
@@ -242,7 +202,7 @@ const SessionReceipts = () => {
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <button
               onClick={() => setShowManualModal(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-blue-600 text-sm font-bold rounded-xl bg-blue-50 hover:bg-blue-100 transition-all border border-blue-100 shadow-sm"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -360,8 +320,8 @@ const SessionReceipts = () => {
                       <td className="py-3 px-3 font-bold text-blue-600">{receipt.receipt_number || `REC-${receipt.id}`}</td>
                       <td className="py-3 px-3 text-gray-500">{formatDate(receipt.issue_date)}</td>
                       <td className="py-3 px-3 font-medium text-gray-900">{getPatientName(receipt.patient)}</td>
-                      <td className="py-3 px-3 text-gray-400">#{receipt.medical_record_id}</td>
-                      <td className="py-3 px-3 text-right font-black text-blue-700">{Number(receipt.total_amount || 0).toLocaleString('fr-FR')} XOF</td>
+                      <td className="py-3 px-3 text-gray-400">#{receipt.medical_record_id || 'Libre'}</td>
+                      <td className="py-3 px-3 text-right font-black text-green-600">{Number(receipt.total_amount || 0).toLocaleString('fr-FR')} XOF</td>
                       <td className="py-3 px-3 text-center">
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${receipt.status === 'paid' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
                           {receipt.status === 'paid' ? 'Payé' : 'Non payé'}
@@ -564,17 +524,17 @@ const SessionReceipts = () => {
                   {/* Saisie du montant et Validation - Style Simple (Inspiré StartTreatment) */}
                   <div className="sticky bottom-0 z-10 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur-sm">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                      <div className="w-full lg:max-w-sm">
+                      <div className="flex-1 w-full sm:max-w-xs">
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block ml-1">Montant à encaisser *</label>
                         <div className="relative">
                           <input
                             type="number"
                             placeholder="0"
-                            className="w-full rounded-2xl border border-blue-200 bg-linear-to-br from-blue-50 to-white px-4 py-3 pr-16 text-xl font-extrabold text-blue-800 shadow-sm outline-none transition-all placeholder:text-blue-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                            className="w-full rounded-2xl border border-emerald-200 bg-linear-to-br from-emerald-50 to-white px-4 py-3 pr-16 text-xl font-extrabold text-emerald-800 shadow-sm outline-none transition-all placeholder:text-emerald-300 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
                             value={manualAmount}
                             onChange={(e) => setManualAmount(e.target.value)}
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-blue-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-600">XOF</span>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-600">XOF</span>
                         </div>
                       </div>
 
@@ -589,7 +549,7 @@ const SessionReceipts = () => {
                         <button
                           disabled={savingManual || !selectedPatientForManual || !manualAmount}
                           onClick={handleCreateManualReceipt}
-                          className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-100 transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-100 transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {savingManual ? (
                             <>

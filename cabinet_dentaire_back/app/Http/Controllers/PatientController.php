@@ -283,7 +283,7 @@ class PatientController extends Controller
         }
 
         if ($patient->has_medical_history || $patient->has_completed_treatment) {
-            $patient->status = 'Suivi';
+            $patient->status = 'Diagnostic';
             return;
         }
 

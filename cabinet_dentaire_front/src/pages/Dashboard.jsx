@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/Layout';
-import { dashboardAPI, patientTreatmentAPI } from '../services/api';
+import { Can } from '../components/Can';
+import { dashboardAPI, patientTreatmentAPI, doctorAPI } from '../services/api';
 
 const statusClasses = {
   Nouveau: 'bg-blue-50 text-blue-700 border-blue-100',
-  Suivi: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  Diagnostic: 'bg-emerald-50 text-emerald-700 border-emerald-100',
   'En traitement': 'bg-amber-50 text-amber-700 border-amber-100',
 };
 
@@ -79,10 +80,13 @@ const formatDate = (value) => {
   return date.toLocaleDateString('fr-FR');
 };
 
-const getInitials = (firstName, lastName) => {
-  const f = (firstName || '').trim().charAt(0).toUpperCase();
-  const l = (lastName || '').trim().charAt(0).toUpperCase();
-  return `${f}${l}` || 'P';
+const getInitials = (name) => {
+  if (!name) return 'P';
+  const parts = name.split(' ');
+  if (parts.length >= 2) {
+    return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
+  }
+  return name.charAt(0).toUpperCase();
 };
 
 const getTrendText = (trendPercent, suffix) => {
@@ -96,10 +100,15 @@ export const Dashboard = () => {
   const { user } = useAuth();
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
+  const [doctors, setDoctors] = useState([]);
+  const [pendingActions, setPendingActions] = useState([]);
+  const [loadingPending, setLoadingPending] = useState(false);
   const [error, setError] = useState('');
   const [selectedRecentPatient, setSelectedRecentPatient] = useState(null);
   const [continuingTreatment, setContinuingTreatment] = useState(false);
   const [showCashModal, setShowCashModal] = useState(false);
+
+  const isMultiDoctorMode = useMemo(() => doctors.length > 1, [doctors]);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -114,9 +123,33 @@ export const Dashboard = () => {
     }
   }, []);
 
+  const loadDoctors = useCallback(async () => {
+    try {
+      const res = await doctorAPI.getAll();
+      setDoctors(res.data || []);
+    } catch (error) {
+      console.error('Erreur chargement médecins:', error);
+    }
+  }, []);
+
+  const loadPendingActions = useCallback(async () => {
+    if (user?.role !== 'secretary' && user?.role !== 'admin') return;
+    setLoadingPending(true);
+    try {
+      const res = await dashboardAPI.getPendingActions();
+      setPendingActions(res.data || []);
+    } catch (e) {
+      console.error('Erreur chargement actions en attente:', e);
+    } finally {
+      setLoadingPending(false);
+    }
+  }, [user?.role]);
+
   useEffect(() => {
     loadDashboard();
-  }, [loadDashboard]);
+    loadDoctors();
+    loadPendingActions();
+  }, [loadDashboard, loadDoctors, loadPendingActions]);
 
   const cards = data.cards || initialData.cards;
   const finance = data.finance_summary || initialData.finance_summary;
@@ -189,7 +222,7 @@ export const Dashboard = () => {
       progress: Math.min(((cards.appointments_today?.value ?? 0) / 20) * 100, 100),
       progressGradient: 'from-teal-400 to-teal-600',
       circleGradient: 'from-emerald-300 to-emerald-100',
-      iconPath: 'M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75(1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z',
+      iconPath: 'M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z',
       iconColor: 'text-amber-600',
     },
     {
@@ -248,7 +281,7 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        {/* Widgets de Caisse (Nouveau) */}
+        {/* Widgets de Caisse */}
         {!loading && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {cashWidgets.map((widget) => (
@@ -475,7 +508,7 @@ export const Dashboard = () => {
                                 <td className="py-4 px-4">
                                   <div className="flex items-center">
                                     <div className="w-8 h-8 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center mr-3">
-                                      <span className="font-semibold text-blue-600 text-xs">{getInitials(patient.first_name, patient.last_name)}</span>
+                                      <span className="font-semibold text-blue-600 text-xs">{getInitials(fullName)}</span>
                                     </div>
                                     <div>
                                       <p className="font-medium text-gray-900 text-xs truncate max-w-[150px]">{fullName}</p>
@@ -514,7 +547,7 @@ export const Dashboard = () => {
               </div>
 
               <div className="space-y-6">
-                <div className="bg-white shadow-sm border border-gray-200 p-6">
+                <div className="bg-white shadow-sm border border-gray-200 p-6 rounded-2xl">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-gray-900">Rendez-vous du jour</h3>
                     <span className="text-sm text-gray-500">{todayAppointments.length} au total</span>
@@ -547,6 +580,88 @@ export const Dashboard = () => {
                 </div>
               </div>
             </div>
+
+            {/* Section Relances Prioritaires (Seulement pour admin/secretaire en mode Multi) */}
+            <Can roles={['admin', 'secretary']}>
+              {isMultiDoctorMode && !loading && (
+                <div className="mt-8 relative overflow-hidden rounded-2xl border border-rose-100 shadow-lg bg-gradient-to-br from-white via-rose-50/30 to-white backdrop-blur-sm transition-all duration-300 group hover:shadow-2xl">
+                  <div className="px-6 py-4 border-b border-rose-100 flex flex-col sm:flex-row sm:items-center sm:justify-between bg-rose-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-md shadow-rose-100 animate-pulse">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">🔔 Relances prioritaires</h2>
+                        <p className="text-rose-600 text-xs font-bold mt-0.5 uppercase tracking-widest">Patients en attente de rendez-vous</p>
+                      </div>
+                    </div>
+                    {pendingActions.length > 0 && (
+                      <span className="mt-3 sm:mt-0 px-3 py-1 bg-rose-500 text-white text-[10px] font-black rounded-full uppercase tracking-tighter shadow-sm">
+                        {pendingActions.length} Rappels à faire
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-50/50">
+                          <th className="text-left py-3 px-6 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Patient</th>
+                          <th className="text-left py-3 px-6 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Soin en cours</th>
+                          <th className="text-left py-3 px-6 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Dernière séance</th>
+                          <th className="text-right py-3 px-6 text-slate-400 font-bold text-[10px] uppercase tracking-widest">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {loadingPending ? (
+                          <tr><td colSpan={4} className="py-12 text-center text-rose-500 font-bold animate-pulse italic text-sm">Analyse des dossiers en cours...</td></tr>
+                        ) : pendingActions.length === 0 ? (
+                          <tr><td colSpan={4} className="py-12 text-center text-slate-400 italic text-sm">Parfait ! Tous les patients ont un rendez-vous planifié. ✨</td></tr>
+                        ) : (
+                          pendingActions.map((action) => (
+                            <tr key={action.treatment_id} className="hover:bg-rose-50/30 transition-colors duration-150 group/row">
+                              <td className="py-4 px-6">
+                                <div className="flex items-center">
+                                  <div className="w-9 h-9 bg-rose-100 rounded-xl flex items-center justify-center mr-3 border border-rose-200">
+                                    <span className="font-black text-rose-600 text-xs">{getInitials(action.patient_name)}</span>
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-slate-900 text-sm">{action.patient_name}</p>
+                                    <p className="text-rose-500 text-xs font-medium">{action.patient_phone || 'Pas de téléphone'}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 px-6">
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-bold text-slate-700">{action.treatment_name}</span>
+                                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-tighter">ID: #{action.treatment_id}</span>
+                                </div>
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black bg-slate-100 text-slate-600 uppercase tracking-tighter border border-slate-200">
+                                  Terminée {action.last_visit_date}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6 text-right">
+                                <button 
+                                  onClick={() => navigate('/appointments', { state: { patientId: action.patient_id, autoOpen: true } })}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-rose-500 text-rose-600 text-xs font-black rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm hover:shadow-rose-100"
+                                >
+                                  FIXER RDV
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </Can>
 
             <div className="flex justify-center w-full mt-8 mb-6">
               <div className="relative overflow-hidden rounded-3xl shadow-xl border border-gray-100 bg-gradient-to-br from-white via-gray-50 to-blue-50 w-full max-w-5xl p-8">

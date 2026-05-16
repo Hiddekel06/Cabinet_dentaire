@@ -83,7 +83,7 @@ class PatientTreatmentController extends Controller
             'end_date' => ['nullable', 'date', 'after:start_date'],
             'status' => ['nullable', 'in:planned,in_progress,completed,cancelled'],
             'notes' => ['nullable', 'string'],
-            'next_appointment_date' => ['required', 'date'],
+            'next_appointment_date' => ['nullable', 'date'],
             'next_appointment_duration' => ['nullable', 'integer', 'min:1'],
             'next_appointment_reason' => ['nullable', 'string'],
             'next_appointment_notes' => ['nullable', 'string'],
@@ -119,20 +119,25 @@ class PatientTreatmentController extends Controller
             ], 422);
         }
 
-        // Empêcher la création d'un rendez-vous à une date passée
-        if (strtotime($validated['next_appointment_date']) < time()) {
-            return response()->json(['message' => 'Impossible de créer un rendez-vous dans le passé.'], 422);
-        }
+        // Gestion du prochain rendez-vous
+        $appointmentId = null;
+        if (!empty($validated['next_appointment_date'])) {
+            // Empêcher la création d'un rendez-vous à une date passée
+            if (strtotime($validated['next_appointment_date']) < time()) {
+                return response()->json(['message' => 'Impossible de créer un rendez-vous dans le passé.'], 422);
+            }
 
-        $appointment = Appointment::create([
-            'patient_id' => $validated['patient_id'],
-            'dentist_id' => $request->user()->id,
-            'appointment_date' => $validated['next_appointment_date'],
-            'appointment_time_specified' => false,
-            'duration' => $validated['next_appointment_duration'] ?? null,
-            'reason' => $validated['next_appointment_reason'] ?? null,
-            'notes' => $validated['next_appointment_notes'] ?? null,
-        ]);
+            $appointment = Appointment::create([
+                'patient_id' => $validated['patient_id'],
+                'dentist_id' => $request->user()->id,
+                'appointment_date' => $validated['next_appointment_date'],
+                'appointment_time_specified' => false,
+                'duration' => $validated['next_appointment_duration'] ?? null,
+                'reason' => $validated['next_appointment_reason'] ?? null,
+                'notes' => $validated['next_appointment_notes'] ?? null,
+            ]);
+            $appointmentId = $appointment->id;
+        }
 
         $patientTreatment = PatientTreatment::create([
             'patient_id' => $validated['patient_id'],
@@ -141,7 +146,7 @@ class PatientTreatmentController extends Controller
             'end_date' => $validated['end_date'] ?? null,
             'status' => $validated['status'] ?? 'planned',
             'notes' => $validated['notes'] ?? null,
-            'next_appointment_id' => $appointment->id,
+            'next_appointment_id' => $appointmentId,
         ]);
 
         // Consultation simple obligatoire ajoutee automatiquement au demarrage.

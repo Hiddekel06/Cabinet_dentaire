@@ -136,11 +136,6 @@ const StartSessionWorkspace = () => {
       return;
     }
 
-    if (!form.next_appointment_date) {
-      showFeedback('warning', 'Information manquante', 'Veuillez renseigner la date du prochain rendez-vous.');
-      return;
-    }
-
     setLoading(true);
     try {
       let consumedAppointmentId = treatment.next_appointment_id || null;

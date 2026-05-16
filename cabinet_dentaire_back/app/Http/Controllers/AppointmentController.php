@@ -24,7 +24,7 @@ class AppointmentController extends Controller
     }
     public function index()
     {
-        $query = Appointment::query()->with(['patient', 'dentist']);
+        $query = Appointment::query()->with(['patient', 'dentist', 'assignedDoctor']);
 
         // Filtre par date si ?date=YYYY-MM-DD fourni
         if (request()->has('date')) {
@@ -32,8 +32,15 @@ class AppointmentController extends Controller
             $dayStart = Carbon::parse($date)->startOfDay();
             $dayEnd = Carbon::parse($date)->endOfDay();
             $query->whereBetween('appointment_date', [$dayStart, $dayEnd]);
+        }
 
-            return response()->json(
+        // Filtre par docteur
+        if (request()->has('assigned_doctor_id')) {
+            $query->where('assigned_doctor_id', request('assigned_doctor_id'));
+        }
+
+        if (request()->has('date')) {
+             return response()->json(
                 $query->orderBy('appointment_date')->paginate(15)
             );
         }
@@ -48,6 +55,7 @@ class AppointmentController extends Controller
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
             'dentist_id' => ['required', 'integer', 'exists:users,id'],
+            'assigned_doctor_id' => ['nullable', 'integer', 'exists:users,id'],
             'appointment_date' => ['required', 'date'],
             'appointment_time_specified' => ['nullable', 'boolean'],
             'duration' => ['nullable', 'integer', 'min:1'],
@@ -55,6 +63,12 @@ class AppointmentController extends Controller
             'reason' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
         ]);
+
+        $user = $request->user();
+        // Auto-assign to self if the user is a doctor and no doctor was specified
+        if ($user->role === 'doctor' && empty($validated['assigned_doctor_id'])) {
+            $validated['assigned_doctor_id'] = $user->id;
+        }
 
         $validated['appointment_time_specified'] = $this->resolveTimeSpecified(
             $request->input('appointment_date'),
@@ -96,12 +110,12 @@ class AppointmentController extends Controller
             return $appointment;
         });
 
-        return response()->json($appointment->load(['patient', 'dentist']), 201);
+        return response()->json($appointment->load(['patient', 'dentist', 'assignedDoctor']), 201);
     }
 
     public function show(Appointment $appointment)
     {
-        return response()->json($appointment->load(['patient', 'dentist']));
+        return response()->json($appointment->load(['patient', 'dentist', 'assignedDoctor']));
     }
 
     public function update(Request $request, Appointment $appointment)
@@ -109,6 +123,7 @@ class AppointmentController extends Controller
         $validated = $request->validate([
             'patient_id' => ['sometimes', 'required', 'integer', 'exists:patients,id'],
             'dentist_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
+            'assigned_doctor_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'appointment_date' => ['sometimes', 'required', 'date'],
             'appointment_time_specified' => ['nullable', 'boolean'],
             'duration' => ['nullable', 'integer', 'min:1'],
@@ -134,7 +149,7 @@ class AppointmentController extends Controller
 
         $appointment->update($validated);
 
-        return response()->json($appointment);
+        return response()->json($appointment->load(['patient', 'dentist', 'assignedDoctor']));
     }
 
     public function destroy(Appointment $appointment)

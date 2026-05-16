@@ -116,6 +116,19 @@ export const authAPI = {
     fetchWithCache('auth:user', () => api.get('/api/user')),
 };
 
+// Endpoints pour le staff
+export const doctorAPI = {
+  getAll: () => {
+    const cacheKey = 'users:doctors';
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+    return api.get('/api/users/doctors').then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  }
+};
+
 // Endpoints pour les patients
 export const patientAPI = {
   getAll: (page = 1, params = {}) => {
@@ -347,6 +360,36 @@ export const medicalRecordAPI = {
     clearCache('medical-records');
     return api.delete(`/api/medical-records/${id}`);
   },
+};
+
+// Endpoints pour les observations cliniques (Anamnèse / Examen complet)
+export const clinicalObservationAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `clinical_observations:${query}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+    
+    return api.get(`/api/clinical-observations?${query}`).then(res => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+  getById: (id) => api.get(`/api/clinical-observations/${id}`),
+  create: (data) => {
+    clearCache('clinical_observations');
+    return api.post('/api/clinical-observations', data);
+  },
+  update: (id, data) => {
+    clearCache('clinical_observations');
+    return api.put(`/api/clinical-observations/${id}`, data);
+  },
+  delete: (id) => {
+    clearCache('clinical_observations');
+    return api.delete(`/api/clinical-observations/${id}`);
+  },
+  generatePDF: (id) =>
+    api.post(`/api/clinical-observations/${id}/generate`, {}, { responseType: 'blob' }),
 };
 
 // Endpoints pour les actes dentaires
@@ -605,6 +648,7 @@ export const dashboardAPI = {
       () => api.get(`/api/dashboard/overview?period=${encodeURIComponent(period)}`)
     );
   },
+  getPendingActions: () => api.get('/api/dashboard/pending-actions'),
 };
 
 export default api;

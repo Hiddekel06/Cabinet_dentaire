@@ -36,7 +36,7 @@ class MedicalRecordController extends Controller
     {
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
-            'appointment_id' => ['required', 'integer', 'exists:appointments,id'],
+            'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
             'patient_treatment_id' => ['nullable', 'integer', 'exists:patient_treatments,id'],
             'treatment_performed' => ['required', 'string'],
             'diagnosis' => ['nullable', 'string'],
@@ -46,13 +46,36 @@ class MedicalRecordController extends Controller
             'amount_collected' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        // Valider que l'appointment appartient au bon patient
-        $appointment = \App\Models\Appointment::findOrFail($validated['appointment_id']);
-        if ($appointment->patient_id !== $validated['patient_id']) {
-            return response()->json([
-                'message' => 'Le rendez-vous ne correspond pas au patient.',
-                'errors' => ['appointment_id' => ['Le rendez-vous doit appartenir au patient sélectionné.']]
-            ], 422);
+        $appointmentId = $validated['appointment_id'] ?? null;
+
+        // Si aucun rendez-vous n'est fourni (soin en direct), on en crée un automatiquement pour la traçabilité
+        if (!$appointmentId) {
+            $appointment = \App\Models\Appointment::create([
+                'patient_id' => $validated['patient_id'],
+                'dentist_id' => $request->user()->id,
+                'assigned_doctor_id' => $request->user()->id,
+                'appointment_date' => now(),
+                'appointment_time_specified' => true,
+                'status' => 'completed',
+                'reason' => 'Séance en direct (sans RDV préalable)',
+                'notes' => 'Généré automatiquement lors de la validation du soin.'
+            ]);
+            $appointmentId = $appointment->id;
+        } else {
+            // Valider que l'appointment appartient au bon patient
+            $appointment = \App\Models\Appointment::findOrFail($appointmentId);
+            if ($appointment->patient_id !== $validated['patient_id']) {
+                return response()->json([
+                    'message' => 'Le rendez-vous ne correspond pas au patient.',
+                    'errors' => ['appointment_id' => ['Le rendez-vous doit appartenir au patient sélectionné.']]
+                ], 422);
+            }
+
+            // Marquer le rendez-vous existant comme terminé
+            $appointment->update([
+                'status' => 'completed',
+                'appointment_date' => now(), // Force la date à aujourd'hui pour refléter la visite réelle
+            ]);
         }
 
         // Vérification du patient_treatment_id si fourni
@@ -69,20 +92,10 @@ class MedicalRecordController extends Controller
 
         // Ajouter l'utilisateur connecté comme créateur
         $validated['created_by'] = $request->user()->id;
-        // Ajouter la date du jour si non fournie
+        $validated['appointment_id'] = $appointmentId;
         $validated['date'] = now()->toDateString();
 
         $record = MedicalRecord::create($validated);
-
-        // Marquer le rendez-vous associé comme terminé et mettre à jour sa date à 'aujourd'hui'
-        // pour refléter la date réelle de la visite
-        $appointment = \App\Models\Appointment::find($validated['appointment_id']);
-        if ($appointment) {
-            $appointment->update([
-                'status' => 'completed',
-                'appointment_date' => now(), // Force la date à aujourd'hui
-            ]);
-        }        
         $record->load(['patient', 'appointment', 'patientTreatment', 'creator']);
 
         // Compute collected sum for the related treatment (if any) to show a memo to the client

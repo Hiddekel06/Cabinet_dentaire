@@ -31,6 +31,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     
+    // Utilisateurs / Staff
+    Route::get('/users/doctors', function() {
+        return \App\Models\User::whereIn('role', ['doctor', 'admin'])
+            ->where('is_active', true)
+            ->select('id', 'name', 'role', 'specialty')
+            ->get();
+    });
+    
     // Gestion des actes dentaires (admin)
     Route::post('/dental-acts/import', [App\Http\Controllers\DentalActController::class, 'import']);
     Route::delete('/dental-acts/truncate', [App\Http\Controllers\DentalActController::class, 'truncate']);
@@ -48,6 +56,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Gestion des dossiers médicaux
     Route::apiResource('medical-records', MedicalRecordController::class);
+    
+    // Observations Cliniques (Anamnèse / Examen complet)
+    Route::post('clinical-observations/{clinicalObservation}/generate', [\App\Http\Controllers\ClinicalObservationController::class, 'generatePDF']);
+    Route::apiResource('clinical-observations', \App\Http\Controllers\ClinicalObservationController::class);
     
     // Gestion des traitements patients (suivi)
     Route::apiResource('patient-treatments', PatientTreatmentController::class);
@@ -93,6 +105,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Dashboard consolide
     Route::get('dashboard/overview', [DashboardController::class, 'overview']);
+    Route::get('dashboard/pending-actions', [DashboardController::class, 'pendingActions']);
     
     // Dossier médical complet du patient
     Route::prefix('patients/{patient}')->group(function () {

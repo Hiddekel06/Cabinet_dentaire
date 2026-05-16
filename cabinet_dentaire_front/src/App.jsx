@@ -19,6 +19,9 @@ import Achats from './pages/Achats';
 import Factures from './pages/Factures';
 import Radiographies from './pages/Radiographies';
 import SessionReceipts from './pages/SessionReceipts';
+import ClinicalObservations from './pages/ClinicalObservations';
+import ClinicalObservationWorkspace from './pages/ClinicalObservationWorkspace';
+import ClinicalObservationDetails from './pages/ClinicalObservationDetails';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
 import ImportDentalActs from './pages/admin/ImportDentalActs';
@@ -217,6 +220,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <SessionReceipts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clinical-observations"
+            element={
+              <ProtectedRoute>
+                <ClinicalObservations />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clinical-observations/new"
+            element={
+              <ProtectedRoute>
+                <ClinicalObservationWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clinical-observations/:id"
+            element={
+              <ProtectedRoute>
+                <ClinicalObservationDetails />
               </ProtectedRoute>
             }
           />

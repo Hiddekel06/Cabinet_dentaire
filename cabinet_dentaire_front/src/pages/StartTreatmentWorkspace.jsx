@@ -211,7 +211,7 @@ const StartTreatmentWorkspace = () => {
         patient_id: createdTreatment.patient_id,
         patient_treatment_id: createdTreatment.id,
         appointment_id: appointmentId,
-        treatment_performed: 'Initialisation du suivi : ' + form.planned_treatment,
+        treatment_performed: 'Initialisation du diagnostic : ' + form.planned_treatment,
         amount_collected: form.amount_collected ? Number(form.amount_collected) : null,
       });
 
@@ -226,13 +226,13 @@ const StartTreatmentWorkspace = () => {
       }
 
       const successMsg = sessionReceiptId 
-        ? 'Le suivi a été créé et le reçu est prêt.' 
-        : 'Le suivi a été créé avec succès.';
+        ? 'Le diagnostic a été créé et le reçu est prêt.' 
+        : 'Le diagnostic a été créé avec succès.';
         
-      showFeedback('success', 'Suivi démarré', successMsg, true, sessionReceiptId);
+      showFeedback('success', 'Diagnostic démarré', successMsg, true, sessionReceiptId);
     } catch (error) {
-      console.error('Erreur démarrage suivi:', error);
-      const message = error.response?.data?.message || 'Erreur lors du démarrage du suivi.';
+      console.error('Erreur démarrage diagnostic:', error);
+      const message = error.response?.data?.message || 'Erreur lors du démarrage du diagnostic.';
       showFeedback('error', 'Échec', message);
     } finally {
       setLoading(false);
@@ -257,7 +257,7 @@ const StartTreatmentWorkspace = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.patient_id || !form.name || !form.planned_treatment || !form.next_appointment_date) {
-      showFeedback('warning', 'Champs obligatoires', 'Veuillez remplir les informations du patient, le nom du suivi, le traitement prévu et le prochain RDV.');
+      showFeedback('warning', 'Champs obligatoires', 'Veuillez remplir les informations du patient, le diagnostic, le traitement prévu et le prochain RDV.');
       return;
     }
 
@@ -271,7 +271,7 @@ const StartTreatmentWorkspace = () => {
   if (loadingData) {
     return (
       <Layout>
-        <div className="p-6 text-sm text-gray-600 font-medium">Chargement de l'espace suivi...</div>
+        <div className="p-6 text-sm text-gray-600 font-medium">Chargement de l'espace diagnostic...</div>
       </Layout>
     );
   }
@@ -291,7 +291,7 @@ const StartTreatmentWorkspace = () => {
                 <h3 className="text-xl font-bold text-slate-900">Traitement actif détecté</h3>
                 <p className="mt-2 text-sm text-slate-600 font-medium px-4">
                   Le patient a déjà un traitement en cours : <span className="text-amber-700 font-bold">"{activePatientTreatment?.name}"</span>. 
-                  Démarrer ce nouveau suivi marquera l'ancien comme <span className="font-bold uppercase text-[10px] bg-slate-200 px-1.5 py-0.5 rounded">Terminé</span>.
+                  Démarrer ce nouveau diagnostic marquera l'ancien comme <span className="font-bold uppercase text-[10px] bg-slate-200 px-1.5 py-0.5 rounded">Terminé</span>.
                 </p>
               </div>
               <div className="p-6 space-y-3">
@@ -323,7 +323,7 @@ const StartTreatmentWorkspace = () => {
                 </svg>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">Nouveau suivi patient</h1>
+                <h1 className="text-xl font-bold text-white">Nouveau diagnostic patient</h1>
                 <p className="text-xs text-slate-300 mt-0.5 font-medium">Initialisez le dossier de soins et planifiez la première étape.</p>
               </div>
             </div>
@@ -411,12 +411,12 @@ const StartTreatmentWorkspace = () => {
               {activePatientTreatment && (
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-800 font-medium flex gap-2">
                   <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                  Ce patient a déjà un suivi actif : "{activePatientTreatment.name}"
+                  Ce patient a déjà un diagnostic actif : "{activePatientTreatment.name}"
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nom du suivi *</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nom du diagnostic *</label>
                 <input
                   type="text"
                   value={form.name}
@@ -452,7 +452,7 @@ const StartTreatmentWorkspace = () => {
                     <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                       {pastTreatments.length > 0 && (
                         <div className="mb-4 pb-4 border-b border-slate-100">
-                          <p className="text-[9px] font-bold text-slate-400 uppercase mb-2">Derniers traitements terminés</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mb-2">Derniers Diagnostics terminés</p>
                           <div className="flex flex-wrap gap-2">
                             {pastTreatments.map(t => (
                               <div key={t.id} className="px-2 py-1 rounded bg-slate-100 border border-slate-200 text-[10px] font-medium text-slate-600">
@@ -486,7 +486,7 @@ const StartTreatmentWorkspace = () => {
                               </p>
                               {record.next_action && (
                                 <div className="mt-1.5 pt-1.5 border-t border-blue-50 flex items-start gap-1">
-                                  <span className="text-[9px] font-bold text-blue-400 uppercase">Suivi :</span>
+                                  <span className="text-[9px] font-bold text-blue-400 uppercase">Diagnostic :</span>
                                   <p className="text-[9px] text-blue-600 font-medium line-clamp-1">{record.next_action}</p>
                                 </div>
                               )}
@@ -547,13 +547,12 @@ const StartTreatmentWorkspace = () => {
               </h2>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Date du 1er RDV *</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Date du 1er RDV (Optionnel)</label>
                 <input
                   type="date"
                   value={form.next_appointment_date}
                   onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_date: e.target.value }))}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm bg-white font-medium"
-                  required
                 />
               </div>
 
@@ -596,7 +595,7 @@ const StartTreatmentWorkspace = () => {
                     Démarrage...
                   </>
                 ) : (
-                  'Démarrer le suivi'
+                  'Démarrer le Diagnostic'
                 )}
               </button>
             </div>

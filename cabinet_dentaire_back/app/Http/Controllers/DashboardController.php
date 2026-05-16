@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Patient;
+use App\Models\PatientTreatment;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -14,132 +15,21 @@ class DashboardController extends Controller
 {
     public function overview(Request $request)
     {
-        [$periodKey, $periodLabel, $startDate, $endDate, $prevStartDate, $prevEndDate] = $this->resolvePeriodRange(
-            $request->input('period')
-        );
+        $period = $request->input('period', 'month');
+        $cacheKey = "dashboard:overview:{$period}";
 
-        $today = Carbon::today();
-        $cacheKey = "dashboard:overview:{$periodKey}:{$today->toDateString()}";
+        return Cache::remember($cacheKey, 300, function () use ($period) {
+            $todayStart = Carbon::now()->startOfDay();
+            $todayEnd = Carbon::now()->endOfDay();
 
-        $data = Cache::remember($cacheKey, 300, function () use (
-            $periodKey, $periodLabel, $startDate, $endDate, $prevStartDate, $prevEndDate, $today
-        ) {
-            $now = Carbon::now();
-            $todayStart = $today->copy()->startOfDay();
-            $todayEnd = $today->copy()->endOfDay();
-            $yesterdayStart = Carbon::yesterday()->startOfDay();
-            $yesterdayEnd = Carbon::yesterday()->endOfDay();
-
-            $periodStart = $startDate->copy()->startOfDay();
-            $periodEnd = $endDate->copy()->endOfDay();
-            $prevPeriodStart = $prevStartDate->copy()->startOfDay();
-            $prevPeriodEnd = $prevEndDate->copy()->endOfDay();
-
-            $patientStats = Patient::query()
-                ->selectRaw('COUNT(*) as total_count')
-                ->selectRaw('SUM(CASE WHEN created_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as current_count', [$periodStart, $periodEnd])
-                ->selectRaw('SUM(CASE WHEN created_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as previous_count', [$prevPeriodStart, $prevPeriodEnd])
-                ->selectRaw('SUM(CASE WHEN created_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as today_count', [$todayStart, $todayEnd])
-                ->first();
-
-            $patientsTotal = (int) ($patientStats?->total_count ?? 0);
-            $newPatientsCurrent = (int) ($patientStats?->current_count ?? 0);
-            $newPatientsPrevious = (int) ($patientStats?->previous_count ?? 0);
-            $newPatientsToday = (int) ($patientStats?->today_count ?? 0);
-
-            $appointmentsTodayStats = Appointment::query()
-                ->whereBetween('appointment_date', [$todayStart, $todayEnd])
-                ->selectRaw('COUNT(*) as total_count')
-                ->selectRaw("SUM(CASE WHEN status IN ('pending', 'confirmed') THEN 1 ELSE 0 END) as pending_count")
-                ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count")
-                ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count")
-                ->selectRaw("SUM(CASE WHEN appointment_date > ? AND status IN ('pending', 'confirmed') THEN 1 ELSE 0 END) as remaining_count", [$now])
-                ->selectRaw('AVG(duration) as avg_duration')
-                ->first();
-
-            $appointmentsToday = (int) ($appointmentsTodayStats?->total_count ?? 0);
-            $appointmentsPendingToday = (int) ($appointmentsTodayStats?->pending_count ?? 0);
-            $appointmentsCancelledToday = (int) ($appointmentsTodayStats?->cancelled_count ?? 0);
-            $appointmentsCompletedToday = (int) ($appointmentsTodayStats?->completed_count ?? 0);
-            $remainingAppointments = (int) ($appointmentsTodayStats?->remaining_count ?? 0);
-            $averageDuration = (float) ($appointmentsTodayStats?->avg_duration ?? 0);
-
-            $appointmentsYesterday = Appointment::query()
-                ->whereBetween('appointment_date', [$yesterdayStart, $yesterdayEnd])
+            // Statistiques des rendez-vous (Appointments Summary)
+            $appointmentsCount = Appointment::whereBetween('appointment_date', [$todayStart, $todayEnd])->count();
+            $completedAppointments = Appointment::whereBetween('appointment_date', [$todayStart, $todayEnd])
+                ->where('status', 'completed')
                 ->count();
-
-            $invoiceStats = Invoice::query()
-                ->whereBetween('issue_date', [$startDate->toDateString(), $endDate->toDateString()])
-                ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count")
-                ->selectRaw("SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count")
-                ->first();
-
-            $invoicesPending = (int) ($invoiceStats?->pending_count ?? 0);
-            $invoicesPaid = (int) ($invoiceStats?->paid_count ?? 0);
-
-            $invoicesTotalPeriod = max($invoicesPending + $invoicesPaid, 1);
-            $pendingRatioPercent = (int) round(($invoicesPending / $invoicesTotalPeriod) * 100);
-
-            $recentPatients = Patient::query()
-                ->with([
-                    'appointments' => function ($query) {
-                        $query->latest('appointment_date')->limit(1);
-                    },
-                    'medicalRecords' => function ($query) {
-                        $query->latest()->limit(1);
-                    },
-                ])
-                ->latest()
-                ->limit(3)
-                ->get()
-                ->map(function (Patient $patient) {
-                    $lastAppointment = $patient->appointments->first();
-                    $lastRecord = $patient->medicalRecords->first();
-
-                    $statusLabel = match ($lastAppointment?->status) {
-                        'pending', 'confirmed' => 'En traitement',
-                        'completed' => 'Suivi',
-                        'cancelled' => 'Nouveau',
-                        default => 'Nouveau',
-                    };
-
-                    return [
-                        'id' => (int) $patient->id,
-                        'display_id' => 'N°' . $patient->id,
-                        'first_name' => (string) ($patient->first_name ?? ''),
-                        'last_name' => (string) ($patient->last_name ?? ''),
-                        'phone' => (string) ($patient->phone ?? ''),
-                        'email' => (string) ($patient->email ?? ''),
-                        'last_appointment_date' => $lastAppointment?->appointment_date?->toDateString(),
-                        'last_treatment' => (string) ($lastRecord?->treatment_performed ?? '-'),
-                        'status_label' => $statusLabel,
-                    ];
-                })
-                ->values();
-
-            $todayAppointments = Appointment::query()
-                ->with('patient:id,first_name,last_name')
-                ->whereBetween('appointment_date', [$todayStart, $todayEnd])
-                ->orderBy('appointment_date')
-                ->limit(8)
-                ->get()
-                ->map(function (Appointment $appointment) {
-                    $patientName = trim(
-                        (string) ($appointment->patient?->first_name ?? '') . ' ' . (string) ($appointment->patient?->last_name ?? '')
-                    );
-
-                    return [
-                        'id' => (int) $appointment->id,
-                        'time' => $appointment->appointment_date?->format('H:i') ?? '--:--',
-                        'patient_name' => $patientName !== '' ? $patientName : 'Patient',
-                        'reason' => (string) ($appointment->reason ?? 'Consultation'),
-                        'status' => (string) ($appointment->status ?? 'pending'),
-                    ];
-                })
-                ->values();
-
-            $patientsBySlot = $this->buildPatientsBySlotSeries($today);
-            $actsBreakdown = $this->buildActsBreakdownSeries($startDate, $endDate);
+            $pendingAppointments = Appointment::whereBetween('appointment_date', [$todayStart, $todayEnd])
+                ->where('status', 'pending')
+                ->count();
 
             // Calcul des encaissements (Finance Summary) - Basé sur les reçus de séance (inclut les manuels)
             $todayCollected = (float) DB::table('session_receipts')
@@ -172,54 +62,39 @@ class DashboardController extends Controller
                     ];
                 });
 
-            $attendanceRate = $appointmentsToday > 0
-                ? (int) round((($appointmentsToday - $appointmentsCancelledToday) / $appointmentsToday) * 100)
-                : 0;
+            // Statistiques des patients (Patients Overview)
+            $newPatientsThisMonth = Patient::where('created_at', '>=', Carbon::now()->startOfMonth())->count();
+            $totalPatients = Patient::count();
+
+            // Facturation (Billing Overview)
+            $totalInvoices = Invoice::count();
+            $pendingInvoicesCount = Invoice::where('status', 'pending')->count();
+            $overdueInvoicesCount = Invoice::where('status', 'pending')
+                ->where('due_date', '<', Carbon::now())
+                ->count();
+
+            $billingRatio = 0;
+            if ($totalInvoices > 0) {
+                $billingRatio = round(($pendingInvoicesCount / $totalInvoices) * 100);
+            }
 
             return [
-                'period' => [
-                    'key' => $periodKey,
-                    'label' => $periodLabel,
-                    'from' => $startDate->toDateString(),
-                    'to' => $endDate->toDateString(),
-                ],
-                'meta' => [
-                    'generated_at' => Carbon::now()->toIso8601String(),
-                    'cache_ttl_seconds' => 300,
-                ],
                 'cards' => [
                     'patients_total' => [
-                        'value' => $patientsTotal,
-                        'trend_percent' => $this->calculatePercentChange($newPatientsCurrent, $newPatientsPrevious),
+                        'value' => $totalPatients,
+                        'trend_percent' => 0
                     ],
                     'appointments_today' => [
-                        'value' => $appointmentsToday,
-                        'pending_count' => $appointmentsPendingToday,
+                        'value' => $appointmentsCount,
+                        'pending_count' => $pendingAppointments
                     ],
                     'new_patients_period' => [
-                        'value' => $newPatientsCurrent,
-                        'trend_percent' => $this->calculatePercentChange($newPatientsCurrent, $newPatientsPrevious),
+                        'value' => $newPatientsThisMonth,
+                        'trend_percent' => 0
                     ],
                     'invoices_pending' => [
-                        'value' => $invoicesPending,
-                        'ratio_percent' => $pendingRatioPercent,
-                    ],
-                ],
-                'recent_patients' => $recentPatients,
-                'today_appointments' => $todayAppointments,
-                'daily_summary' => [
-                    'patients_by_slot' => $patientsBySlot,
-                    'acts_breakdown' => $actsBreakdown,
-                    'remaining_appointments' => [
-                        'value' => $remainingAppointments,
-                        'total_today' => $appointmentsToday,
-                    ],
-                    'quick_indicators' => [
-                        'new_patients_today' => $newPatientsToday,
-                        'attendance_rate_percent' => $attendanceRate,
-                        'average_duration_minutes' => (int) round($averageDuration),
-                        'vs_yesterday_percent' => $this->calculatePercentChange($appointmentsToday, $appointmentsYesterday),
-                        'appointments_completed_today' => $appointmentsCompletedToday,
+                        'value' => $pendingInvoicesCount,
+                        'ratio_percent' => $billingRatio
                     ],
                 ],
                 'finance_summary' => [
@@ -227,95 +102,104 @@ class DashboardController extends Controller
                     'week_collected' => $weekCollected,
                     'month_collected' => $monthCollected,
                     'today_details' => $todayDetails,
+                    'currency' => 'XOF',
                 ],
+                'recent_patients' => Patient::latest()->limit(5)->get()->map(function($p) {
+                    // Calcul de la vraie dernière visite (passée et terminée)
+                    $lastVisit = $p->appointments()
+                        ->where('appointment_date', '<=', now())
+                        ->where('status', 'completed')
+                        ->latest('appointment_date')
+                        ->first();
+
+                    return [
+                        'id' => $p->id,
+                        'first_name' => $p->first_name,
+                        'last_name' => $p->last_name,
+                        'display_id' => 'PAT-' . str_pad($p->id, 5, '0', STR_PAD_LEFT),
+                        'phone' => $p->phone,
+                        'email' => $p->email,
+                        'last_appointment_date' => $lastVisit?->appointment_date,
+                        'status_label' => $p->status_label // Utiliser l'attribut du modèle s'il existe
+                    ];
+                }),
+                'today_appointments' => Appointment::whereBetween('appointment_date', [$todayStart, $todayEnd])
+                    ->with('patient')
+                    ->orderBy('appointment_date')
+                    ->limit(5)
+                    ->get()
+                    ->map(function($a) {
+                        return [
+                            'id' => $a->id,
+                            'time' => Carbon::parse($a->appointment_date)->format('H:i'),
+                            'patient_name' => $a->patient ? $a->patient->first_name . ' ' . $a->patient->last_name : 'Inconnu',
+                            'reason' => $a->reason
+                        ];
+                    }),
+                'daily_summary' => [
+                    'quick_indicators' => [
+                        'new_patients_today' => Patient::whereDate('created_at', Carbon::today())->count(),
+                        'attendance_rate_percent' => $appointmentsCount > 0 ? round(($completedAppointments / $appointmentsCount) * 100) : 0,
+                        'appointments_completed_today' => $completedAppointments,
+                    ]
+                ]
             ];
         });
-
-        return response()->json($data);
     }
 
-    private function resolvePeriodRange(?string $rawPeriod): array
+    /**
+     * Retourne la liste des patients nécessitant un rendez-vous (Traitements sans prochain RDV).
+     * Destiné principalement au secrétariat.
+     */
+    public function pendingActions(Request $request)
     {
-        $period = strtolower(trim((string) $rawPeriod));
+        $pending = PatientTreatment::query()
+            ->with(['patient:id,first_name,last_name,phone'])
+            ->whereIn('status', ['planned', 'in_progress'])
+            ->whereNull('next_appointment_id')
+            ->latest('updated_at')
+            ->get()
+            ->map(function ($treatment) {
+                // Trouver le dernier dossier médical pour savoir quand il a été vu
+                $lastVisit = $treatment->medicalRecords()->latest()->first();
+                
+                return [
+                    'treatment_id' => $treatment->id,
+                    'treatment_name' => $treatment->name,
+                    'patient_id' => $treatment->patient_id,
+                    'patient_name' => $treatment->patient ? "{$treatment->patient->first_name} {$treatment->patient->last_name}" : 'Inconnu',
+                    'patient_phone' => $treatment->patient?->phone,
+                    'last_visit_date' => $lastVisit ? Carbon::parse($lastVisit->created_at)->diffForHumans() : 'Jamais vu',
+                    'status' => $treatment->status
+                ];
+            });
 
-        $now = Carbon::now();
-        $start = $now->copy()->startOfMonth();
-        $end = $now->copy()->endOfDay();
-        $label = 'Ce mois';
-        $key = 'month';
-
-        if (in_array($period, ['quarter', 'trimestre', 'ce trimestre', 'this_quarter'], true)) {
-            $start = $now->copy()->startOfQuarter();
-            $label = 'Ce trimestre';
-            $key = 'quarter';
-        } elseif (in_array($period, ['year', 'annee', 'année', 'cette annee', 'cette année', 'this_year'], true)) {
-            $start = $now->copy()->startOfYear();
-            $label = 'Cette année';
-            $key = 'year';
-        }
-
-        $durationDays = max($start->diffInDays($end), 1);
-        $prevEnd = $start->copy()->subDay()->endOfDay();
-        $prevStart = $prevEnd->copy()->subDays($durationDays)->startOfDay();
-
-        return [$key, $label, $start, $end, $prevStart, $prevEnd];
+        return response()->json($pending);
     }
 
-    private function calculatePercentChange(float|int $current, float|int $previous): int
+    public function activity()
     {
-        $curr = (float) $current;
-        $prev = (float) $previous;
+        $rows = DB::table('patient_treatments')
+            ->select('name', DB::raw('count(*) as count'), DB::raw('sum(0) as revenue')) // revenue logic is complex, placeholder
+            ->groupBy('name')
+            ->orderBy('count', 'desc')
+            ->limit(5)
+            ->get();
 
-        if ($prev <= 0.0) {
-            return $curr > 0.0 ? 100 : 0;
-        }
-
-        return (int) round((($curr - $prev) / $prev) * 100);
-    }
-
-    private function buildPatientsBySlotSeries(Carbon $day): array
-    {
-        $dayStart = $day->copy()->startOfDay();
-        $dayEnd = $day->copy()->endOfDay();
-
-        $hourlyCounts = Appointment::query()
-            ->whereBetween('appointment_date', [$dayStart, $dayEnd])
-            ->selectRaw('HOUR(appointment_date) as hour_slot, COUNT(*) as total')
-            ->groupBy('hour_slot')
-            ->pluck('total', 'hour_slot');
-
-        $slots = [
-            ['slot' => '08:00-10:00', 'start' => 8, 'end' => 10],
-            ['slot' => '10:00-12:00', 'start' => 10, 'end' => 12],
-            ['slot' => '14:00-16:00', 'start' => 14, 'end' => 16],
-        ];
-
-        return collect($slots)->map(function ($slot) use ($hourlyCounts) {
-            $count = 0;
-
-            for ($hour = $slot['start']; $hour < $slot['end']; $hour++) {
-                $count += (int) ($hourlyCounts[$hour] ?? 0);
-            }
-
+        return $rows->map(function ($row) {
             return [
-                'slot' => $slot['slot'],
-                'count' => $count,
+                'name' => (string) $row->name,
+                'count' => (int) $row->count,
+                'revenue' => (float) $row->revenue,
             ];
         })->values()->all();
     }
 
-    private function buildActsBreakdownSeries(Carbon $startDate, Carbon $endDate): array
+    public function appointmentsStatus()
     {
-        $rows = DB::table('invoice_items as ii')
-            ->join('invoices as i', 'i.id', '=', 'ii.invoice_id')
-            ->join('patient_treatment_acts as pta', 'pta.id', '=', 'ii.patient_treatment_act_id')
-            ->join('dental_acts as da', 'da.id', '=', 'pta.dental_act_id')
-            ->whereBetween('i.issue_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->where('i.status', '!=', 'cancelled')
-            ->selectRaw("COALESCE(NULLIF(da.category, ''), 'Autres') as label, COUNT(ii.id) as count")
-            ->groupBy('label')
-            ->orderByDesc('count')
-            ->limit(4)
+        $rows = DB::table('appointments')
+            ->select('status as label', DB::raw('count(*) as count'))
+            ->groupBy('status')
             ->get();
 
         return $rows->map(function ($row) {

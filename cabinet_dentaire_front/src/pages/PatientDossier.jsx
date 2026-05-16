@@ -119,7 +119,7 @@ const PatientDossier = () => {
   }, [id]);
 
   const ptNameById = patientTreatments.reduce((acc, pt) => {
-    acc[pt.id] = pt.name || 'Suivi';
+    acc[pt.id] = pt.name || 'Diagnostic';
     return acc;
   }, {});
 
@@ -285,12 +285,12 @@ const PatientDossier = () => {
           </div>
         </div>
 
-        {/* Traitements et suivi */}
+        {/* Traitements & Diagnostic */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <TreatmentIcon />
-              Traitements et suivi
+              Traitements & Diagnostic
             </h2>
           </div>
           <div className="p-6">
@@ -325,7 +325,7 @@ const PatientDossier = () => {
                     {patientTreatments.map((pt) => (
                       <tr key={pt.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {pt.name || 'Suivi'}
+                          {pt.name || 'Diagnostic'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {pt.start_date ? new Date(pt.start_date).toLocaleDateString('fr-FR') : '-'}

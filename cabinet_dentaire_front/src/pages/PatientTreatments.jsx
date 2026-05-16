@@ -99,13 +99,13 @@ const PatientTreatments = () => {
         status: 'completed',
         end_date: new Date().toISOString().split('T')[0],
       });
-      alert('Suivi terminé avec succès !');
+      alert('Diagnostic terminé avec succès !');
       setShowFinishConfirmModal(false);
       setTreatmentToFinish(null);
       loadInitialData();
     } catch (error) {
-      console.error('Erreur fin suivi:', error);
-      alert('Erreur lors de la fin du suivi');
+      console.error('Erreur fin diagnostic:', error);
+      alert('Erreur lors de la fin du diagnostic');
     } finally {
       setLoading(false);
     }
@@ -365,8 +365,8 @@ const PatientTreatments = () => {
         {/* En-tête */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Suivi des patients</h1>
-            <p className="text-sm text-gray-600 mt-1">Gestion des traitements et suivis médicaux</p>
+            <h1 className="text-2xl font-bold text-gray-900">Diagnostic des patients</h1>
+            <p className="text-sm text-gray-600 mt-1">Gestion des traitements et diagnostics médicaux</p>
           </div>
           <button
             onClick={() => navigate('/treatments/new')}
@@ -375,7 +375,7 @@ const PatientTreatments = () => {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Nouveau suivi
+            Nouveau Diagnostic
           </button>
         </div>
 
@@ -486,7 +486,7 @@ const PatientTreatments = () => {
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-gray-600">
-                {filteredTreatments.length} suivi{filteredTreatments.length !== 1 ? 's' : ''} trouvé{filteredTreatments.length !== 1 ? 's' : ''}
+                {filteredTreatments.length} Diagnostic{filteredTreatments.length !== 1 ? 's' : ''} trouvé{filteredTreatments.length !== 1 ? 's' : ''}
               </span>
               {(searchTerm || selectedStatus !== 'all') && (
                 <div className="flex flex-wrap gap-2">
@@ -567,8 +567,8 @@ const PatientTreatments = () => {
             ) : filteredTreatments.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 {searchTerm || selectedStatus !== 'all' 
-                  ? 'Aucun suivi trouvé avec ces critères' 
-                  : tab === 'en_cours' ? 'Aucun suivi en cours' : 'Aucun traitement terminé'}
+                  ? 'Aucun diagnostic trouvé avec ces critères' 
+                  : tab === 'en_cours' ? 'Aucun diagnostic en cours' : 'Aucun traitement terminé'}
               </div>
             ) : (
               filteredTreatments.map((pt) => (
@@ -582,7 +582,7 @@ const PatientTreatments = () => {
                         {getStatusBadge(pt.status)}
                       </div>
                       <p className="text-sm text-gray-600 mt-1">
-                        Suivi: <span className="font-medium">{pt.name}</span>
+                        Diagnostic: <span className="font-medium">{pt.name}</span>
                       </p>
                       <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
                         <span>Début: {pt.start_date ? new Date(pt.start_date).toLocaleDateString('fr-FR') : ''}</span>
@@ -822,19 +822,19 @@ const PatientTreatments = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Confirmer la fin du suivi</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Confirmer la fin du diagnostic</h3>
                 </div>
               </div>
 
               <div className="px-6 py-5 space-y-3">
-                <p className="text-sm text-gray-700">Voulez-vous vraiment terminer ce suivi ?</p>
+                <p className="text-sm text-gray-700">Voulez-vous vraiment terminer ce diagnostic ?</p>
                 <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <p className="text-sm text-gray-900 font-medium">{treatmentToFinish?.name || 'Suivi'}</p>
+                  <p className="text-sm text-gray-900 font-medium">{treatmentToFinish?.name || 'Diagnostic'}</p>
                   <p className="text-xs text-gray-600 mt-1">
                     Patient: {treatmentToFinish?.patient?.first_name} {treatmentToFinish?.patient?.last_name}
                   </p>
                 </div>
-                <p className="text-xs text-gray-500">Cette action marquera le suivi comme terminé à la date du jour.</p>
+                <p className="text-xs text-gray-500">Cette action marquera le diagnostic comme terminé à la date du jour.</p>
               </div>
 
               <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3">
@@ -868,3 +868,6 @@ const PatientTreatments = () => {
 };
 
 export default PatientTreatments;
+
+;
+

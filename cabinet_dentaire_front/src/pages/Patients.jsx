@@ -55,7 +55,7 @@ const Patients = () => {
   };
 
   const statusToColor = (status) => {
-    if (status === 'Suivi') return 'emerald';
+    if (status === 'Diagnostic') return 'emerald';
     if (status === 'En traitement') return 'amber';
     return 'blue';
   };
@@ -738,4 +738,4 @@ const Patients = () => {
   );
 };
 
-export default Patients;
+export default Patients;ents;
