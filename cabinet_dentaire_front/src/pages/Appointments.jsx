@@ -60,6 +60,9 @@ const Appointments = () => {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [validationData, setValidationData] = useState({ appointment: null, treatment: null });
   const [isValidating, setIsValidating] = useState(false);
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [showPatientResults, setShowPatientResults] = useState(false);
+  const patientSearchRef = useRef(null);
   const hasLoadedRef = useRef(false);
   const lastFocusedAppointmentRef = useRef(null);
   const flashTimerRef = useRef(null);
@@ -68,7 +71,7 @@ const Appointments = () => {
     date: '',
     heure: '',
     patient_id: '',
-    motif: 'Consultation',
+    motif: '',
     assigned_doctor_id: '',
     praticien: '',
     statut: 'À venir',
@@ -149,7 +152,7 @@ const Appointments = () => {
           timeSpecified,
           patient,
           patientId: a.patient?.id,
-          motif: a.reason || 'Consultation',
+          motif: a.reason || '',
           assigned_doctor_id: a.assigned_doctor_id,
           praticien,
           statut,
@@ -182,11 +185,24 @@ const Appointments = () => {
   // On est en mode Multi si plus d'un médecin est enregistré
   const isMultiDoctorMode = useMemo(() => doctors.length > 1, [doctors]);
 
+  const filteredPatientsForSearch = useMemo(() => {
+    if (!patientSearchTerm.trim() || !showPatientResults) return [];
+    const term = patientSearchTerm.toLowerCase();
+    return patients.filter(p => 
+      `${p.first_name} ${p.last_name}`.toLowerCase().includes(term) ||
+      (p.phone && p.phone.includes(term)) ||
+      (p.id && String(p.id).includes(term))
+    ).slice(0, 8); // Limit to 8 results for performance
+  }, [patients, patientSearchTerm, showPatientResults]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       const isInsideMenu = event.target.closest('[data-appointment-menu="true"]');
       if (!isInsideMenu) {
         setOpenMenu(null);
+      }
+      if (patientSearchRef.current && !patientSearchRef.current.contains(event.target)) {
+        setShowPatientResults(false);
       }
     };
 
@@ -247,11 +263,13 @@ const Appointments = () => {
       date: appointment.date,
       heure: appointment.timeSpecified ? (appointment.heureValue || '') : '',
       patient_id: appointment.patientId || '',
-      motif: appointment.motif || 'Consultation',
+      motif: appointment.motif || '',
       assigned_doctor_id: appointment.assigned_doctor_id || '',
       praticien: appointment.praticien || (user?.name || 'Dentiste'),
       statut: appointment.statut || 'À venir',
     });
+    setPatientSearchTerm(appointment.patient);
+    setShowPatientResults(false);
     setShowQuickCreate(true);
   };
 
@@ -343,7 +361,7 @@ const Appointments = () => {
 
   // Génération dynamique des motifs à partir des rendez-vous chargés
   const motifOptions = useMemo(() => {
-    const baseMotifs = ['Consultation'];
+    const baseMotifs = [];
     const loadedMotifs = appointments.map(a => a.motif).filter(Boolean);
     
     // Fusionner, supprimer les doublons et trier
@@ -464,11 +482,13 @@ const Appointments = () => {
       date: dateStr,
       heure: '',
       patient_id: '',
-      motif: 'Consultation',
+      motif: '',
       assigned_doctor_id: '',
       praticien: user?.name || 'Dentiste',
       statut: 'À venir',
     });
+    setPatientSearchTerm('');
+    setShowPatientResults(false);
     setEditingAppointment(null);
     setSelectedDate(date);
     setShowQuickCreate(true);
@@ -804,23 +824,59 @@ const Appointments = () => {
               </p>
             </div>
             <form onSubmit={handleQuickCreateSubmit} className="px-6 py-4 grid grid-cols-1 gap-3">
-              <div>
+              <div className="relative" ref={patientSearchRef}>
                 <label className="text-xs font-semibold text-gray-700">Patient *</label>
-                <select
-                  name="patient_id"
-                  value={quickForm.patient_id}
-                  onChange={handleQuickCreateChange}
+                <input
+                  type="text"
+                  placeholder="Rechercher un patient (nom, téléphone, ID)..."
+                  value={patientSearchTerm}
+                  onChange={(e) => {
+                    setPatientSearchTerm(e.target.value);
+                    setShowPatientResults(true);
+                    // Reset patient_id if input is cleared to force re-selection
+                    if (!e.target.value) setQuickForm(prev => ({ ...prev, patient_id: '' }));
+                  }}
+                  onFocus={() => setShowPatientResults(true)}
                   className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
                   required
-                  disabled={patientsLoading}
-                >
-                  <option value="">{patientsLoading ? 'Chargement...' : 'Sélectionner un patient'}</option>
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {(p.first_name || '').trim()} {(p.last_name || '').trim()}
-                    </option>
-                  ))}
-                </select>
+                />
+                {showPatientResults && filteredPatientsForSearch.length > 0 && (
+                  <div className="absolute z-[100] mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto animate-in fade-in zoom-in duration-150">
+                    {filteredPatientsForSearch.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setQuickForm(prev => ({ ...prev, patient_id: p.id }));
+                          setPatientSearchTerm(`${p.first_name} ${p.last_name}`);
+                          setShowPatientResults(false);
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-bold text-sm text-gray-900 group-hover:text-blue-700">{p.first_name} {p.last_name}</div>
+                          <div className="text-[10px] font-black text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">ID #{p.id}</div>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">{p.phone || 'Aucun téléphone enregistré'}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showPatientResults && patientSearchTerm && filteredPatientsForSearch.length === 0 && (
+                  <div className="absolute z-[100] mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl p-6 text-center animate-in fade-in zoom-in duration-150">
+                    <div className="text-gray-400 mb-2">
+                      <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 9.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-500">Aucun patient trouvé</p>
+                    <button 
+                      type="button"
+                      onClick={() => navigate('/patients/new')}
+                      className="mt-3 text-xs font-bold text-blue-600 hover:underline"
+                    >
+                      + Créer un nouveau patient
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -848,16 +904,14 @@ const Appointments = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Motif</label>
-                  <select
+                  <input
+                    type="text"
                     name="motif"
                     value={quickForm.motif}
                     onChange={handleQuickCreateChange}
+                    placeholder="Ex: Consultation, Détartrage..."
                     className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
-                  >
-                    {motifOptions.filter(m => m.value !== 'all').map(m => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700">Statut</label>
