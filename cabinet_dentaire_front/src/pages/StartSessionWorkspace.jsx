@@ -138,22 +138,7 @@ const StartSessionWorkspace = () => {
 
     setLoading(true);
     try {
-      let consumedAppointmentId = treatment.next_appointment_id || null;
-
-      if (!consumedAppointmentId) {
-        const now = new Date();
-        const nowIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:00`;
-        const placeholder = await appointmentAPI.create({
-          patient_id: treatment.patient_id,
-          dentist_id: currentUser?.id,
-          appointment_date: nowIso,
-          appointment_time_specified: true,
-          duration: null,
-          reason: null,
-          notes: 'Rendez-vous créé automatiquement pour saisir la séance',
-        });
-        consumedAppointmentId = placeholder?.data?.id || null;
-      }
+      const consumedAppointmentId = treatment.next_appointment_id || null;
 
       const medicalRecordRes = await medicalRecordAPI.create({
         patient_id: treatment.patient_id,

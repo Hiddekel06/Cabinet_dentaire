@@ -374,7 +374,9 @@ class AppointmentController extends Controller
             return $appointmentDate->toDateString() < Carbon::today()->toDateString();
         }
 
-        return $appointmentDate->lt(Carbon::now());
+        // On ajoute une marge de 10 minutes pour tolérer les décalages d'horloge entre client/serveur 
+        // et le temps d'exécution de la requête.
+        return $appointmentDate->addMinutes(10)->lt(Carbon::now());
     }
 
     private function resolveConsultationSimpleAct(): ?DentalAct
