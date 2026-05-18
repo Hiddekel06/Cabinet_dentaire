@@ -13,11 +13,14 @@ use Illuminate\Validation\ValidationException;
 
 class PatientController extends Controller
 {
+    /**
+     * Liste paginée des patients avec recherche et tri optimisé.
+     */
     public function index(Request $request)
     {
         $search = trim((string) $request->input('search', ''));
-        $perPage = (int) $request->input('per_page', 5);
-        $perPage = max(1, min($perPage, 50));
+        $perPage = (int) $request->input('per_page', 10);
+        $perPage = max(1, min($perPage, 100));
 
         $patientsQuery = Patient::query();
 
@@ -33,20 +36,50 @@ class PatientController extends Controller
             });
         }
 
+        // Filtre par statut (via scopes optimisés)
+        $status = $request->input('status');
+        if ($status && $status !== 'all') {
+            // Note: Le statut est dynamique, on filtre sur les flags calculés
+            if ($status === 'En traitement') {
+                $patientsQuery->whereHas('patientTreatments', function($q) {
+                    $q->whereIn('status', ['planned', 'in_progress']);
+                });
+            } elseif ($status === 'Diagnostic') {
+                $patientsQuery->where(function($q) {
+                    $q->has('medicalRecords')->orWhereHas('patientTreatments', function($sq) {
+                        $q->where('status', 'completed');
+                    });
+                });
+            } elseif ($status === 'Nouveau') {
+                $patientsQuery->doesntHave('medicalRecords')
+                    ->doesntHave('patientTreatments');
+            }
+        }
+
+        // Optimisation N+1 via sous-requêtes SQL
         $this->applySummaryScopes($patientsQuery);
 
-        $patients = $patientsQuery
-            ->with([
-                'appointments' => function ($query) {
-                    $query->latest('appointment_date')->limit(1);
-                },
-                'medicalRecords' => function ($query) {
-                    $query->latest()->limit(1);
-                },
-            ])
-            ->latest()
-            ->paginate($perPage);
+        // Gestion du tri côté serveur
+        $sortBy = $request->input('sort_by', 'id');
+        $sortOrder = $request->input('sort_order', 'desc');
 
+        $allowedSortFields = [
+            'id', 
+            'first_name', 
+            'last_name', 
+            'phone', 
+            'last_visit_date_precalc'
+        ];
+
+        if (in_array($sortBy, $allowedSortFields)) {
+            $patientsQuery->orderBy($sortBy, $sortOrder === 'asc' ? 'asc' : 'desc');
+        } else {
+            $patientsQuery->latest();
+        }
+
+        $patients = $patientsQuery->paginate($perPage);
+
+        // Transformation légère pour le formatage final
         $patients->getCollection()->transform(function ($patient) {
             $this->buildPatientSummary($patient);
             return $patient;
@@ -98,18 +131,11 @@ class PatientController extends Controller
 
     public function show(Patient $patient)
     {
-        // On recharge le patient avec les scopes optimisés
+        // On recharge le patient avec les scopes optimisés (N+1 safe)
         $query = Patient::query()->where('id', $patient->id);
         $this->applySummaryScopes($query);
         
-        $patient = $query->with([
-            'appointments' => function ($query) {
-                $query->latest('appointment_date')->limit(1);
-            },
-            'medicalRecords' => function ($query) {
-                $query->latest()->limit(1);
-            },
-        ])->firstOrFail();
+        $patient = $query->firstOrFail();
 
         $this->buildPatientSummary($patient);
 
@@ -236,7 +262,8 @@ class PatientController extends Controller
     }
 
     /**
-     * Applique les sous-requetes SQL pour eviter le probleme N+1
+     * Applique les sous-requetes SQL pour eviter le probleme N+1.
+     * Calcule dynamiquement les dernières infos sans charger de collections d'objets.
      */
     private function applySummaryScopes($query): void
     {
@@ -249,6 +276,16 @@ class PatientController extends Controller
                     ->where('appointments.status', 'completed')
                     ->latest('appointments.appointment_date')
                     ->limit(1),
+                
+                'last_appointment_date_precalc' => \App\Models\Appointment::select('appointment_date')
+                    ->whereColumn('patient_id', 'patients.id')
+                    ->latest('appointment_date')
+                    ->limit(1),
+
+                'last_treatment_precalc' => MedicalRecord::select('treatment_performed')
+                    ->whereColumn('patient_id', 'patients.id')
+                    ->latest('id')
+                    ->limit(1),
             ])
         ->withExists(['patientTreatments as has_active_treatment' => function($q) {
             $q->whereIn('status', ['planned', 'in_progress']);
@@ -260,22 +297,21 @@ class PatientController extends Controller
     }
 
     /**
-     * Build patient dashboard summary with business-driven status.
-     * Uses pre-calculated fields from applySummaryScopes for maximum performance.
+     * Construit le résumé métier d'un patient.
+     * Utilise les champs pré-calculés par SQL pour une performance maximale.
      */
     private function buildPatientSummary(Patient $patient): void
     {
-        $lastAppointment = $patient->appointments->first();
-        $lastRecord = $patient->medicalRecords->first();
-
-        // On utilise la date pre-calculee par SQL (N+1 safe)
+        // On utilise les valeurs pré-calculées par les sous-requêtes SQL
         $patient->last_visit_date = $patient->last_visit_date_precalc 
             ? Carbon::parse($patient->last_visit_date_precalc)->toDateString() 
             : null;
         
-        $patient->last_appointment_date = $lastAppointment?->appointment_date;
-        $patient->last_appointment_status = $lastAppointment?->status;
-        $patient->last_treatment = $lastRecord?->treatment_performed;
+        $patient->last_appointment_date = $patient->last_appointment_date_precalc
+            ? Carbon::parse($patient->last_appointment_date_precalc)->toDateString()
+            : null;
+
+        $patient->last_treatment = $patient->last_treatment_precalc;
 
         if ($patient->has_active_treatment) {
             $patient->status = 'En traitement';
@@ -291,8 +327,7 @@ class PatientController extends Controller
     }
 
     /**
-     * Build patient payload from UI fields.
-     * Age is converted to date_of_birth to match database schema.
+     * Prépare les données pour la sauvegarde.
      */
     private function buildPatientPayload(array $validated): array
     {
@@ -344,7 +379,7 @@ class PatientController extends Controller
     }
 
     /**
-     * Normalize phone for consistent duplicate detection/storage.
+     * Normalise le numéro de téléphone.
      */
     private function normalizePhone(string $phone): string
     {
@@ -352,7 +387,7 @@ class PatientController extends Controller
     }
 
     /**
-     * Enforce patient/contact consistency for robust contactability.
+     * Règles de validation pour les contacts tiers.
      */
     private function enforceContactRules(array $data, ?Patient $patient): void
     {

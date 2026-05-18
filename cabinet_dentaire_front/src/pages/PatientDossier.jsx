@@ -262,10 +262,17 @@ const PatientDossier = () => {
                 <div className="text-xl font-semibold text-gray-900">
                   {patient.first_name} {patient.last_name}
                 </div>
-                <div className="text-sm text-gray-500">ID patient: #{patient.id}</div>
+                <div className="text-sm text-gray-500 flex items-center gap-2">
+                  <span>ID patient: #{patient.id}</span>
+                  {patient.date_of_birth && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[11px] font-bold">
+                      {calculateAge(patient.date_of_birth)} ans
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
               <div className="flex items-center gap-2 text-gray-700">
                 <PhoneIcon />
                 <span className="font-medium">Téléphone :</span>
@@ -276,11 +283,22 @@ const PatientDossier = () => {
                 <span className="font-medium">Email :</span>
                 <span>{patient.email || 'Non renseigné'}</span>
               </div>
-              <div className="flex items-center gap-2 text-gray-700 md:col-span-2">
+              <div className="flex items-center gap-2 text-gray-700">
                 <LocationIcon />
                 <span className="font-medium">Adresse :</span>
                 <span>{patient.address || 'Non renseignée'}</span>
               </div>
+              {patient.general_state && (
+                <div className="flex items-start gap-2 text-gray-700 md:col-span-2 lg:col-span-3 bg-amber-50/50 p-2 rounded-lg border border-amber-100/50">
+                  <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <span className="font-bold text-amber-800 text-xs uppercase tracking-tight">État général :</span>
+                    <p className="mt-0.5 text-gray-600 italic">{patient.general_state}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

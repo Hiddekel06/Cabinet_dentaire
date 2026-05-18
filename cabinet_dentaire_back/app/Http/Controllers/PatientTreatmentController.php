@@ -44,31 +44,60 @@ class PatientTreatmentController extends Controller
     {
         $query = PatientTreatment::query()
             ->with(['patient', 'nextAppointment', 'acts.dentalAct'])
-            ->select('patient_treatments.*');
+            ->select('patient_treatments.*')
+            ->addSelect([
+                // Calcul du montant total cumulé via SQL
+                'total_acts_amount' => PatientTreatmentAct::select(DB::raw('SUM(quantity * tarif_snapshot)'))
+                    ->whereColumn('patient_treatment_id', 'patient_treatments.id'),
+                
+                'acts_count' => PatientTreatmentAct::select(DB::raw('COUNT(*)'))
+                    ->whereColumn('patient_treatment_id', 'patient_treatments.id'),
+            ])
+            // Flag: Si au moins un acte du traitement est dans une facture payée
+            ->withExists(['acts as is_invoice_paid_locked' => function($q) {
+                $q->whereHas('invoiceItems.invoice', function($sq) {
+                    $sq->where('status', 'paid');
+                });
+            }]);
 
         // Filtrer par patient
         if ($request->has('patient_id')) {
             $query->where('patient_id', $request->input('patient_id'));
         }
 
-        // Filtrer par statut
+        // Filtrer par statut (Supporte "status=planned,in_progress" ou "status=completed")
         if ($request->has('status')) {
-            $query->where('status', $request->input('status'));
+            $status = $request->input('status');
+            if (str_contains($status, ',')) {
+                $query->whereIn('status', explode(',', $status));
+            } else {
+                $query->where('status', $status);
+            }
         }
 
-        $patientTreatments = $query->latest()->paginate(15);
+        // Gestion du tri côté serveur
+        $sortBy = $request->input('sort_by', 'start_date');
+        $sortOrder = $request->input('sort_order', 'desc');
 
-        $patientTreatments->getCollection()->transform(function (PatientTreatment $patientTreatment) {
-            $isPaidLocked = $this->hasPaidInvoice($patientTreatment->id);
-            $patientTreatment->setAttribute(
-                'is_invoice_paid_locked',
-                $isPaidLocked
-            );
-            $patientTreatment->setAttribute(
-                'invoice_preview',
-                $this->buildInvoicePreview($patientTreatment, $isPaidLocked)
-            );
-            return $patientTreatment;
+        $allowedSortFields = ['id', 'name', 'start_date', 'status', 'total_acts_amount'];
+        if (in_array($sortBy, $allowedSortFields)) {
+            $query->orderBy($sortBy, $sortOrder === 'asc' ? 'asc' : 'desc');
+        } else {
+            $query->orderBy('start_date', 'desc');
+        }
+
+        $patientTreatments = $query->paginate(15);
+
+        $patientTreatments->getCollection()->transform(function (PatientTreatment $pt) {
+            // Reformatage pour le frontend
+            $pt->setAttribute('is_invoice_paid_locked', (bool) $pt->is_invoice_paid_locked);
+            $pt->setAttribute('invoice_preview', [
+                'status' => $pt->is_invoice_paid_locked ? 'paid' : 'draft',
+                'item_count' => (int) $pt->acts_count,
+                'total_amount' => (float) round($pt->total_acts_amount, 2),
+                'currency' => 'EUR',
+            ]);
+            return $pt;
         });
 
         return response()->json($patientTreatments);

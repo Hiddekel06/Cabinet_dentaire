@@ -936,8 +936,26 @@ const Appointments = () => {
             <div className="px-6 py-4 grid grid-cols-1 gap-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">Patient</span>
-                <span className="text-sm font-semibold text-gray-900">{selectedAppointment.patient}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900">{selectedAppointment.patient}</span>
+                  {selectedAppointment.patientAge !== null && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full border border-blue-100">
+                      {selectedAppointment.patientAge} ans
+                    </span>
+                  )}
+                </div>
               </div>
+              {selectedAppointment.patientGeneralState && (
+                <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 mb-2">
+                  <div className="flex items-center gap-2 text-amber-800 text-[10px] font-bold uppercase tracking-wider mb-1">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.998-.833-2.732 0L4.346 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                    État général du patient
+                  </div>
+                  <p className="text-xs text-amber-900 italic leading-relaxed">
+                    {selectedAppointment.patientGeneralState}
+                  </p>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">Date</span>
                 <span className="text-sm font-semibold text-gray-900">{selectedAppointment.date}</span>

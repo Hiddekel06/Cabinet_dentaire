@@ -1,14 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { patientAPI, patientTreatmentAPI, dentalActAPI, medicalRecordAPI, sessionReceiptAPI } from '../services/api';
+import { patientAPI, patientTreatmentAPI, medicalRecordAPI, sessionReceiptAPI } from '../services/api';
 
 const PatientTreatments = () => {
   const navigate = useNavigate();
 
   const [patients, setPatients] = useState([]);
   const [patientTreatments, setPatientTreatments] = useState([]);
-  const [dentalActs, setDentalActs] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [showFinishConfirmModal, setShowFinishConfirmModal] = useState(false);
@@ -27,7 +26,6 @@ const PatientTreatments = () => {
   const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
   const [loadedReceiptPatientIds] = useState(new Set());
   const [loadedMedicalRecordTreatmentIds] = useState(new Set());
-  // Price editing removed from treatments: prices are managed at invoice/receipt level
 
   const hasLoadedRef = useRef(false);
   
@@ -36,6 +34,8 @@ const PatientTreatments = () => {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   // Onglet sélectionné : 'en_cours' ou 'termines'
   const [tab, setTab] = useState('en_cours');
   const [expandedTreatmentId, setExpandedTreatmentId] = useState(null);
@@ -45,12 +45,11 @@ const PatientTreatments = () => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
     loadInitialData();
-
-    // Charger les actes dentaires
-    dentalActAPI.getAll().then(res => {
-      setDentalActs(res.data.data || res.data || []);
-    }).catch(() => setDentalActs([]));
   }, []);
+
+  useEffect(() => {
+    loadTreatments();
+  }, [page, tab, searchTerm, selectedStatus, sortBy, sortOrder]);
 
   // Charger les reçus quand un traitement est étendu
   useEffect(() => {
@@ -65,28 +64,46 @@ const PatientTreatments = () => {
     }
   }, [expandedTreatmentId, patientTreatments]);
 
-  const loadInitialData = async () => {
+  const loadTreatments = async () => {
     setLoading(true);
     try {
-      const [patientsRes, ptRes] = await Promise.all([
-        patientAPI.getAll(),
-        patientTreatmentAPI.getAll(),
-      ]);
-      console.log('Patients reçus:', patientsRes);
-      console.log('PatientTreatments reçus:', ptRes);
+      const backendSortMap = {
+        date: 'start_date',
+        patient: 'name', // Trie par le nom du diagnostic
+        status: 'status'
+      };
+
+      const params = {
+        page,
+        search: searchTerm,
+        sort_by: backendSortMap[sortBy] || 'start_date',
+        sort_order: sortOrder,
+      };
       
-      const patientsData = patientsRes.data?.data || patientsRes.data || [];
-      const ptData = ptRes.data?.data || ptRes.data || [];
-      
-      console.log('Patients après extraction:', patientsData);
-      console.log('Nombre de patients:', patientsData.length);
-      
-      setPatients(patientsData);
-      setPatientTreatments(ptData);
+      // Gestion intelligente des statuts par onglet
+      if (tab === 'termines') {
+        params.status = 'completed';
+      } else {
+        params.status = selectedStatus !== 'all' ? selectedStatus : 'planned,in_progress,cancelled';
+      }
+
+      const res = await patientTreatmentAPI.getAll(params);
+      setPatientTreatments(res.data?.data || []);
+      setTotalPages(res.data?.last_page || 1);
     } catch (error) {
-      console.error('Erreur chargement données:', error);
+      console.error('Erreur chargement traitements:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadInitialData = async () => {
+    try {
+      const patientsRes = await patientAPI.getAll(1, { per_page: 50 });
+      const patientsData = patientsRes.data?.data || patientsRes.data || [];
+      setPatients(patientsData);
+    } catch (error) {
+      console.error('Erreur chargement patients:', error);
     }
   };
 
@@ -102,47 +119,13 @@ const PatientTreatments = () => {
       alert('Diagnostic terminé avec succès !');
       setShowFinishConfirmModal(false);
       setTreatmentToFinish(null);
-      loadInitialData();
+      loadTreatments();
     } catch (error) {
       console.error('Erreur fin diagnostic:', error);
       alert('Erreur lors de la fin du diagnostic');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleRemoveAct = async (treatmentId, act) => {
-    if (!treatmentId || !act?.id) {
-      alert('Acte introuvable.');
-      return;
-    }
-
-    const confirmed = confirm('Voulez-vous vraiment supprimer cet acte ?');
-    if (!confirmed) return;
-
-    const auditNote = prompt('Note d\'audit (optionnelle)', '') ?? '';
-
-    setLoading(true);
-    try {
-      await patientTreatmentAPI.removeAct(treatmentId, act.id, auditNote);
-      await loadInitialData();
-      if (openAuditByTreatment[treatmentId]) {
-        await handleToggleAuditLogs(treatmentId, true);
-      }
-      alert('Acte supprimé avec succès.');
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Suppression impossible.';
-      alert(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  const isConsultationSimpleAct = (actFromCatalog, actFromTreatment) => {
-    const catalogName = (actFromCatalog?.name || actFromCatalog?.label || '').toLowerCase();
-    const nestedName = (actFromTreatment?.dentalAct?.name || '').toLowerCase();
-    return catalogName.includes('consultation simple') || nestedName.includes('consultation simple');
   };
 
   const handleToggleAuditLogs = async (treatmentId, forceReload = false) => {
@@ -287,52 +270,9 @@ const PatientTreatments = () => {
   };
 
   // Filtrer et trier selon l'onglet
-  const filteredTreatments = patientTreatments
-    .filter((pt) => {
-      if (tab === 'en_cours') {
-        if (pt.status === 'completed') return false;
-      } else if (tab === 'termines') {
-        if (pt.status !== 'completed') return false;
-      }
-      // Filtre par recherche
-      if (searchTerm) {
-        const search = searchTerm.toLowerCase();
-        const patientName = `${pt.patient?.first_name || ''} ${pt.patient?.last_name || ''}`.toLowerCase();
-        const treatmentName = (pt.name || '').toLowerCase();
-        if (!patientName.includes(search) && !treatmentName.includes(search)) {
-          return false;
-        }
-      }
-      // Filtre par statut
-      if (selectedStatus !== 'all' && pt.status !== selectedStatus) {
-        return false;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      let aValue, bValue;
-      switch (sortBy) {
-        case 'date':
-          aValue = new Date(a.start_date).getTime();
-          bValue = new Date(b.start_date).getTime();
-          break;
-        case 'patient':
-          aValue = `${a.patient?.first_name || ''} ${a.patient?.last_name || ''}`.toLowerCase();
-          bValue = `${b.patient?.first_name || ''} ${b.patient?.last_name || ''}`.toLowerCase();
-          break;
-        case 'status':
-          aValue = a.status || '';
-          bValue = b.status || '';
-          break;
-        default:
-          return 0;
-      }
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
-    });
+  const filteredTreatments = useMemo(() => {
+    return [...patientTreatments];
+  }, [patientTreatments]);
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -640,57 +580,6 @@ const PatientTreatments = () => {
                             );
                           })()}
 
-                          {/* Détails avancés */}
-                          {Array.isArray(pt.acts) && pt.acts.length > 0 && (
-                            <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/40 p-3">
-                              <div className="font-semibold text-xs text-blue-700 mb-2">Actes sélectionnés</div>
-                              <ul className="text-xs text-gray-700 space-y-1">
-                                {pt.acts.map((a, idx) => {
-                                  const act = dentalActs.find(act => act.id === a.dental_act_id);
-                                  const actLabel = act ? (act.code ? `${act.code} - ` : '') + (act.label || act.name || '') : `Acte #${a.dental_act_id}`;
-                                  const isInvoiceLocked = !!pt.is_invoice_paid_locked;
-                                  const isEditableTreatment = pt.status !== 'completed' && pt.status !== 'cancelled' && tab === 'en_cours' && !isInvoiceLocked;
-                                  const isMandatoryConsultation = isConsultationSimpleAct(act, a);
-                                  const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
-                                  return (
-                                    <li key={idx} className="flex flex-wrap items-center gap-3 rounded-md bg-white/70 px-2 py-1">
-                                      <span className="font-medium text-gray-900">{actLabel}</span>
-                                      <span className="text-gray-500">Qté: x{a.quantity}</span>
-                                      {Number.isFinite(unitPrice) && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800 font-semibold">
-                                          Prix unitaire: {Number(unitPrice).toFixed(2)} €
-                                        </span>
-                                      )}
-                                      {isMandatoryConsultation && (
-                                        <span className="ml-2 px-2 py-0.5 rounded text-[11px] font-semibold text-amber-800 bg-amber-100">
-                                          Obligatoire
-                                        </span>
-                                      )}
-                                      {/* Prix modifiable depuis la création/édition de facture ou depuis le reçu de séance. */}
-                                      {isEditableTreatment && !isMandatoryConsultation && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemoveAct(pt.id, a)}
-                                          className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100"
-                                          title="Supprimer cet acte"
-                                          disabled={loading}
-                                        >
-                                          Supprimer
-                                        </button>
-                                      )}
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                              <div className="mt-2 text-xs font-bold text-blue-800">
-                                Total actes : {pt.acts.reduce((sum, a) => {
-                                  const act = dentalActs.find(act => act.id === a.dental_act_id);
-                                  const unitPrice = Number(a.tarif_snapshot ?? act?.tarif ?? 0);
-                                  return sum + (Number.isFinite(unitPrice) ? unitPrice * a.quantity : 0);
-                                }, 0).toFixed(2)} €
-                              </div>
-                            </div>
-                          )}
                           {pt.invoice_preview && (
                             <div className="mt-2 text-xs">
                               {pt.invoice_preview.status === 'paid' ? (
@@ -811,6 +700,29 @@ const PatientTreatments = () => {
           </div>
         </div>
 
+        {/* Pagination */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 flex items-center justify-between">
+          <p className="text-sm text-gray-500 font-medium uppercase tracking-tight">
+            Page {page} sur {totalPages} | {filteredTreatments.length} affichés
+          </p>
+          <div className="flex gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+              className="px-4 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-30 transition-all"
+            >
+              ← Précédent
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+              className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-30 transition-all shadow-md shadow-blue-100"
+            >
+              Suivant →
+            </button>
+          </div>
+        </div>
+
         {/* Modal confirmation fin de suivi */}
         {showFinishConfirmModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -860,14 +772,9 @@ const PatientTreatments = () => {
             </div>
           </div>
         )}
-
-
       </div>
     </Layout>
   );
 };
 
 export default PatientTreatments;
-
-;
-

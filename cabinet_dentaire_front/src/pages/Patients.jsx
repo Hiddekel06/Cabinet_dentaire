@@ -21,16 +21,22 @@ const treatmentOptions = [
 const Patients = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // États de données
   const [patients, setPatients] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [patientsLoading, setPatientsLoading] = useState(true);
   const [patientsError, setPatientsError] = useState('');
+
+  // États de filtres et tri
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedTreatment, setSelectedTreatment] = useState('all');
-  const [sortBy, setSortBy] = useState('name');
+  const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
+
+  // États UI
   const [openMenu, setOpenMenu] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
@@ -38,6 +44,7 @@ const Patients = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const successTimeoutRef = useRef(null);
 
+  // Helpers
   const formatDate = (value) => {
     if (!value) return '';
     const d = new Date(value);
@@ -66,6 +73,19 @@ const Patients = () => {
     amber: 'bg-amber-50 text-amber-700 border-amber-100',
   };
 
+  const calculateAge = (dob) => {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    if (Number.isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   const mapPatient = (p) => ({
     apiId: p.id,
     id: `N°${p.id}`,
@@ -77,66 +97,49 @@ const Patients = () => {
     status: p.status || 'Nouveau',
     color: statusToColor(p.status),
     timeAgo: '',
+    age: calculateAge(p.date_of_birth),
+    generalState: p.general_state,
   });
 
-  useEffect(() => {
-    const loadPatients = async () => {
-      setPatientsLoading(true);
-      setPatientsError('');
-      try {
-        const { data } = await patientAPI.getAll(page, { search: searchTerm.trim(), per_page: 5 });
-        const list = Array.isArray(data?.data) ? data.data : [];
-        setPatients(list.map(mapPatient));
-        setTotalPages(data?.last_page || 1);
-      } catch (error) {
-        console.error('Erreur chargement patients:', error);
-        setPatientsError('Impossible de charger les patients.');
-      } finally {
-        setPatientsLoading(false);
-      }
-    };
-    loadPatients();
-  }, [page, searchTerm]);
+  // Chargement des données optimisé (Côté serveur)
+  const reloadPatients = async () => {
+    setPatientsLoading(true);
+    setPatientsError('');
+    try {
+      // Mapping des champs de tri vers le backend
+      const backendSortMap = {
+        name: 'last_name',
+        date: 'last_visit_date_precalc',
+        status: 'id'
+      };
 
+      const { data } = await patientAPI.getAll(page, { 
+        search: searchTerm.trim(), 
+        per_page: 10,
+        sort_by: backendSortMap[sortBy] || 'id',
+        sort_order: sortOrder,
+        status: selectedStatus !== 'all' ? selectedStatus : undefined
+      });
+      
+      const list = Array.isArray(data?.data) ? data.data : [];
+      setPatients(list.map(mapPatient));
+      setTotalPages(data?.last_page || 1);
+    } catch (error) {
+      console.error('Erreur chargement patients:', error);
+      setPatientsError('Impossible de charger les patients.');
+    } finally {
+      setPatientsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reloadPatients();
+  }, [page, searchTerm, selectedStatus, sortBy, sortOrder]);
+
+  // Réinitialiser la page quand on change de recherche ou de filtre
   useEffect(() => {
     setPage(1);
-  }, [searchTerm]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      const isInsideMenu = event.target.closest('[data-patient-menu="true"]');
-      if (!isInsideMenu) {
-        setOpenMenu(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    const incomingSuccess = location.state?.success;
-    if (!incomingSuccess) return;
-
-    setSuccessMessage(incomingSuccess);
-    navigate(location.pathname, { replace: true, state: {} });
-
-    if (successTimeoutRef.current) {
-      clearTimeout(successTimeoutRef.current);
-    }
-    successTimeoutRef.current = setTimeout(() => {
-      setSuccessMessage('');
-      successTimeoutRef.current = null;
-    }, 3500);
-  }, [location.pathname, location.state, navigate]);
-
-  useEffect(() => {
-    return () => {
-      if (successTimeoutRef.current) {
-        clearTimeout(successTimeoutRef.current);
-      }
-    };
-  }, []);
+  }, [searchTerm, selectedStatus]);
 
   const handleEdit = async (patient) => {
     if (!patient?.apiId) return;
@@ -165,72 +168,23 @@ const Patients = () => {
     }
   };
 
-  const reloadPatients = async () => {
-    setPatientsLoading(true);
-    setPatientsError('');
-    try {
-      const { data } = await patientAPI.getAll(page, { search: searchTerm.trim(), per_page: 5 });
-      const list = Array.isArray(data?.data) ? data.data : [];
-      setPatients(list.map(mapPatient));
-      setTotalPages(data?.last_page || 1);
-    } catch (error) {
-      console.error('Erreur chargement patients:', error);
-      setPatientsError('Impossible de charger les patients.');
-    } finally {
-      setPatientsLoading(false);
-    }
-  };
-
   const filteredPatients = useMemo(() => {
+    // Filtrage/Tri gérés par le serveur désormais. 
+    // On pourrait encore filtrer localement par 'selectedTreatment' si non géré par le backend
     let results = [...patients];
-
-    // Filtre par statut
-    if (selectedStatus !== 'all') {
-      results = results.filter(patient => patient.status === selectedStatus);
-    }
-
-    // Filtre par traitement
     if (selectedTreatment !== 'all') {
-      results = results.filter(patient => patient.treatment === selectedTreatment);
+      results = results.filter(p => p.treatment === selectedTreatment);
     }
-
-    // Tri
-    results.sort((a, b) => {
-      let aValue, bValue;
-      
-      switch (sortBy) {
-        case 'name':
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
-          break;
-        case 'date':
-          aValue = a.date ? new Date(a.date.split('/').reverse().join('-')).getTime() : 0;
-          bValue = b.date ? new Date(b.date.split('/').reverse().join('-')).getTime() : 0;
-          break;
-        case 'status':
-          aValue = a.status;
-          bValue = b.status;
-          break;
-        default:
-          return 0;
-      }
-
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
-    });
-
     return results;
-  }, [patients, selectedStatus, selectedTreatment, sortBy, sortOrder]);
+  }, [patients, selectedTreatment]);
 
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedStatus('all');
     setSelectedTreatment('all');
-    setSortBy('name');
+    setSortBy('date');
     setSortOrder('desc');
+    setPage(1);
   };
 
   const toggleSort = (field) => {
@@ -238,18 +192,15 @@ const Patients = () => {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
       setSortBy(field);
-      setSortOrder('asc');
+      setSortOrder('desc');
     }
   };
 
   const handleRowClick = async (patient) => {
     if (!patient?.apiId) return;
     try {
-      // Chercher un traitement actif (planned ou in_progress)
       const res = await patientTreatmentAPI.getAll({ patient_id: patient.apiId, per_page: 1 });
       const list = Array.isArray(res?.data?.data) ? res.data.data : (res?.data || []);
-      
-      // Filtrer seulement les traitements actifs (pas completed/cancelled)
       const activeTreatment = list.find(t => ['planned', 'in_progress'].includes(t.status));
       
       if (activeTreatment && activeTreatment.id) {
@@ -265,10 +216,9 @@ const Patients = () => {
 
   return (
     <Layout>
-
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Liste des patients</h1>
-        <p className="text-gray-600 mt-1">Gérez et suivez tous vos patients</p>
+        <p className="text-gray-600 mt-1">Gérez et suivez tous vos patients (Optimisé)</p>
       </div>
 
       {successMessage && (
@@ -277,460 +227,117 @@ const Patients = () => {
         </div>
       )}
 
-      {/* Modale de confirmation de suppression */}
+      {/* Modale Suppression */}
       {showDeleteConfirmation && patientToDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
-          onClick={() => setShowDeleteConfirmation(false)}
-        >
-          <div
-            className="relative w-full max-w-sm mx-2 bg-white rounded-lg shadow-lg border border-red-100"
-            onClick={e => e.stopPropagation()}
-          >
-            <button
-              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
-              onClick={() => setShowDeleteConfirmation(false)}
-              aria-label="Fermer"
-              type="button"
-            >
-              &times;
-            </button>
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100">
-                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0-12a9 9 0 110 18 9 9 0 010-18z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">Supprimer le patient</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowDeleteConfirmation(false)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 border border-red-100" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-red-50 text-red-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               </div>
-              <div className="mb-6">
-                <p className="text-sm text-gray-600 mb-4">
-                  Êtes-vous sûr de vouloir supprimer ce patient ? Cette action est irréversible.
-                </p>
-                <div className="bg-red-50 rounded-lg p-4 space-y-2 mb-4 border border-red-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Patient :</span>
-                    <span className="text-sm font-semibold text-gray-900">{patientToDelete.name}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Téléphone :</span>
-                    <span className="text-sm font-semibold text-gray-900">{patientToDelete.phone || '-'}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
-                  onClick={() => setShowDeleteConfirmation(false)}
-                  disabled={deleteLoading}
-                >
-                  Annuler
-                </button>
-                <button
-                  className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                  onClick={confirmDelete}
-                  disabled={deleteLoading}
-                >
-                  {deleteLoading ? (
-                    <>
-                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v2m0 12v2m8-8h-2m-12 0H4m12.364-6.364l-1.414 1.414M8.05 15.95l-1.414 1.414m0-11.314l1.414 1.414m7.9 7.9l1.414 1.414" />
-                      </svg>
-                      Suppression...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      Supprimer
-                    </>
-                  )}
-                </button>
-              </div>
+              <h3 className="text-lg font-bold text-gray-900">Supprimer le patient</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-6">Souhaitez-vous vraiment supprimer <strong>{patientToDelete.name}</strong> ?</p>
+            <div className="flex gap-3 justify-end">
+              <button className="px-4 py-2 text-gray-500 font-bold hover:bg-gray-50 rounded-xl" onClick={() => setShowDeleteConfirmation(false)}>Annuler</button>
+              <button className="px-5 py-2 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-lg shadow-red-200" onClick={confirmDelete} disabled={deleteLoading}>{deleteLoading ? '...' : 'Supprimer'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Barre de recherche et filtres */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
+      {/* Filtres */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-6">
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Barre de recherche */}
-          <div className="flex-1">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Rechercher un patient par nom ou téléphone..."
-                className="block w-full pl-10 pr-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-normal placeholder-gray-400"
-                style={{ maxWidth: 260, fontFamily: 'Inter, Arial, sans-serif' }}
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                >
-                  <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
+          <div className="flex-1 relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             </div>
+            <input
+              type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Rechercher nom ou téléphone..."
+              className="block w-full pl-10 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+            />
           </div>
-
-          {/* Filtres */}
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-wrap gap-3">
             <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="px-3 py-1.5 text-sm font-medium border border-blue-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white shadow-sm hover:border-blue-400"
-              style={{ minWidth: 170, fontFamily: 'Inter, Arial, sans-serif' }}
+              value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}
+              className="px-3 py-2 text-sm font-semibold border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {statusOptions.map(option => (
-                <option
-                  key={option.value}
-                  value={option.value}
-                  className={
-                    selectedStatus === option.value
-                      ? 'bg-blue-50 text-blue-700 font-semibold'
-                      : 'bg-white text-gray-700'
-                  }
-                >
-                  {option.label}
-                </option>
-              ))}
+              {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-
-            <select
-              value={selectedTreatment}
-              onChange={(e) => setSelectedTreatment(e.target.value)}
-              className="px-3 py-1.5 text-sm font-medium border border-blue-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white shadow-sm hover:border-blue-400"
-              style={{ minWidth: 170, fontFamily: 'Inter, Arial, sans-serif' }}
-            >
-              {treatmentOptions.map(option => (
-                <option
-                  key={option.value}
-                  value={option.value}
-                  className={
-                    selectedTreatment === option.value
-                      ? 'bg-blue-50 text-blue-700 font-semibold'
-                      : 'bg-white text-gray-700'
-                  }
-                >
-                  {option.label}
-                </option>
-              ))}
-            </select>
-
-            <button
-              onClick={clearFilters}
-              className="px-3 py-1.5 text-sm font-medium border border-gray-300 text-gray-700 rounded-md bg-white shadow-sm hover:bg-gray-50 hover:border-blue-400 transition-colors flex items-center gap-2"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Réinitialiser
-            </button>
-          </div>
-        </div>
-
-        {/* Résumé des filtres */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-600">
-              {filteredPatients.length} patient{filteredPatients.length !== 1 ? 's' : ''} trouvé{filteredPatients.length !== 1 ? 's' : ''}
-            </span>
-            {(searchTerm || selectedStatus !== 'all' || selectedTreatment !== 'all') && (
-              <div className="flex flex-wrap gap-2">
-                {searchTerm && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
-                    Recherche: "{searchTerm}"
-                    <button onClick={() => setSearchTerm('')} className="hover:text-blue-900">
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </span>
-                )}
-                {selectedStatus !== 'all' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 text-xs rounded-full">
-                    Statut: {statusOptions.find(s => s.value === selectedStatus)?.label}
-                    <button onClick={() => setSelectedStatus('all')} className="hover:text-emerald-900">
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </span>
-                )}
-                {selectedTreatment !== 'all' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 text-xs rounded-full">
-                    Traitement: {selectedTreatment}
-                    <button onClick={() => setSelectedTreatment('all')} className="hover:text-amber-900">
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Options de tri */}
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600">Trier par:</span>
-            <div className="flex gap-1">
-              {['date', 'name', 'status'].map((field) => (
-                <button
-                  key={field}
-                  onClick={() => toggleSort(field)}
-                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                    sortBy === field
-                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                      : 'text-gray-600 hover:bg-gray-100 border border-transparent'
-                  }`}
-                >
-                  {field === 'date' && 'Date'}
-                  {field === 'name' && 'Nom'}
-                  {field === 'status' && 'Statut'}
-                  {sortBy === field && (
-                    <span className="ml-1">
-                      {sortOrder === 'asc' ? '↑' : '↓'}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+            <button onClick={clearFilters} className="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-50 rounded-xl border border-gray-200 transition-colors">Réinitialiser</button>
           </div>
         </div>
       </div>
 
-      {/* Tableau des patients */}
-      <div className="relative overflow-hidden rounded-2xl border border-blue-100 shadow-lg bg-linear-to-br from-white/80 via-blue-50/60 to-white/90 backdrop-blur-sm transition-all duration-300 group hover:shadow-2xl hover:border-blue-200">
-        <div className="px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Patients</h2>
-            <p className="text-gray-500 text-sm mt-1">Liste complète des patients enregistrés</p>
-          </div>
-          <div className="mt-3 sm:mt-0 flex space-x-2">
-            <button
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-orange-500 text-sm font-medium rounded-lg bg-orange-50 hover:bg-orange-100 transition-colors cursor-pointer select-none border border-orange-100"
-              onClick={() => navigate('/patients/new')}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Nouveau patient
-            </button>
-          </div>
+      {/* Tableau */}
+      <div className="bg-white rounded-3xl border border-blue-50 shadow-xl overflow-hidden">
+        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-white to-blue-50/30">
+          <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Registre Patients</h2>
+          <button onClick={() => navigate('/patients/new')} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+            Nouveau
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="text-left py-3 px-4 text-gray-600 font-medium text-xs uppercase tracking-wider">
-                  <button 
-                    onClick={() => toggleSort('name')}
-                    className="flex items-center hover:text-gray-900 transition-colors"
-                  >
-                    <span>Patient</span>
-                    <svg className={`w-4 h-4 ml-1 ${sortBy === 'name' ? 'text-blue-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                    </svg>
-                  </button>
-                </th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium text-xs uppercase tracking-wider">Contact</th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium text-xs uppercase tracking-wider">
-                  <button 
-                    onClick={() => toggleSort('date')}
-                    className="flex items-center hover:text-gray-900 transition-colors"
-                  >
-                    <span>Dernière visite</span>
-                    <svg className={`w-4 h-4 ml-1 ${sortBy === 'date' ? 'text-blue-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                    </svg>
-                  </button>
-                </th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium text-xs uppercase tracking-wider">
-                  <button 
-                    onClick={() => toggleSort('status')}
-                    className="flex items-center hover:text-gray-900 transition-colors"
-                  >
-                    <span>Statut</span>
-                    <svg className={`w-4 h-4 ml-1 ${sortBy === 'status' ? 'text-blue-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                    </svg>
-                  </button>
-                </th>
-                <th className="text-left py-3 px-4 text-gray-600 font-medium text-xs uppercase tracking-wider"></th>
+              <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                <th className="py-4 px-6 text-left cursor-pointer hover:text-blue-600" onClick={() => toggleSort('name')}>Patient {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                <th className="py-4 px-6 text-left">Contact</th>
+                <th className="py-4 px-6 text-left cursor-pointer hover:text-blue-600" onClick={() => toggleSort('date')}>Dernière Visite {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                <th className="py-4 px-6 text-left">Statut</th>
+                <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-slate-100">
               {patientsLoading ? (
-                <tr>
-                  <td colSpan="5" className="py-10 text-center">
-                    <div className="flex items-center justify-center gap-2 text-gray-500">
-                      <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v2m0 12v2m8-8h-2M6 12H4m12.364-6.364-1.414 1.414M8.05 15.95l-1.414 1.414m0-11.314 1.414 1.414m7.9 7.9 1.414 1.414" />
-                      </svg>
-                      Chargement des patients...
-                    </div>
-                  </td>
-                </tr>
-              ) : patientsError ? (
-                <tr>
-                  <td colSpan="5" className="py-10 text-center text-red-600">
-                    {patientsError}
-                  </td>
-                </tr>
-              ) : filteredPatients.length > 0 ? (
-                filteredPatients.map((patient, index) => (
-                    <tr key={patient.apiId || index} onClick={() => handleRowClick(patient)} className="hover:bg-gray-50 transition-colors duration-150 group cursor-pointer">
-                    <td className="py-4 px-4">
-                      <div className="flex items-center">
-                        <div className="relative">
-                          <div className="w-8 h-8 bg-linear-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center mr-3 group-hover:scale-105 transition-transform duration-200">
-                            <span className="font-semibold text-blue-600 text-xs">{patient.initials}</span>
-                          </div>
-                          {patient.status === 'Nouveau' && (
-                            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></div>
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 text-xs truncate max-w-35">{patient.name}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
+                <tr><td colSpan="5" className="py-20 text-center font-bold text-slate-400 animate-pulse">Chargement intelligent...</td></tr>
+              ) : filteredPatients.map(p => (
+                <tr key={p.apiId} onClick={() => handleRowClick(p)} className="hover:bg-blue-50/40 transition-colors cursor-pointer group">
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-black text-xs">{p.initials}</div>
                       <div>
-                        <p className="font-medium text-gray-900 text-sm flex items-center">
-                          <svg className="w-3 h-3 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                          {patient.phone}
+                        <p className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                          {p.name}
+                          {p.age && <span className="text-slate-400 font-medium">({p.age} ans)</span>}
+                          {p.generalState && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>}
                         </p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{p.id}</p>
                       </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      {patient.date && patient.date !== '-' ? (
-                        <span className="text-sm font-bold text-blue-700">{patient.date}</span>
-                      ) : (
-                        <span className="text-sm font-medium text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${colorClasses[patient.color] || colorClasses.blue}`}>
-                        {patient.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <div className="relative inline-flex" data-patient-menu="true">
-                        <button
-                          className="text-gray-400 hover:text-gray-600 transition-colors"
-                          onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === patient.apiId ? null : patient.apiId); }}
-                          title="Actions"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                          </svg>
-                        </button>
-                        {openMenu === patient.apiId && (
-                          <div className="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleEdit(patient); setOpenMenu(null); }}
-                              className="w-full text-left px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                              Modifier
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); navigate(`/ordonnances/new?patient_id=${patient.apiId}`); setOpenMenu(null); }}
-                              className="w-full text-left px-4 py-2 text-sm text-emerald-600 hover:bg-emerald-50 flex items-center gap-2 transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              Créer ordonnance
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); navigate(`/medical-certificates/new?patient_id=${patient.apiId}`); setOpenMenu(null); }}
-                              className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              Créer certificat
-                            </button>
-                            <div className="border-t border-gray-100 my-1"></div>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDelete(patient); setOpenMenu(null); }}
-                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                              Supprimer
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="5" className="py-12 text-center">
-                    <div className="flex flex-col items-center justify-center">
-                      <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <p className="text-gray-500 text-lg font-medium mb-2">Aucun patient trouvé</p>
-                      <p className="text-gray-400 text-sm">Essayez de modifier vos critères de recherche</p>
-                      <button
-                        onClick={clearFilters}
-                        className="mt-4 px-4 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        Réinitialiser tous les filtres
-                      </button>
                     </div>
                   </td>
+                  <td className="py-4 px-6 text-sm font-medium text-slate-600">{p.phone}</td>
+                  <td className="py-4 px-6"><span className="text-sm font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">{p.date}</span></td>
+                  <td className="py-4 px-6">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${colorClasses[p.color] || colorClasses.blue}`}>
+                      {p.status}
+                    </span>
+                  </td>
+                  <td className="py-4 px-6 text-right relative" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setOpenMenu(openMenu === p.apiId ? null : p.apiId)} className="p-2 hover:bg-white rounded-lg transition-colors"><svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg></button>
+                    {openMenu === p.apiId && (
+                      <div className="absolute right-6 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <button className="w-full text-left px-4 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-50" onClick={() => handleEdit(p)}>Modifier dossier</button>
+                        <button className="w-full text-left px-4 py-2 text-sm font-bold text-emerald-600 hover:bg-emerald-50" onClick={() => navigate(`/ordonnances/new?patient_id=${p.apiId}`)}>Ordonnance</button>
+                        <button className="w-full text-left px-4 py-2 text-sm font-bold text-blue-600 hover:bg-blue-50" onClick={() => navigate(`/medical-certificates/new?patient_id=${p.apiId}`)}>Certificat</button>
+                        <div className="h-px bg-slate-100 my-1"></div>
+                        <button className="w-full text-left px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50" onClick={() => handleDelete(p)}>Supprimer</button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
-        {/* Pagination */}
-        <div className="px-8 py-4 border-t border-blue-100 flex items-center justify-between mt-2">
-          <p className="text-gray-500 text-sm">Page {page} sur {totalPages} | Affichage de {patients.length} patient{patients.length !== 1 ? 's' : ''}</p>
-          <div className="flex space-x-2">
-            <button
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              disabled={page <= 1}
-              onClick={() => setPage(page - 1)}
-            >
-              ← Précédent
-            </button>
-            <button
-              className="px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 hover:shadow-md rounded-lg transition-all duration-200 flex items-center gap-1"
-              disabled={page >= totalPages}
-              onClick={() => setPage(page + 1)}
-            >
-              <span>Suivant</span>
-              <svg className="w-4 h-4 text-blue-500 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+        <div className="px-6 py-5 border-t border-slate-50 bg-slate-50/30 flex justify-between items-center">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Page {page} / {totalPages}</p>
+          <div className="flex gap-2">
+            <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="px-4 py-2 text-xs font-black uppercase tracking-widest bg-white border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-30 transition-all shadow-sm">Précédent</button>
+            <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="px-4 py-2 text-xs font-black uppercase tracking-widest bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-30 transition-all shadow-lg shadow-blue-200">Suivant</button>
           </div>
         </div>
       </div>
@@ -738,4 +345,4 @@ const Patients = () => {
   );
 };
 
-export default Patients;ents;
+export default Patients;

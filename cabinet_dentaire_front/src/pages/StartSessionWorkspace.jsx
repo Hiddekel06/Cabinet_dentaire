@@ -215,6 +215,19 @@ const StartSessionWorkspace = () => {
     }
   };
 
+  const calculateAge = (dob) => {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    if (Number.isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   if (loadingData) {
     return (
       <Layout>
@@ -255,10 +268,25 @@ const StartSessionWorkspace = () => {
                 </svg>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">Ajouter une séance</h1>
-                <p className="text-xs text-slate-300 mt-0.5 font-medium">
-                  {treatment.patient?.first_name} {treatment.patient?.last_name} — {treatment.name}
-                </p>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  Ajouter une séance
+                  {treatment.patient?.date_of_birth && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-800 text-slate-400 rounded border border-slate-700">
+                      {calculateAge(treatment.patient.date_of_birth)} ans
+                    </span>
+                  )}
+                </h1>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <p className="text-xs text-slate-300 font-medium">
+                    {treatment.patient?.first_name} {treatment.patient?.last_name} — {treatment.name}
+                  </p>
+                  {treatment.patient?.general_state && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] font-bold text-amber-500 animate-pulse">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.998-.833-2.732 0L4.346 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                      {treatment.patient.general_state}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <span className="text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-sm">

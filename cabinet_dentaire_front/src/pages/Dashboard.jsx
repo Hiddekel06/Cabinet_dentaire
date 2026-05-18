@@ -202,6 +202,19 @@ export const Dashboard = () => {
     }
   };
 
+  const calculateAge = (dob) => {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    if (Number.isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   const cardItems = [
     {
       label: 'Patients totaux',
@@ -511,7 +524,15 @@ export const Dashboard = () => {
                                       <span className="font-semibold text-blue-600 text-xs">{getInitials(fullName)}</span>
                                     </div>
                                     <div>
-                                      <p className="font-medium text-gray-900 text-xs truncate max-w-[150px]">{fullName}</p>
+                                      <p className="font-medium text-gray-900 text-xs truncate max-w-[150px] flex items-center gap-1.5">
+                                        {fullName}
+                                        {patient.date_of_birth && (
+                                          <span className="text-gray-400 font-normal">({calculateAge(patient.date_of_birth)} ans)</span>
+                                        )}
+                                        {patient.general_state && (
+                                          <span className="flex-shrink-0 w-2 h-2 rounded-full bg-amber-400" title={`État général : ${patient.general_state}`}></span>
+                                        )}
+                                      </p>
                                       <p className="text-gray-500 text-xs mt-0.5">{patient.display_id}</p>
                                     </div>
                                   </div>
@@ -782,22 +803,21 @@ export const Dashboard = () => {
 
         {selectedRecentPatient && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backdropFilter: 'blur(6px)', background: 'rgba(0,0,0,0.25)' }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
             onClick={closePatientModal}
           >
             <div
-              className="w-full max-w-2xl rounded-2xl border border-blue-100 bg-white shadow-2xl"
+              className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border border-blue-100 bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between px-6 py-5 border-b border-gray-200">
+              <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100 bg-slate-50/50">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">Détails patient</h3>
-                  <p className="text-sm text-gray-500 mt-1">Informations complètes du patient récent</p>
+                  <p className="text-sm text-gray-500 mt-1 font-medium tracking-tight">Informations complètes du dossier</p>
                 </div>
                 <button
                   onClick={closePatientModal}
-                  className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-all text-2xl leading-none shadow-sm"
                   aria-label="Fermer"
                   type="button"
                 >
@@ -805,48 +825,66 @@ export const Dashboard = () => {
                 </button>
               </div>
 
-              <div className="px-6 py-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Identifiant</p>
-                  <p className="text-sm font-medium text-gray-900 mt-1">{selectedRecentPatient.display_id || '-'}</p>
+              <div className="px-6 py-6 overflow-y-auto custom-scrollbar flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white">
+                <div className="rounded-2xl border border-gray-100 p-4 bg-slate-50 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Identifiant</p>
+                  <p className="text-sm font-bold text-gray-900">{selectedRecentPatient.display_id || '-'}</p>
                 </div>
-                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Nom complet</p>
-                  <p className="text-sm font-medium text-gray-900 mt-1">
-                    {`${selectedRecentPatient.first_name || ''} ${selectedRecentPatient.last_name || ''}`.trim() || '-'}
+                <div className="rounded-2xl border border-gray-100 p-4 bg-slate-50 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Nom complet</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-bold text-gray-900">
+                      {`${selectedRecentPatient.first_name || ''} ${selectedRecentPatient.last_name || ''}`.trim() || '-'}
+                    </p>
+                    {selectedRecentPatient.date_of_birth && (
+                      <span className="text-[10px] text-blue-600 bg-blue-100/50 border border-blue-200 px-2 py-0.5 rounded-lg font-black uppercase tracking-tighter">
+                        {calculateAge(selectedRecentPatient.date_of_birth)} ans
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-gray-100 p-4 bg-slate-50 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Téléphone</p>
+                  <p className="text-sm font-bold text-gray-900">{selectedRecentPatient.phone || '-'}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-100 p-4 bg-slate-50 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Email</p>
+                  <p className="text-sm font-bold text-gray-900 break-all">{selectedRecentPatient.email || '-'}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-100 p-4 bg-slate-50 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Dernière visite</p>
+                  <p className="text-sm font-bold text-gray-900">{formatDate(selectedRecentPatient.last_appointment_date)}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-100 p-4 bg-slate-50 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Dernier traitement</p>
+                  <p className="text-sm font-bold text-gray-900">{selectedRecentPatient.last_treatment || '-'}</p>
+                </div>
+                
+                <div className="rounded-2xl border border-amber-100 p-4 bg-amber-50 sm:col-span-2 shadow-sm">
+                  <div className="flex items-center gap-2 text-amber-600 mb-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.998-.833-2.732 0L4.346 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <p className="text-[10px] font-black uppercase tracking-widest">État général</p>
+                  </div>
+                  <p className="text-sm font-medium text-amber-900 italic leading-relaxed">
+                    {selectedRecentPatient.general_state || 'Aucun antécédent particulier renseigné.'}
                   </p>
                 </div>
-                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Téléphone</p>
-                  <p className="text-sm font-medium text-gray-900 mt-1">{selectedRecentPatient.phone || '-'}</p>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Email</p>
-                  <p className="text-sm font-medium text-gray-900 mt-1 break-all">{selectedRecentPatient.email || '-'}</p>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Dernière visite</p>
-                  <p className="text-sm font-medium text-gray-900 mt-1">{formatDate(selectedRecentPatient.last_appointment_date)}</p>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Dernier traitement</p>
-                  <p className="text-sm font-medium text-gray-900 mt-1">{selectedRecentPatient.last_treatment || '-'}</p>
-                </div>
-                <div className="md:col-span-2 rounded-lg border border-gray-200 p-3 bg-gray-50">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Statut</p>
-                  <div className="mt-2">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${statusClasses[selectedRecentPatient.status_label] || statusClasses.Nouveau}`}>
-                      {selectedRecentPatient.status_label || 'Nouveau'}
-                    </span>
-                  </div>
+
+                <div className="sm:col-span-2 rounded-2xl border border-gray-100 p-4 bg-slate-50 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Statut actuel</p>
+                  <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest border ${statusClasses[selectedRecentPatient.status_label] || statusClasses.Nouveau}`}>
+                    {selectedRecentPatient.status_label || 'Nouveau'}
+                  </span>
                 </div>
               </div>
 
-              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+              <div className="px-6 py-5 bg-slate-50 border-t border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={closePatientModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 bg-white hover:bg-gray-50 rounded-lg transition-all duration-200"
+                  className="px-6 py-3 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
                 >
                   Fermer
                 </button>
@@ -854,9 +892,19 @@ export const Dashboard = () => {
                   type="button"
                   onClick={continueTreatment}
                   disabled={continuingTreatment}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200"
+                  className="px-6 py-3 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-2xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2"
                 >
-                  {continuingTreatment ? 'Ouverture...' : 'Continuer le traitement'}
+                  {continuingTreatment ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      Ouverture...
+                    </>
+                  ) : (
+                    <>
+                      Continuer le traitement
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
