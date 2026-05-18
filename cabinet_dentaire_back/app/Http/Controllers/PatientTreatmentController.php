@@ -8,6 +8,7 @@ use App\Models\InvoiceItem;
 use App\Models\PatientTreatmentAct;
 use App\Models\PatientTreatment;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class PatientTreatmentController extends Controller
@@ -152,7 +153,8 @@ class PatientTreatmentController extends Controller
         $appointmentId = null;
         if (!empty($validated['next_appointment_date'])) {
             // Empêcher la création d'un rendez-vous à une date passée
-            if (strtotime($validated['next_appointment_date']) < time()) {
+            $nextAppointmentDate = Carbon::parse($validated['next_appointment_date'])->toDateString();
+            if ($nextAppointmentDate < Carbon::today()->toDateString()) {
                 return response()->json(['message' => 'Impossible de créer un rendez-vous dans le passé.'], 422);
             }
 
