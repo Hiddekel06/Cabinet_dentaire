@@ -196,17 +196,20 @@ export const radiographyAPI = {
 
 // Endpoints pour les rendez-vous
 export const appointmentAPI = {
-  getAll: (page = 1) => {
-    const cacheKey = `appointments:${page}`;
+  getAll: (params = {}) => {
+    // Si params est un nombre, on le convertit en objet pour la compatibilité
+    const p = typeof params === 'number' ? { page: params } : params;
+    const query = new URLSearchParams(p).toString();
+    const cacheKey = `appointments:${query}`;
+
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-    
-    return api.get(`/api/appointments?page=${page}`).then(res => {
+
+    return api.get(`/api/appointments?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
   },
-
   getByDate: (date) => {
     const queryDate = encodeURIComponent(date);
     const cacheKey = `appointments:date:${queryDate}`;
