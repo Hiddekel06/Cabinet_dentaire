@@ -42,35 +42,35 @@
         }
 
         .header-meta {
-            width: 210px;
+            width: 280px;
             text-align: right;
-            margin-left: -6px; /* slight left shift if space is tight */
+            padding-left: 230px;
         }
 
-        .meta-line {
-            margin-top: 6px;
+        .meta-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .meta-table td {
+            padding-top: 5px;
             font-size: 9.5pt;
-            color: #475569;
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
-            align-items: center;
+            vertical-align: top;
         }
 
-        .meta-line .label {
+        .meta-table .label {
             width: 70px;
             text-align: left;
             font-weight: bold;
             color: #334155;
         }
 
-        .meta-line .value {
-            flex: 1;
-            text-align: right;
+        .meta-table .value {
+            text-align: left;
+            padding-left: 2px;
             color: #0f172a;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            word-break: break-word;
         }
 
         .cabinet-name {
@@ -111,14 +111,6 @@
             font-size: 13pt;
             font-weight: bold;
             color: #0f172a;
-        }
-
-        .meta-line {
-            margin-top: 6px;
-            font-size: 9.5pt;
-            color: black;
-            text-align: right;
-            font-weight: bold;
         }
 
         .section-title {
@@ -192,11 +184,24 @@
             <p class="cabinet-name">Téléphone : {{ $cabinetPhone }}</p>
         </td>
         <td class="header-meta">
-            <div style="text-align: right;">
-                <div class="meta-line"><span class="label">Date :</span><span class="value">{{ $issueDate }}</span></div>
-                <div class="meta-line"><span class="label">Nom :</span><span class="value">{{ $patientFullName }}</span></div>
-                <div class="meta-line"><span class="label">Âge :</span><span class="value">@if(!is_null($patientAge)) {{ $patientAge }} ans @else <span class="muted">Non renseigné</span> @endif</span></div>
-            </div>
+            <table class="meta-table">
+                <tr>
+                    <td class="label">Date :</td>
+                    <td class="value">{{ $issueDate }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Prénom :</td>
+                    <td class="value">{{ $patientFirstName }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Nom :</td>
+                    <td class="value">{{ $patientLastName }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Âge :</td>
+                    <td class="value">@if(!is_null($patientAge)) {{ $patientAge }} ans @else <span class="muted">Non renseigné</span> @endif</td>
+                </tr>
+            </table>
         </td>
     </tr>
 </table>
