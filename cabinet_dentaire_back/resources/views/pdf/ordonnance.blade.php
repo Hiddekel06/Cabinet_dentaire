@@ -178,6 +178,16 @@
         <td class="label">Nom complet</td>
         <td>{{ $patientFullName }}</td>
     </tr>
+    <tr>
+        <td class="label">Âge</td>
+        <td>
+            @if(!is_null($patientAge))
+                {{ $patientAge }} ans
+            @else
+                <span class="muted">Non renseigné</span>
+            @endif
+        </td>
+    </tr>
 </table>
 
 <div class="section-title">Prescription</div>

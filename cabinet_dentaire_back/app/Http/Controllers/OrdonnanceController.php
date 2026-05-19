@@ -244,6 +244,9 @@ class OrdonnanceController extends Controller
         $patientFirstName = (string) ($ordonnance->patient->first_name ?? '');
         $patientLastName = (string) ($ordonnance->patient->last_name ?? '');
         $patientFullName = trim($patientFirstName . ' ' . $patientLastName);
+        $patientAge = $ordonnance->patient?->date_of_birth
+            ? $ordonnance->patient->date_of_birth->age
+            : null;
 
         $items = $ordonnance->items->map(function ($item) {
             return [
@@ -266,6 +269,7 @@ class OrdonnanceController extends Controller
             'patientFirstName' => (string) ($customVariables['patient_first_name'] ?? $patientFirstName),
             'patientLastName' => (string) ($customVariables['patient_last_name'] ?? $patientLastName),
             'patientFullName' => (string) ($customVariables['patient_full_name'] ?? $patientFullName),
+            'patientAge' => $patientAge,
             'doctorName' => (string) ($customVariables['doctor_name'] ?? $defaultDoctorName),
             'notes' => (string) ($customVariables['notes'] ?? ($ordonnance->notes ?? '')),
             'itemsText' => (string) ($customVariables['items_text'] ?? $this->buildItemsText($ordonnance)),
