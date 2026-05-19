@@ -43,6 +43,34 @@
 
         .header-meta {
             width: 210px;
+            text-align: right;
+            margin-left: -6px; /* slight left shift if space is tight */
+        }
+
+        .meta-line {
+            margin-top: 6px;
+            font-size: 9.5pt;
+            color: #475569;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .meta-line .label {
+            width: 70px;
+            text-align: left;
+            font-weight: bold;
+            color: #334155;
+        }
+
+        .meta-line .value {
+            flex: 1;
+            text-align: right;
+            color: #0f172a;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .cabinet-name {
@@ -88,8 +116,9 @@
         .meta-line {
             margin-top: 6px;
             font-size: 9.5pt;
-            color: #475569;
+            color: black;
             text-align: right;
+            font-weight: bold;
         }
 
         .section-title {
@@ -163,32 +192,16 @@
             <p class="cabinet-name">Téléphone : {{ $cabinetPhone }}</p>
         </td>
         <td class="header-meta">
-            <div class="ordonnance-box">
-                <span class="label">Ordonnance</span>
-                <span class="value">N° {{ $ordonnanceId }}</span>
+            <div style="text-align: right;">
+                <div class="meta-line"><span class="label">Date :</span><span class="value">{{ $issueDate }}</span></div>
+                <div class="meta-line"><span class="label">Nom :</span><span class="value">{{ $patientFullName }}</span></div>
+                <div class="meta-line"><span class="label">Âge :</span><span class="value">@if(!is_null($patientAge)) {{ $patientAge }} ans @else <span class="muted">Non renseigné</span> @endif</span></div>
             </div>
-            <div class="meta-line">Date : {{ $issueDate }}</div>
         </td>
     </tr>
 </table>
 
-<div class="section-title">Patient</div>
-<table class="patient-table">
-    <tr>
-        <td class="label">Nom complet</td>
-        <td>{{ $patientFullName }}</td>
-    </tr>
-    <tr>
-        <td class="label">Âge</td>
-        <td>
-            @if(!is_null($patientAge))
-                {{ $patientAge }} ans
-            @else
-                <span class="muted">Non renseigné</span>
-            @endif
-        </td>
-    </tr>
-</table>
+<div style="text-align:center; font-weight:bold; font-size:18pt; margin: 22px 0 18px 0;">ORDONNANCE</div>
 
 <div class="section-title">Prescription</div>
 <table class="items-table">
