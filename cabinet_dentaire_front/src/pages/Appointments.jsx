@@ -1398,7 +1398,9 @@ const Appointments = () => {
 
               <div className="grid grid-cols-1 gap-3">
                 <button
-                  onClick={() => navigate(`/treatments/${validationData.treatment.id}/session`)}
+                  onClick={() => navigate(`/treatments/${validationData.treatment.id}/session`, { 
+                    state: { defaultTreatmentPerformed: validationData.appointment.motif } 
+                  })}
                   className="w-full flex items-center justify-between p-4 bg-white border-2 border-emerald-100 rounded-xl hover:border-emerald-500 hover:bg-emerald-50 transition-all group"
                 >
                   <div className="flex items-center gap-3">
@@ -1418,7 +1420,12 @@ const Appointments = () => {
                 </button>
 
                 <button
-                  onClick={confirmFinishTreatment}
+                  onClick={() => navigate(`/treatments/${validationData.treatment.id}/session`, { 
+                    state: { 
+                      defaultTreatmentPerformed: validationData.appointment.motif,
+                      finishTreatment: true
+                    } 
+                  })}
                   disabled={isValidating}
                   className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-100 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group"
                 >

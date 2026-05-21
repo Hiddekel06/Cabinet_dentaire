@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import {
   appointmentAPI,
@@ -11,6 +11,7 @@ import {
 
 const StartSessionWorkspace = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { treatmentId } = useParams();
 
   const [loading, setLoading] = useState(false);
@@ -37,6 +38,16 @@ const StartSessionWorkspace = () => {
     next_appointment_time: '',
     amount_collected: '',
   });
+
+  // Pre-fill treatment_performed if passed in navigation state
+  useEffect(() => {
+    if (location.state?.defaultTreatmentPerformed) {
+      setForm(prev => ({
+        ...prev,
+        treatment_performed: location.state.defaultTreatmentPerformed
+      }));
+    }
+  }, [location.state]);
 
   const formatAppointmentForDisplay = (rawDate, timeSpecified = true) => {
     if (!rawDate) return 'Non renseignée';
@@ -169,9 +180,9 @@ const StartSessionWorkspace = () => {
       }
 
       await patientTreatmentAPI.update(treatment.id, {
-        status: 'in_progress',
+        status: isFinishFlow ? 'completed' : 'in_progress',
         completed_sessions: (treatment.completed_sessions || 0) + 1,
-        next_appointment_id: newNextAppointmentId,
+        next_appointment_id: isFinishFlow ? null : newNextAppointmentId,
       });
 
       let sessionReceiptId = null;
@@ -183,11 +194,11 @@ const StartSessionWorkspace = () => {
         sessionReceiptId = receiptRes?.data?.id || null;
       }
 
-      const successMessage = sessionReceiptId 
-        ? 'La séance a été enregistrée. Votre reçu est prêt.' 
-        : 'La séance a été enregistrée avec succès.';
+      const successMessage = isFinishFlow 
+        ? 'Le traitement a été clôturé avec succès. Toutes les données sont enregistrées.'
+        : (sessionReceiptId ? 'La séance a été enregistrée. Votre reçu est prêt.' : 'La séance a été enregistrée avec succès.');
 
-      showFeedback('success', 'Séance enregistrée', successMessage, true, sessionReceiptId);
+      showFeedback('success', isFinishFlow ? 'Traitement clôturé' : 'Séance enregistrée', successMessage, true, sessionReceiptId);
     } catch (error) {
       console.error('Erreur ajout séance:', error);
       let message = 'Erreur lors de l\'ajout de la séance.';
@@ -239,6 +250,7 @@ const StartSessionWorkspace = () => {
   }
 
   const isLocked = !!treatment.is_invoice_paid_locked;
+  const isFinishFlow = !!location.state?.finishTreatment;
   const lastAppointment = treatment?.nextAppointment || treatment?.next_appointment || null;
 
   return (
@@ -254,7 +266,7 @@ const StartSessionWorkspace = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                  Ajouter une séance
+                  {isFinishFlow ? 'Finaliser le traitement' : 'Ajouter une séance'}
                   {treatment.patient?.date_of_birth && (
                     <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-800 text-slate-400 rounded border border-slate-700">
                       {calculateAge(treatment.patient.date_of_birth)} ans
@@ -274,15 +286,21 @@ const StartSessionWorkspace = () => {
                 </div>
               </div>
             </div>
-            <span className="text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-sm">
-              SÉANCE MÉDICALE
+            <span className={`text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border shadow-sm ${
+              isFinishFlow ? 'bg-amber-500/20 text-amber-300 border-amber-400/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+            }`}>
+              {isFinishFlow ? 'CLÔTURE DE DOSSIER' : 'SÉANCE MÉDICALE'}
             </span>
           </div>
         </div>
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-600 font-medium italic">Décrivez les soins prodigués aujourd'hui et planifiez la suite.</p>
+            <p className="text-sm text-gray-600 font-medium italic">
+              {isFinishFlow 
+                ? 'Dernière séance : enregistrez les soins finaux et le dernier paiement pour clôturer le diagnostic.'
+                : 'Décrivez les soins prodigués aujourd\'hui et planifiez la suite.'}
+            </p>
           </div>
           <button
             type="button"
@@ -313,14 +331,18 @@ const StartSessionWorkspace = () => {
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-[10px] text-white font-bold">2</span>
               <span className="text-[11px] font-bold uppercase text-slate-600 tracking-tighter">Paiement</span>
             </div>
-            <div className="w-8 border-t border-slate-300"></div>
-            <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-[10px] text-white font-bold">3</span>
-              <span className="text-[11px] font-bold uppercase text-slate-600 tracking-tighter">Prochain RDV</span>
-            </div>
+            {!isFinishFlow && (
+              <>
+                <div className="w-8 border-t border-slate-300"></div>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-[10px] text-white font-bold">3</span>
+                  <span className="text-[11px] font-bold uppercase text-slate-600 tracking-tighter">Prochain RDV</span>
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+          <div className={`grid grid-cols-1 divide-y lg:divide-y-0 divide-gray-200 ${isFinishFlow ? '' : 'lg:grid-cols-2 lg:divide-x'}`}>
             {/* Colonne 1: Traitement et Paiement */}
             <div className="p-6 space-y-6">
               <section className="space-y-4">
@@ -380,74 +402,76 @@ const StartSessionWorkspace = () => {
               </section>
             </div>
 
-            {/* Colonne 2: Prochain Rendez-vous */}
-            <div className="p-6 bg-slate-50/50 space-y-6">
-              <section className="space-y-4">
-                <div className="flex items-center gap-2 text-indigo-800">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <h2 className="text-base font-bold">Planification suite</h2>
-                </div>
+            {/* Colonne 2: Prochain Rendez-vous - Cache si flow de clôture */}
+            {!isFinishFlow && (
+              <div className="p-6 bg-slate-50/50 space-y-6">
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-indigo-800">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <h2 className="text-base font-bold">Planification suite</h2>
+                  </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Date du prochain RDV *</label>
+                      <input
+                        type="date"
+                        value={form.next_appointment_date}
+                        onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_date: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm bg-white"
+                        required
+                        disabled={isLocked}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Heure (si connue)</label>
+                      <input
+                        type="time"
+                        value={form.next_appointment_time}
+                        onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_time: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm bg-white"
+                        disabled={isLocked}
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Date du prochain RDV *</label>
-                    <input
-                      type="date"
-                      value={form.next_appointment_date}
-                      onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_date: e.target.value }))}
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">À prévoir pour la suite</label>
+                    <textarea
+                      value={form.next_action}
+                      onChange={(e) => setForm((prev) => ({ ...prev, next_action: e.target.value }))}
+                      rows="4"
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm bg-white"
-                      required
+                      placeholder="Quels soins prévoyez-vous pour la prochaine fois ?"
                       disabled={isLocked}
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Heure (si connue)</label>
-                    <input
-                      type="time"
-                      value={form.next_appointment_time}
-                      onChange={(e) => setForm((prev) => ({ ...prev, next_appointment_time: e.target.value }))}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm bg-white"
-                      disabled={isLocked}
-                    />
-                  </div>
-                </div>
+                </section>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">À prévoir pour la suite</label>
-                  <textarea
-                    value={form.next_action}
-                    onChange={(e) => setForm((prev) => ({ ...prev, next_action: e.target.value }))}
-                    rows="4"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm bg-white"
-                    placeholder="Quels soins prévoyez-vous pour la prochaine fois ?"
-                    disabled={isLocked}
-                  />
-                </div>
-              </section>
-
-              {/* Contexte précédent pour aider le dentiste */}
-              <div className="pt-6 mt-6 border-t border-slate-200">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Rappel historique</h3>
-                <div className="space-y-3">
-                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Dernière séance</p>
-                    {lastMedicalRecord?.treatment_performed ? (
-                      <p className="text-xs text-slate-700 line-clamp-3 italic">"{lastMedicalRecord.treatment_performed}"</p>
-                    ) : (
-                      <p className="text-xs text-slate-400 italic">Aucun historique disponible.</p>
+                {/* Contexte précédent pour aider le dentiste */}
+                <div className="pt-6 mt-6 border-t border-slate-200">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Rappel historique</h3>
+                  <div className="space-y-3">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Dernière séance</p>
+                      {lastMedicalRecord?.treatment_performed ? (
+                        <p className="text-xs text-slate-700 line-clamp-3 italic">"{lastMedicalRecord.treatment_performed}"</p>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic">Aucun historique disponible.</p>
+                      )}
+                    </div>
+                    {lastMedicalRecord?.next_action && (
+                      <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 shadow-sm">
+                        <p className="text-[10px] font-bold text-indigo-400 uppercase mb-1">Prévu pour aujourd'hui</p>
+                        <p className="text-xs text-indigo-800 font-medium italic">"{lastMedicalRecord.next_action}"</p>
+                      </div>
                     )}
                   </div>
-                  {lastMedicalRecord?.next_action && (
-                    <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 shadow-sm">
-                      <p className="text-[10px] font-bold text-indigo-400 uppercase mb-1">Prévu pour aujourd'hui</p>
-                      <p className="text-xs text-indigo-800 font-medium italic">"{lastMedicalRecord.next_action}"</p>
-                    </div>
-                  )}
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="px-6 py-5 bg-slate-50 border-t border-gray-200 flex items-center justify-between">
@@ -465,7 +489,11 @@ const StartSessionWorkspace = () => {
               <button
                 type="submit"
                 disabled={loading || isLocked}
-                className="px-8 py-2.5 text-sm font-bold text-white bg-linear-to-r from-blue-600 to-indigo-600 rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
+                className={`px-8 py-2.5 text-sm font-bold text-white rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isFinishFlow 
+                    ? 'bg-linear-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 shadow-amber-200' 
+                    : 'bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-200'
+                }`}
               >
                 {loading ? (
                   <>
@@ -476,7 +504,7 @@ const StartSessionWorkspace = () => {
                     Enregistrement...
                   </>
                 ) : (
-                  'Terminer la séance'
+                  isFinishFlow ? 'Clôturer le traitement' : 'Terminer la séance'
                 )}
               </button>
             </div>
