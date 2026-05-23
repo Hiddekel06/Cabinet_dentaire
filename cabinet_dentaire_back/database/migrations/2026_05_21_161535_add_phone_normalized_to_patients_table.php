@@ -3,7 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use App\Models\Patient;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -16,12 +16,14 @@ return new class extends Migration
             $table->string('phone_normalized')->nullable()->after('phone')->index();
         });
 
-        // Migration des données existantes (par paquets de 100 pour la performance)
-        Patient::chunk(100, function ($patients) {
+        // Migration des données existantes (utilisation de DB::table pour éviter les scopes de modèles comme SoftDeletes)
+        DB::table('patients')->orderBy('id')->chunk(100, function ($patients) {
             foreach ($patients as $patient) {
-                if ($patient->phone) {
-                    $patient->phone_normalized = preg_replace('/\D/', '', $patient->phone);
-                    $patient->save();
+                if (!empty($patient->phone)) {
+                    $normalized = preg_replace('/\D/', '', $patient->phone);
+                    DB::table('patients')
+                        ->where('id', $patient->id)
+                        ->update(['phone_normalized' => $normalized]);
                 }
             }
         });
