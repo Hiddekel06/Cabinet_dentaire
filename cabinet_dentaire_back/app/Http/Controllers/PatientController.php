@@ -9,6 +9,7 @@ use App\Models\PatientTreatment;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class PatientController extends Controller
@@ -25,10 +26,21 @@ class PatientController extends Controller
         $patientsQuery = Patient::query();
 
         if ($search !== '') {
-            $patientsQuery->where(function ($query) use ($search) {
+            // Check if phone_normalized column exists to avoid SQL errors during migration transition
+            $hasNormalizedColumn = Schema::hasColumn('patients', 'phone_normalized');
+            $digitsOnly = preg_replace('/\D/', '', $search);
+
+            $patientsQuery->where(function ($query) use ($search, $hasNormalizedColumn, $digitsOnly) {
                 $query->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('phone_normalized', 'like', "%" . preg_replace('/\D/', '', $search) . "%");
+                    ->orWhere('last_name', 'like', "%{$search}%");
+                
+                if ($digitsOnly !== '') {
+                    if ($hasNormalizedColumn) {
+                        $query->orWhere('phone_normalized', 'like', "%{$digitsOnly}%");
+                    } else {
+                        $query->orWhere('phone', 'like', "%{$search}%");
+                    }
+                }
 
                 if (is_numeric($search)) {
                     $query->orWhere('id', (int) $search);
@@ -47,7 +59,7 @@ class PatientController extends Controller
             } elseif ($status === 'Diagnostic') {
                 $patientsQuery->where(function($q) {
                     $q->has('medicalRecords')->orWhereHas('patientTreatments', function($sq) {
-                        $q->where('status', 'completed');
+                        $sq->where('status', 'completed');
                     });
                 });
             } elseif ($status === 'Nouveau') {

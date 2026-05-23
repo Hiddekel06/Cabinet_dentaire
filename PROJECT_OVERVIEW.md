@@ -18,20 +18,23 @@ Ce projet est une solution complète de gestion pour cabinets dentaires, visant 
 ## ✅ Optimisations & Corrections Récentes (Mai 2026)
 
 ### 1. Performance & Scalabilité
-- **Indexation des Téléphones :** Ajout d'une colonne `phone_normalized` indexée pour des recherches et vérifications d'unicité ultra-rapides sur des milliers de patients.
-- **Modularisation Frontend :** Découpage du composant massif `Appointments.jsx` (2200+ lignes) en sous-composants (ex: `ValidationModal`) pour améliorer la fluidité de l'interface.
+- **Indexation des Téléphones :** Ajout d'une colonne `phone_normalized` indexée pour des recherches et vérifications d'unicité ultra-rapides.
+- **Modularisation Frontend :** Découpage du composant massif `Appointments.jsx` en sous-composants (ex: `ValidationModal`).
 
-### 2. Sécurité des Données
-- **Soft Delete :** Implémentation de la suppression logique sur les Patients, RDV et Séances. Les données supprimées par erreur peuvent désormais être restaurées.
-- **Nettoyage Automatique :** Mise en place d'une tâche planifiée (`CleanupTempFiles`) qui supprime les PDF temporaires de plus de 24h pour éviter la saturation du disque serveur.
+### 2. Sécurité & Stabilité
+- **Soft Delete :** Implémentation de la suppression logique sur les Patients, RDV et Séances.
+- **Migration Robustesse (Production) :** Sécurisation des migrations de données en utilisant `DB::table` au lieu des modèles Eloquent pour éviter les conflits avec les traits (comme SoftDeletes) lors du déploiement.
+- **Nettoyage Automatique :** Tâche planifiée (`app:cleanup-temp-files`) pour les PDF temporaires.
 
 ### 3. Corrections de Bugs (Comptabilité & UX)
-- **Bug du Doublage :** Suppression de la logique qui additionnait par erreur le montant du reçu au montant de la séance, causant des montants erronés (ex: 30 000 au lieu de 5 000).
-- **Rapports Financiers :** Correction du calcul du "Total Encaissé" qui ne prenait auparavant que la page en cours au lieu du montant global filtré.
-- **Disparition des RDV :** Correction du bug qui marquait les futurs rendez-vous comme "Terminés" lors de l'initialisation du diagnostic.
-- **UX Séance :** Le motif du rendez-vous est désormais pré-rempli automatiquement dans la description des soins prodigués.
+- **Bug du Doublage :** Suppression du cumul erroné entre le reçu et la séance.
+- **Rapports Financiers :** Calcul global du "Total Encaissé" sur l'ensemble de la pagination.
+- **Disparition des RDV :** Séparation du RDV futur et de la séance initiale.
+- **UX Séance :** Auto-remplissage du motif de RDV dans les soins prodigués.
 
-## 🛡️ Points de Vigilance
-- Toujours utiliser `phone_normalized` pour les recherches SQL par téléphone.
-- Lors de l'ajout d'une fonctionnalité financière, vérifier la cohérence entre `medical_records.amount_collected` et `session_receipts.total_amount`.
-- Maintenir le découpage des composants React pour éviter les fichiers de plus de 500 lignes.
+## 🛡️ Points de Vigilance (Règles d'or)
+1. **Migrations de Données :** NE JAMAIS utiliser les Modèles Eloquent (ex: `Patient::all()`) dans une migration. Utiliser toujours `DB::table('patients')` pour éviter les erreurs de colonnes manquantes (ex: `deleted_at`) en production.
+2. **Idempotence :** Toujours vérifier si une colonne existe (`Schema::hasColumn`) avant de l'ajouter dans une migration pour permettre une relance sans erreur en cas de plantage partiel.
+3. **Recherche :** Toujours utiliser `phone_normalized` pour les requêtes SQL par numéro.
+4. **Cohérence Financière :** Maintenir le lien entre `medical_records.amount_collected` et `session_receipts.total_amount`.
+
