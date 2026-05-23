@@ -4,16 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Patient extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'first_name',
         'last_name',
         'email',
         'phone',
+        'phone_normalized',
         'contact_first_name',
         'contact_last_name',
         'contact_phone',
@@ -27,6 +29,20 @@ class Patient extends Model
         'notes',
         'general_state',
     ];
+
+    /**
+     * Boot the model to handle phone normalization.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::saving(function ($patient) {
+            if ($patient->isDirty('phone')) {
+                $patient->phone_normalized = preg_replace('/\D/', '', $patient->phone) ?: null;
+            }
+        });
+    }
 
     protected $casts = [
         'date_of_birth' => 'date',

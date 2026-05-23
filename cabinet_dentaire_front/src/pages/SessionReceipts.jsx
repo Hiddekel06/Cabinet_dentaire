@@ -26,6 +26,7 @@ const SessionReceipts = () => {
   const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [globalTotalFromAPI, setGlobalTotalFromAPI] = useState(0);
 
   // Filtres
   const [filters, setFilters] = useState({
@@ -81,6 +82,7 @@ const SessionReceipts = () => {
       const res = await sessionReceiptAPI.getAll(params);
       setReceipts(res.data?.data || []);
       setTotalPages(res.data?.last_page || 1);
+      setGlobalTotalFromAPI(res.data?.global_total_sum || 0);
     } catch (err) {
       console.error('Erreur chargement reçus:', err);
       setReceipts([]);
@@ -114,6 +116,20 @@ const SessionReceipts = () => {
       alert('Erreur lors de la génération du PDF.');
     } finally {
       setDownloadingReceiptId(null);
+    }
+  };
+
+  const handleDelete = async (receiptId) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce reçu ? Cette action est irréversible et mettra à jour le montant collecté du patient.')) {
+      return;
+    }
+
+    try {
+      await sessionReceiptAPI.delete(receiptId);
+      loadReceipts();
+    } catch (err) {
+      console.error('Erreur suppression reçu:', err);
+      alert('Erreur lors de la suppression du reçu.');
     }
   };
 
@@ -217,7 +233,7 @@ const SessionReceipts = () => {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest leading-tight">Total encaissé<br/>({periodLabel})</p>
-                  <p className="text-xl font-black text-blue-700">{totalCollected.toLocaleString()} XOF</p>
+                  <p className="text-xl font-black text-blue-700">{globalTotalFromAPI.toLocaleString()} XOF</p>
                 </div>
               </div>
             )}
@@ -347,6 +363,15 @@ const SessionReceipts = () => {
                             title="Voir dossier"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 21h7a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v11m0 5l4.879-4.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242z" /></svg>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(receipt.id)}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all"
+                            title="Supprimer le reçu"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                           </button>
                         </div>
                       </td>

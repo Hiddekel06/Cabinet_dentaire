@@ -28,7 +28,7 @@ class PatientController extends Controller
             $patientsQuery->where(function ($query) use ($search) {
                 $query->where('first_name', 'like', "%{$search}%")
                     ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%");
+                    ->orWhere('phone_normalized', 'like', "%" . preg_replace('/\D/', '', $search) . "%");
 
                 if (is_numeric($search)) {
                     $query->orWhere('id', (int) $search);
@@ -111,7 +111,7 @@ class PatientController extends Controller
         if (!empty($validated['phone'])) {
             $normalizedPhone = $this->normalizePhone($validated['phone']);
             $alreadyExists = Patient::query()
-                ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '.', ''), '+', '') = ?", [$normalizedPhone])
+                ->where('phone_normalized', $normalizedPhone)
                 ->exists();
 
             if ($alreadyExists) {
@@ -191,7 +191,7 @@ class PatientController extends Controller
             $normalizedPhone = $this->normalizePhone($validated['phone']);
             $alreadyExists = Patient::query()
                 ->where('id', '!=', $patient->id)
-                ->whereRaw("REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '.', ''), '+', '') = ?", [$normalizedPhone])
+                ->where('phone_normalized', $normalizedPhone)
                 ->exists();
 
             if ($alreadyExists) {

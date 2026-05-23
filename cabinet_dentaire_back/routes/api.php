@@ -75,6 +75,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('session-receipts', [SessionReceiptController::class, 'index']);
     Route::post('session-receipts', [SessionReceiptController::class, 'store']);
     Route::get('session-receipts/{sessionReceipt}', [SessionReceiptController::class, 'show']);
+    Route::delete('session-receipts/{sessionReceipt}', [SessionReceiptController::class, 'destroy']);
     Route::post('session-receipts/{sessionReceipt}/generate', [SessionReceiptController::class, 'generate']);
     Route::post('session-receipts/{sessionReceipt}/mark-paid', [SessionReceiptController::class, 'markAsPaid']);
 

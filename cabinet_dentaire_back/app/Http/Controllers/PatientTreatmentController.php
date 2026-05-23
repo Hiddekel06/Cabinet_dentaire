@@ -272,13 +272,8 @@ class PatientTreatmentController extends Controller
             'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
         ]);
 
-        if (($validated['status'] ?? null) === 'completed' && !$patientTreatment->medicalRecords()->exists()) {
-            return response()->json([
-                'message' => 'Impossible de terminer le traitement: au moins une séance est obligatoire.',
-            ], 422);
-        }
-
-        // Auto-créer la facture si le traitement passe en 'completed' et n'a pas déjà de facture
+        // On permet la clôture même sans séance pour les cas de réorientation de diagnostic ou erreur de saisie.
+        // On vérifie tout de même si on passe à 'completed' pour déclencher la facture.
         if (($validated['status'] ?? null) === 'completed' && $patientTreatment->status !== 'completed') {
             $existingInvoice = $patientTreatment->invoice()->exists();
             if (!$existingInvoice) {

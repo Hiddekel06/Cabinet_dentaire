@@ -14,6 +14,9 @@ const StartSessionWorkspace = () => {
   const location = useLocation();
   const { treatmentId } = useParams();
 
+  const isFinishFlow = !!location.state?.finishTreatment;
+  const defaultTreatmentPerformed = location.state?.defaultTreatmentPerformed || '';
+
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
@@ -32,22 +35,22 @@ const StartSessionWorkspace = () => {
   const [collectedSoFar, setCollectedSoFar] = useState(0);
 
   const [form, setForm] = useState({
-    treatment_performed: '',
+    treatment_performed: defaultTreatmentPerformed, // Initialisation directe
     next_action: '',
     next_appointment_date: '',
     next_appointment_time: '',
     amount_collected: '',
   });
 
-  // Pre-fill treatment_performed if passed in navigation state
+  // Forcer le remplissage si le state arrive
   useEffect(() => {
-    if (location.state?.defaultTreatmentPerformed) {
+    if (defaultTreatmentPerformed) {
       setForm(prev => ({
         ...prev,
-        treatment_performed: location.state.defaultTreatmentPerformed
+        treatment_performed: prev.treatment_performed || defaultTreatmentPerformed
       }));
     }
-  }, [location.state]);
+  }, [defaultTreatmentPerformed]);
 
   const formatAppointmentForDisplay = (rawDate, timeSpecified = true) => {
     if (!rawDate) return 'Non renseignée';
@@ -119,14 +122,11 @@ const StartSessionWorkspace = () => {
           const sortedRecords = records.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
           setPastSessions(sortedRecords);
           setLastMedicalRecord(sortedRecords[0]);
-        }
-
-        try {
-          const receiptsRes = await sessionReceiptAPI.getAll({ patient_treatment_id: treatmentId, per_page: 200 });
-          const receipts = receiptsRes?.data?.data || receiptsRes?.data || [];
-          const sum = (receipts || []).reduce((s, r) => s + (Number(r.total_amount || 0)), 0);
+          
+          // Calculer le total encaissé directement à partir des séances pour la cohérence
+          const sum = records.reduce((s, r) => s + (Number(r.amount_collected || 0)), 0);
           setCollectedSoFar(sum);
-        } catch (e) {
+        } else {
           setCollectedSoFar(0);
         }
       } catch (error) {
@@ -250,7 +250,6 @@ const StartSessionWorkspace = () => {
   }
 
   const isLocked = !!treatment.is_invoice_paid_locked;
-  const isFinishFlow = !!location.state?.finishTreatment;
   const lastAppointment = treatment?.nextAppointment || treatment?.next_appointment || null;
 
   return (

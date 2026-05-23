@@ -538,6 +538,16 @@ export const sessionReceiptAPI = {
     clearCache('session-receipts');
     return api.post(`/api/session-receipts/${id}/mark-paid`);
   },
+
+  delete: (id) => {
+    return api.delete(`/api/session-receipts/${id}`).then(res => {
+      clearCache('session-receipts');
+      clearCache('statistics:overview');
+      clearCache('dashboard:overview');
+      clearCache('medical-records');
+      return res;
+    });
+  },
 };
 
 // Endpoints pour les types de produits

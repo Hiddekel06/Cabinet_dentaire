@@ -7,6 +7,7 @@ use App\Models\MedicalRecord;
 use App\Models\SessionReceipt;
 use App\Models\SessionReceiptEvent;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Mpdf\Mpdf;
@@ -74,7 +75,15 @@ class SessionReceiptController extends Controller
             }
         }
 
-        return response()->json($query->paginate($perPage));
+        // Calculer le total global pour les filtres actuels avant la pagination
+        $totalSum = (float) (clone $query)->where('status', 'paid')->sum('total_amount');
+
+        $paginated = $query->paginate($perPage);
+
+        // Ajouter le total global aux métadonnées de la réponse
+        return response()->json(array_merge($paginated->toArray(), [
+            'global_total_sum' => $totalSum
+        ]));
     }
 
     public function store(Request $request)
@@ -150,15 +159,9 @@ class SessionReceiptController extends Controller
                 // Simple payment receipt (no items). Mark as paid immediately.
                 $total = (float) $validated['amount_collected'];
                 
-                // Add this amount to the total already collected for this session (if session exists)
-                if ($medicalRecord) {
-                    try {
-                        $currentCollected = (float) ($medicalRecord->amount_collected ?? 0);
-                        $medicalRecord->update(['amount_collected' => $currentCollected + $total]);
-                    } catch (\Throwable $e) {
-                        // ignore failure
-                    }
-                }
+                // On ne met PLUS à jour le montant de la séance ici car il est déjà
+                // enregistré lors de la création de la séance (MedicalRecordController).
+                // Cela évitait de doubler le montant par erreur.
 
                 $receipt->update([
                     'total_amount' => $total,
@@ -323,6 +326,35 @@ class SessionReceiptController extends Controller
         );
 
         return response()->json($sessionReceipt);
+    }
+
+    public function destroy(SessionReceipt $sessionReceipt)
+    {
+        DB::transaction(function () use ($sessionReceipt) {
+            // Si le reçu est lié à une séance, on soustrait le montant
+            if ($sessionReceipt->medical_record_id && $sessionReceipt->total_amount > 0) {
+                $mr = MedicalRecord::find($sessionReceipt->medical_record_id);
+                if ($mr) {
+                    $newTotal = max(0, (float)($mr->amount_collected ?? 0) - (float)$sessionReceipt->total_amount);
+                    $mr->update(['amount_collected' => $newTotal]);
+                }
+            }
+
+            // Supprimer les événements liés
+            $sessionReceipt->events()->delete();
+            // Supprimer les items liés
+            $sessionReceipt->items()->delete();
+            // Supprimer le reçu
+            $sessionReceipt->delete();
+        });
+
+        // Invalider le cache pour forcer la mise à jour des KPIs dans le dashboard
+        Cache::forget('dashboard:overview:day');
+        Cache::forget('dashboard:overview:week');
+        Cache::forget('dashboard:overview:month');
+        Cache::forget('dashboard:overview:year');
+
+        return response()->noContent();
     }
 
     private function normalizeCabinetName(string $name): string

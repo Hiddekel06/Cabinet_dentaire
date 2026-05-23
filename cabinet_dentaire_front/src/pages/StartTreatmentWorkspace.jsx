@@ -3,42 +3,43 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { patientAPI, patientTreatmentAPI, medicalRecordAPI, sessionReceiptAPI, authAPI } from '../services/api';
 
+/**
+ * Calcule l'âge à partir d'une date de naissance
+ * Déplacé en dehors du composant pour éviter les problèmes d'initialisation
+ */
+const calculateAge = (dateOfBirth) => {
+  if (!dateOfBirth) return null;
+  const today = new Date();
+  const birthDate = new Date(dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
 const StartTreatmentWorkspace = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // 1. États de chargement et utilisateur
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+
+  // 2. États pour les listes
   const [patients, setPatients] = useState([]);
   const [patientTreatments, setPatientTreatments] = useState([]);
-  const [patientSearchTerm, setPatientSearchTerm] = useState('');
-  const [showPatientList, setShowPatientList] = useState(false);
   const [patientHistory, setPatientHistory] = useState([]);
   const [pastTreatments, setPastTreatments] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [showAutoCloseModal, setShowAutoCloseModal] = useState(false);
 
-  useEffect(() => {
-    // Recherche serveur debouncée
-    const delayDebounceFn = setTimeout(() => {
-      if (patientSearchTerm && showPatientList) {
-        searchPatients(patientSearchTerm);
-      }
-    }, 300);
+  // 3. États pour la recherche
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [showPatientList, setShowPatientList] = useState(false);
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [patientSearchTerm]);
-
-  const searchPatients = async (term) => {
-    try {
-      const res = await patientAPI.search(term);
-      setPatients(res.data?.data || []);
-    } catch (error) {
-      console.error('Erreur recherche patients:', error);
-    }
-  };
-
+  // 4. État du formulaire principal
   const [form, setForm] = useState({
     patient_id: '',
     name: '', // Nom du traitement
@@ -49,6 +50,8 @@ const StartTreatmentWorkspace = () => {
     next_appointment_reason: '',
   });
 
+  // 5. États de feedback et modales
+  const [showAutoCloseModal, setShowAutoCloseModal] = useState(false);
   const [feedback, setFeedback] = useState({
     open: false,
     type: 'info',
@@ -58,6 +61,30 @@ const StartTreatmentWorkspace = () => {
     receiptId: null,
   });
 
+  // --- MEMOS (Calculés après les états) ---
+
+  const selectedPatient = useMemo(() => {
+    if (!form.patient_id) return null;
+    return patients.find(p => Number(p.id) === Number(form.patient_id)) || null;
+  }, [patients, form.patient_id]);
+
+  const activePatientTreatment = useMemo(() => {
+    if (!form.patient_id) return null;
+    return patientTreatments.find(
+      (pt) => Number(pt.patient_id) === Number(form.patient_id) && ['planned', 'in_progress'].includes(pt.status)
+    ) || null;
+  }, [patientTreatments, form.patient_id]);
+
+  const filteredPatients = useMemo(() => {
+    const term = patientSearchTerm.toLowerCase();
+    return patients.filter((p) => {
+      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
+      return fullName.includes(term) || (p.phone && p.phone.includes(patientSearchTerm));
+    });
+  }, [patients, patientSearchTerm]);
+
+  // --- ACTIONS ---
+
   const showFeedback = (type, title, message, redirectToTreatments = false, receiptId = null) => {
     setFeedback({ open: true, type, title, message, redirectToTreatments, receiptId });
   };
@@ -66,6 +93,15 @@ const StartTreatmentWorkspace = () => {
     const shouldRedirect = feedback.redirectToTreatments;
     setFeedback((prev) => ({ ...prev, open: false }));
     if (shouldRedirect) navigate('/treatments');
+  };
+
+  const searchPatients = async (term) => {
+    try {
+      const res = await patientAPI.search(term);
+      setPatients(res.data?.data || []);
+    } catch (error) {
+      console.error('Erreur recherche patients:', error);
+    }
   };
 
   const downloadSessionReceipt = async () => {
@@ -85,6 +121,19 @@ const StartTreatmentWorkspace = () => {
       alert('Impossible de générer le reçu de séance.');
     }
   };
+
+  // --- EFFECTS ---
+
+  useEffect(() => {
+    // Recherche serveur debouncée
+    const delayDebounceFn = setTimeout(() => {
+      if (patientSearchTerm && showPatientList) {
+        searchPatients(patientSearchTerm);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [patientSearchTerm]);
 
   useEffect(() => {
     const loadPatientHistory = async () => {
@@ -170,29 +219,20 @@ const StartTreatmentWorkspace = () => {
     preload();
   }, [location.state]);
 
-  const filteredPatients = useMemo(() => {
-    const term = patientSearchTerm.toLowerCase();
-    return patients.filter((p) => {
-      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
-      return fullName.includes(term) || (p.phone && p.phone.includes(patientSearchTerm));
-    });
-  }, [patients, patientSearchTerm]);
-
-  const activePatientTreatment = useMemo(() => {
-    if (!form.patient_id) return null;
-    return patientTreatments.find(
-      (pt) => Number(pt.patient_id) === Number(form.patient_id) && ['planned', 'in_progress'].includes(pt.status)
-    ) || null;
-  }, [patientTreatments, form.patient_id]);
-
   const saveNewTreatment = async () => {
+    // Validation minimale : si une note de RDV est mise, la date est obligatoire
+    if (form.next_appointment_reason && !form.next_appointment_date) {
+      showFeedback('warning', 'Date manquante', 'Veuillez sélectionner une date pour le premier rendez-vous.');
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await patientTreatmentAPI.create({ 
         patient_id: form.patient_id,
         name: form.name,
         start_date: form.start_date,
-        next_appointment_date: form.next_appointment_date,
+        next_appointment_date: form.next_appointment_date, // Correction : on passait la date mais elle n'était pas lue par le controller car le nom de champ doit correspondre
         next_appointment_reason: form.next_appointment_reason,
         notes: form.planned_treatment,
         acts: [] 
@@ -205,12 +245,12 @@ const StartTreatmentWorkspace = () => {
       }
 
       let sessionReceiptId = null;
-      let appointmentId = Number(createdTreatment.next_appointment_id || 0) || null;
-
+      // Note: On ne passe PAS d'appointment_id ici car celui créé dans createdTreatment est un RDV FUTUR.
+      // Le passer ici le marquerait comme 'Terminé' et changerait sa date à aujourd'hui dans le contrôleur.
       const mrRes = await medicalRecordAPI.create({
         patient_id: createdTreatment.patient_id,
         patient_treatment_id: createdTreatment.id,
-        appointment_id: appointmentId,
+        appointment_id: null, 
         treatment_performed: 'Initialisation du diagnostic : ' + form.planned_treatment,
         amount_collected: form.amount_collected ? Number(form.amount_collected) : null,
       });
@@ -244,12 +284,17 @@ const StartTreatmentWorkspace = () => {
     setLoading(true);
     try {
       if (activePatientTreatment) {
-        await patientTreatmentAPI.update(activePatientTreatment.id, { status: 'completed' });
+        // On clôture proprement l'ancien traitement avec une date de fin
+        await patientTreatmentAPI.update(activePatientTreatment.id, { 
+          status: 'completed',
+          end_date: new Date().toISOString().split('T')[0]
+        });
       }
       await saveNewTreatment();
     } catch (error) {
       console.error('Erreur lors de la clôture automatique:', error);
-      showFeedback('error', 'Erreur', 'Impossible de clôturer l\'ancien traitement.');
+      const message = error.response?.data?.message || 'Impossible de clôturer l\'ancien traitement.';
+      showFeedback('error', 'Erreur de clôture', message);
       setLoading(false);
     }
   };
@@ -323,8 +368,28 @@ const StartTreatmentWorkspace = () => {
                 </svg>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white">Nouveau diagnostic patient</h1>
-                <p className="text-xs text-slate-300 mt-0.5 font-medium">Initialisez le dossier de soins et planifiez la première étape.</p>
+                <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                  Nouveau diagnostic patient
+                  {selectedPatient?.date_of_birth && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-800 text-slate-400 rounded border border-slate-700">
+                      {calculateAge(selectedPatient.date_of_birth)} ans
+                    </span>
+                  )}
+                </h1>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <p className="text-xs text-slate-300 font-medium">
+                    {selectedPatient 
+                      ? `${selectedPatient.first_name} ${selectedPatient.last_name} — Initialisation du dossier`
+                      : 'Initialisez le dossier de soins et planifiez la première étape.'
+                    }
+                  </p>
+                  {selectedPatient?.general_state && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] font-bold text-amber-500 animate-pulse">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.998-.833-2.732 0L4.346 16.5c-.77 1.333.192 2.5 1.732 2.5z" /></svg>
+                      {selectedPatient.general_state}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <span className="text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
