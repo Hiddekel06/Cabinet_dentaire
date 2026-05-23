@@ -12,9 +12,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('patients', function (Blueprint $table) {
-            $table->string('phone_normalized')->nullable()->after('phone')->index();
-        });
+        if (!Schema::hasColumn('patients', 'phone_normalized')) {
+            Schema::table('patients', function (Blueprint $table) {
+                $table->string('phone_normalized')->nullable()->after('phone')->index();
+            });
+        }
 
         // Migration des données existantes (utilisation de DB::table pour éviter les scopes de modèles comme SoftDeletes)
         DB::table('patients')->orderBy('id')->chunk(100, function ($patients) {
