@@ -133,13 +133,15 @@ const Patients = () => {
   };
 
   useEffect(() => {
-    reloadPatients();
-  }, [page, searchTerm, selectedStatus, sortBy, sortOrder]);
-
-  // Réinitialiser la page quand on change de recherche ou de filtre
-  useEffect(() => {
     setPage(1);
-  }, [searchTerm, selectedStatus]);
+    reloadPatients();
+  }, [searchTerm, selectedStatus, sortBy, sortOrder]);
+
+  useEffect(() => {
+    if (page !== 1) {
+      reloadPatients();
+    }
+  }, [page]);
 
   const handleEdit = async (patient) => {
     if (!patient?.apiId) return;
