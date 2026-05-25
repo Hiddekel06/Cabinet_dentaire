@@ -107,14 +107,21 @@ const StartSessionWorkspace = () => {
     const loadData = async () => {
       setLoadingData(true);
       try {
-        const [userRes, treatmentRes, recordsRes] = await Promise.all([
+        const [userRes, treatmentRes] = await Promise.all([
           authAPI.getUser().catch(() => ({ data: null })),
           patientTreatmentAPI.getById(treatmentId),
-          medicalRecordAPI.getAll({ patient_treatment_id: treatmentId, per_page: 100 }),
         ]);
 
         setCurrentUser(userRes?.data || null);
-        setTreatment(treatmentRes?.data || null);
+        const treatmentData = treatmentRes?.data || null;
+        setTreatment(treatmentData);
+
+        // Récupérer les dossiers médicaux filtrés par traitement ET patient pour plus de sécurité
+        const recordsRes = await medicalRecordAPI.getAll({ 
+          patient_treatment_id: treatmentId, 
+          patient_id: treatmentData?.patient_id, // Ajout de la sécurité par patient_id
+          per_page: 100 
+        });
 
         const records = recordsRes?.data?.data || recordsRes?.data?.data?.data || [];
         

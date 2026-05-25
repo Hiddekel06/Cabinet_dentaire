@@ -4,6 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\MedicalRecord;
 use App\Models\PatientTreatment;
+use App\Models\SessionReceipt;
+use App\Models\SessionReceiptEvent;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
 
 class MedicalRecordController extends Controller
@@ -12,22 +16,25 @@ class MedicalRecordController extends Controller
     {
         $query = MedicalRecord::query()->with(['patient', 'appointment', 'patientTreatment', 'creator']);
 
-        // Filtrer par patient
-        if ($request->has('patient_id')) {
-            $query->where('patient_id', $request->input('patient_id'));
+        // Filtrer par patient (obligatoire si on veut éviter les fuites de données globales dans certains contextes)
+        if ($request->filled('patient_id')) {
+            $query->where('patient_id', $request->integer('patient_id'));
         }
 
         // Filtrer par rendez-vous
-        if ($request->has('appointment_id')) {
-            $query->where('appointment_id', $request->input('appointment_id'));
+        if ($request->filled('appointment_id')) {
+            $query->where('appointment_id', $request->integer('appointment_id'));
         }
 
         // Filtrer par traitement patient
-        if ($request->has('patient_treatment_id')) {
-            $query->where('patient_treatment_id', $request->input('patient_treatment_id'));
+        if ($request->filled('patient_treatment_id')) {
+            $query->where('patient_treatment_id', $request->integer('patient_treatment_id'));
         }
 
-        $records = $query->latest()->paginate(15);
+        // Si aucun filtre n'est fourni, on pourrait limiter à l'utilisateur actuel ou restreindre
+        // Pour l'instant on garde la pagination mais on s'assure que per_page est respecté
+        $perPage = max(1, min(100, (int) $request->input('per_page', 15)));
+        $records = $query->latest()->paginate($perPage);
 
         return response()->json($records);
     }
@@ -97,6 +104,60 @@ class MedicalRecordController extends Controller
 
         $record = MedicalRecord::create($validated);
         $record->load(['patient', 'appointment', 'patientTreatment', 'creator']);
+
+        // If a manual amount was provided for this medical record and there is
+        // no session receipt yet linked to it, create a paid SessionReceipt
+        // so the amount entered by the doctor appears in the receipts and KPIs.
+        try {
+            if (!empty($validated['amount_collected']) && (float)$validated['amount_collected'] > 0) {
+                $existing = SessionReceipt::where('medical_record_id', $record->id)->exists();
+                if (!$existing) {
+                    DB::transaction(function () use ($record, $validated) {
+                        $receipt = SessionReceipt::create([
+                            'medical_record_id' => $record->id,
+                            'patient_id' => $record->patient_id,
+                            'patient_treatment_id' => $record->patient_treatment_id,
+                            'receipt_number' => 'TMP-' . uniqid('', true),
+                            'issue_date' => $record->date ?? now()->toDateString(),
+                            'notes' => null,
+                            'total_amount' => 0,
+                            'status' => 'paid',
+                            'paid_at' => now(),
+                        ]);
+
+                        $total = (float) $validated['amount_collected'];
+
+                        $receipt->update([
+                            'receipt_number' => sprintf('REC-%s-%06d', date('Y'), $receipt->id),
+                            'total_amount' => $total,
+                        ]);
+
+                        // Log a created event (best-effort)
+                        try {
+                            SessionReceiptEvent::create([
+                                'session_receipt_id' => $receipt->id,
+                                'user_id' => auth()->id(),
+                                'event_type' => 'created',
+                                'metadata' => [
+                                    'medical_record_id' => $record->id,
+                                    'patient_treatment_id' => $record->patient_treatment_id,
+                                ],
+                            ]);
+                        } catch (\Throwable $e) {
+                            // swallow: event logging must not break MR creation
+                        }
+                    });
+
+                    // Invalidate dashboard caches so KPIs reflect the new payment
+                    Cache::forget('dashboard:overview:day');
+                    Cache::forget('dashboard:overview:week');
+                    Cache::forget('dashboard:overview:month');
+                    Cache::forget('dashboard:overview:year');
+                }
+            }
+        } catch (\Throwable $e) {
+            // Do not prevent medical record creation on receipt creation failure
+        }
 
         // Compute collected sum for the related treatment (if any) to show a memo to the client
         $collectedBefore = 0;

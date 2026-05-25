@@ -70,11 +70,15 @@ const SessionReceipts = () => {
     setLoading(true);
     setError('');
     try {
+      // Si une recherche est en cours, on élargit la période à 'all' si elle était à 'today'
+      // pour éviter de masquer des résultats pertinents.
+      const currentPeriod = (filters.search && filters.period === 'today') ? 'all' : filters.period;
+
       const params = {
         page,
         per_page: 15,
         search: filters.search,
-        period: filters.period,
+        period: currentPeriod,
         patient_id: filters.patient_id,
         status: filters.status
       };

@@ -120,7 +120,10 @@ const Appointments = () => {
     setAppointmentsLoading(true);
     setAppointmentsError('');
     try {
-      const params = { page };
+      const params = { 
+        page,
+        search: searchTerm // Ajout du support de la recherche côté serveur
+      };
       if (selectedDoctorId) {
         params.assigned_doctor_id = selectedDoctorId;
       }
@@ -218,7 +221,7 @@ const Appointments = () => {
     loadPatients();
     loadDoctors();
     // eslint-disable-next-line
-  }, [page, selectedDoctorId]);
+  }, [page, selectedDoctorId, searchTerm]);
 
   useEffect(() => {
     const focusAppointmentId = location.state?.focusAppointmentId;

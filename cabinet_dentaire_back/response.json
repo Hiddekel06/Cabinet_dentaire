@@ -1,0 +1,2 @@
+
+{"message":"The patient id field is required. (and 1 more error)","errors":{"patient_id":["The patient id field is required."],"treatment_performed":["The treatment performed field is required."]}}

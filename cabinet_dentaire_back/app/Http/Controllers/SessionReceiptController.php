@@ -76,7 +76,9 @@ class SessionReceiptController extends Controller
         }
 
         // Calculer le total global pour les filtres actuels avant la pagination
-        $totalSum = (float) (clone $query)->where('status', 'paid')->sum('total_amount');
+        // On clone la requête filtrée pour obtenir la somme sans pagination
+        $totalSumQuery = clone $query;
+        $totalSum = (float) $totalSumQuery->where('status', 'paid')->sum('total_amount');
 
         $paginated = $query->paginate($perPage);
 
@@ -199,6 +201,16 @@ class SessionReceiptController extends Controller
             'last_downloaded_at',
             $receipt->events()->where('event_type', 'downloaded')->max('created_at')
         );
+
+        // Invalidate dashboard caches to keep KPIs in sync
+        try {
+            Cache::forget('dashboard:overview:day');
+            Cache::forget('dashboard:overview:week');
+            Cache::forget('dashboard:overview:month');
+            Cache::forget('dashboard:overview:year');
+        } catch (\Throwable $e) {
+            // non-fatal
+        }
 
         return response()->json($receipt, 201);
     }
@@ -324,6 +336,16 @@ class SessionReceiptController extends Controller
             'last_downloaded_at',
             $sessionReceipt->events()->where('event_type', 'downloaded')->max('created_at')
         );
+
+        // Invalidate dashboard caches when a receipt is paid
+        try {
+            Cache::forget('dashboard:overview:day');
+            Cache::forget('dashboard:overview:week');
+            Cache::forget('dashboard:overview:month');
+            Cache::forget('dashboard:overview:year');
+        } catch (\Throwable $e) {
+            // ignore
+        }
 
         return response()->json($sessionReceipt);
     }

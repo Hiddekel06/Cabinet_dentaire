@@ -159,19 +159,25 @@ class PatientController extends Controller
      */
     public function treatmentSummaries(Patient $patient)
     {
+        // On s'assure que le patient est bien chargé
         $summaries = $patient->patientTreatments()
             ->with(['medicalRecords' => function($q) {
-                $q->select('id', 'patient_treatment_id', 'amount_collected');
+                // On s'assure de ne sélectionner que les records liés à ce traitement spécifique
+                // Le lien hasMany fait déjà ce filtrage par patient_treatment_id
+                $q->select('id', 'patient_treatment_id', 'amount_collected', 'date');
             }])
             ->get()
             ->map(function($treatment) {
-                $totalCollected = $treatment->medicalRecords->sum('amount_collected');
+                // Calcul de la somme encaissée pour ce traitement spécifique
+                $totalCollected = (float) $treatment->medicalRecords->sum('amount_collected');
+                
                 return [
                     'id' => $treatment->id,
                     'name' => $treatment->name,
                     'status' => $treatment->status,
-                    'total_collected' => (float) $totalCollected,
+                    'total_collected' => $totalCollected,
                     'start_date' => $treatment->start_date,
+                    'sessions_count' => $treatment->medicalRecords->count(),
                 ];
             });
 

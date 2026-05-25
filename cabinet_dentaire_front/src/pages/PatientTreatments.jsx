@@ -59,7 +59,7 @@ const PatientTreatments = () => {
         loadSessionReceiptsForPatient(expandedTreatment.patient_id);
       }
       if (expandedTreatment?.id) {
-        loadMedicalRecordsForTreatment(expandedTreatment.id);
+        loadMedicalRecordsForTreatment(expandedTreatment.id, expandedTreatment.patient_id);
       }
     }
   }, [expandedTreatmentId, patientTreatments]);
@@ -153,6 +153,8 @@ const PatientTreatments = () => {
       return;
     }
 
+    if (!patientId) return;
+
     setLoadingReceiptsByPatient(prev => ({ ...prev, [patientId]: true }));
     try {
       const res = await sessionReceiptAPI.getAll({ patient_id: patientId, per_page: 200 });
@@ -166,14 +168,19 @@ const PatientTreatments = () => {
     }
   };
 
-  const loadMedicalRecordsForTreatment = async (treatmentId, forceReload = false) => {
+  const loadMedicalRecordsForTreatment = async (treatmentId, patientId, forceReload = false) => {
     if (!forceReload && loadedMedicalRecordTreatmentIds.has(treatmentId)) {
       return;
     }
 
     setLoadingRecordsByTreatment(prev => ({ ...prev, [treatmentId]: true }));
     try {
-      const res = await medicalRecordAPI.getAll({ patient_treatment_id: treatmentId, per_page: 200 });
+      // Sécurité renforcée: On filtre par traitement ET par patient pour éviter les fuites globales
+      const res = await medicalRecordAPI.getAll({ 
+        patient_treatment_id: treatmentId, 
+        patient_id: patientId,
+        per_page: 200 
+      });
       const records = res?.data?.data || res?.data || [];
       setMedicalRecordsByTreatment(prev => ({ ...prev, [treatmentId]: records }));
       loadedMedicalRecordTreatmentIds.add(treatmentId);

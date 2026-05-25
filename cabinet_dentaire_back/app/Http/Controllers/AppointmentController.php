@@ -22,31 +22,51 @@ class AppointmentController extends Controller
         // On retourne une vue simple (à créer ensuite)
         return view('pwa.calendar');
     }
-    public function index()
+    public function index(Request $request)
     {
         $query = Appointment::query()->with(['patient', 'dentist', 'assignedDoctor']);
 
+        // Filtre par recherche (Patient, Docteur, Motif)
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('reason', 'like', "%{$search}%")
+                    ->orWhereHas('patient', function ($pq) use ($search) {
+                        $pq->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('assignedDoctor', function ($dq) use ($search) {
+                        $dq->where('name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('dentist', function ($dq) use ($search) {
+                        $dq->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
         // Filtre par date si ?date=YYYY-MM-DD fourni
-        if (request()->has('date')) {
-            $date = request('date');
+        if ($request->filled('date')) {
+            $date = $request->input('date');
             $dayStart = Carbon::parse($date)->startOfDay();
             $dayEnd = Carbon::parse($date)->endOfDay();
             $query->whereBetween('appointment_date', [$dayStart, $dayEnd]);
         }
 
         // Filtre par docteur
-        if (request()->has('assigned_doctor_id')) {
-            $query->where('assigned_doctor_id', request('assigned_doctor_id'));
+        if ($request->filled('assigned_doctor_id')) {
+            $query->where('assigned_doctor_id', $request->input('assigned_doctor_id'));
         }
 
-        if (request()->has('date')) {
-             return response()->json(
-                $query->orderBy('appointment_date')->paginate(15)
+        $perPage = max(1, min(100, (int) $request->input('per_page', 15)));
+
+        if ($request->filled('date')) {
+            return response()->json(
+                $query->orderBy('appointment_date')->paginate($perPage)
             );
         }
 
         return response()->json(
-            $query->latest()->paginate(15)
+            $query->latest()->paginate($perPage)
         );
     }
 
