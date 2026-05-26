@@ -57,6 +57,28 @@ class AppointmentController extends Controller
             $query->where('assigned_doctor_id', $request->input('assigned_doctor_id'));
         }
 
+        $statusGroup = $request->input('status_group', 'all');
+        $activeStatuses = ['pending', 'confirmed'];
+
+        if ($statusGroup === 'today') {
+            $query->whereDate('appointment_date', Carbon::today())
+                ->whereIn('status', $activeStatuses);
+        } elseif ($statusGroup === 'upcoming') {
+            $query->whereDate('appointment_date', '>', Carbon::today())
+                ->whereIn('status', $activeStatuses);
+        } elseif ($statusGroup === 'overdue') {
+            $query->whereDate('appointment_date', '<', Carbon::today())
+                ->whereIn('status', $activeStatuses);
+        } elseif ($statusGroup === 'completed') {
+            $query->where('status', 'completed');
+        } elseif ($statusGroup === 'absent') {
+            $query->where('status', 'absent');
+        } elseif ($statusGroup === 'cancelled') {
+            $query->where('status', 'cancelled');
+        } elseif ($statusGroup !== 'everything') {
+            $query->whereIn('status', $activeStatuses);
+        }
+
         $perPage = max(1, min(100, (int) $request->input('per_page', 15)));
 
         if ($request->filled('date')) {
@@ -66,7 +88,10 @@ class AppointmentController extends Controller
         }
 
         return response()->json(
-            $query->latest()->paginate($perPage)
+            $query
+                ->orderByRaw('CASE WHEN DATE(appointment_date) = CURDATE() THEN 0 WHEN DATE(appointment_date) > CURDATE() THEN 1 ELSE 2 END')
+                ->orderBy('appointment_date')
+                ->paginate($perPage)
         );
     }
 

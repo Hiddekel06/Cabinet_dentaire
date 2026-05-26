@@ -120,9 +120,21 @@ const Appointments = () => {
     setAppointmentsLoading(true);
     setAppointmentsError('');
     try {
+      const statusGroupBySelection = {
+        all: 'all',
+        "Aujourd'hui": 'today',
+        'À venir': 'upcoming',
+        'En retard': 'overdue',
+        'Terminé': 'completed',
+        'Absent': 'absent',
+        'Annulé': 'cancelled',
+        everything: 'everything',
+      };
+
       const params = { 
         page,
-        search: searchTerm // Ajout du support de la recherche côté serveur
+        search: searchTerm, // Ajout du support de la recherche côté serveur
+        status_group: statusGroupBySelection[selectedStatus] || 'all',
       };
       if (selectedDoctorId) {
         params.assigned_doctor_id = selectedDoctorId;
@@ -221,7 +233,13 @@ const Appointments = () => {
     loadPatients();
     loadDoctors();
     // eslint-disable-next-line
-  }, [page, selectedDoctorId, searchTerm]);
+  }, [page, selectedDoctorId, searchTerm, selectedStatus]);
+
+  useEffect(() => {
+    if (page !== 1) {
+      setPage(1);
+    }
+  }, [searchTerm, selectedDoctorId, selectedStatus]);
 
   useEffect(() => {
     const focusAppointmentId = location.state?.focusAppointmentId;
