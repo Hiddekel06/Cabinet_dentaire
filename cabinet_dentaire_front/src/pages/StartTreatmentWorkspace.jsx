@@ -257,12 +257,17 @@ const StartTreatmentWorkspace = () => {
 
       const medicalRecord = mrRes?.data || null;
 
-      if (medicalRecord?.id && form.amount_collected && Number(form.amount_collected) > 0) {
-        const receiptRes = await sessionReceiptAPI.create({
-          medical_record_id: medicalRecord.id,
-          amount_collected: Number(form.amount_collected),
-        });
-        sessionReceiptId = receiptRes?.data?.id || null;
+      if (medicalRecord?.id) {
+        try {
+          const receiptLookup = await sessionReceiptAPI.getAll({
+            medical_record_id: medicalRecord.id,
+            per_page: 1,
+          });
+          const firstReceipt = receiptLookup?.data?.data?.[0] || receiptLookup?.data?.[0] || null;
+          sessionReceiptId = firstReceipt?.id || null;
+        } catch (lookupError) {
+          console.error('Impossible de récupérer le reçu créé automatiquement:', lookupError);
+        }
       }
 
       const successMsg = sessionReceiptId 

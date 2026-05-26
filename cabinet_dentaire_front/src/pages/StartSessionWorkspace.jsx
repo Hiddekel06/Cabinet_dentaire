@@ -193,12 +193,17 @@ const StartSessionWorkspace = () => {
       });
 
       let sessionReceiptId = null;
-      if (form.amount_collected && Number(form.amount_collected) > 0) {
-        const receiptRes = await sessionReceiptAPI.create({
-          medical_record_id: medicalRecordRes?.data?.id,
-          amount_collected: Number(form.amount_collected),
-        });
-        sessionReceiptId = receiptRes?.data?.id || null;
+      if (medicalRecordRes?.data?.id) {
+        try {
+          const receiptLookup = await sessionReceiptAPI.getAll({
+            medical_record_id: medicalRecordRes.data.id,
+            per_page: 1,
+          });
+          const firstReceipt = receiptLookup?.data?.data?.[0] || receiptLookup?.data?.[0] || null;
+          sessionReceiptId = firstReceipt?.id || null;
+        } catch (lookupError) {
+          console.error('Impossible de récupérer le reçu créé automatiquement:', lookupError);
+        }
       }
 
       const successMessage = isFinishFlow 
