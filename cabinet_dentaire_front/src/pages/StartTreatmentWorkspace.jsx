@@ -156,10 +156,26 @@ const StartTreatmentWorkspace = () => {
           })
         ]);
 
+        const receiptsRes = await sessionReceiptAPI.getAll({
+          patient_id: form.patient_id,
+          per_page: 200,
+        });
+
         const historyData = recordsRes.data?.data || recordsRes.data?.data?.data || [];
         const treatsData = (treatmentsRes.data?.data || treatmentsRes.data || []).filter(t => t.status === 'completed');
+        const receipts = receiptsRes.data?.data || receiptsRes.data || [];
+        const receiptByMedicalRecordId = new Map(
+          receipts
+            .filter((receipt) => Number.isInteger(Number(receipt.medical_record_id)))
+            .map((receipt) => [Number(receipt.medical_record_id), Number(receipt.total_amount || 0)])
+        );
+
+        const historyWithReceiptAmounts = historyData.map((record) => ({
+          ...record,
+          receipt_total_amount: receiptByMedicalRecordId.get(Number(record.id)) ?? Number(record.amount_collected || 0),
+        }));
         
-        setPatientHistory(historyData);
+        setPatientHistory(historyWithReceiptAmounts);
         setPastTreatments(treatsData);
       } catch (error) {
         console.error('Erreur chargement historique patient:', error);
@@ -330,7 +346,7 @@ const StartTreatmentWorkspace = () => {
     <Layout>
       <div className="p-6 space-y-6">
         {showAutoCloseModal && (
-          <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-110 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
             <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-amber-100 animate-in fade-in zoom-in duration-200">
               <div className="bg-amber-50 px-6 py-6 text-center">
                 <div className="w-16 h-16 bg-amber-500 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-200">
@@ -480,7 +496,7 @@ const StartTreatmentWorkspace = () => {
 
               {activePatientTreatment && (
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-800 font-medium flex gap-2">
-                  <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                  <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                   Ce patient a déjà un diagnostic actif : "{activePatientTreatment.name}"
                 </div>
               )}
@@ -542,9 +558,9 @@ const StartTreatmentWorkspace = () => {
                                 <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
                                   {new Date(record.created_at).toLocaleDateString('fr-FR')}
                                 </span>
-                                {record.amount_collected > 0 && (
+                                {Number((record.receipt_total_amount ?? record.amount_collected) || 0) > 0 && (
                                   <span className="text-[10px] font-extrabold text-emerald-600">
-                                    {Number(record.amount_collected).toLocaleString('fr-FR')} XOF
+                                    {Number((record.receipt_total_amount ?? record.amount_collected) || 0).toLocaleString('fr-FR')} XOF
                                   </span>
                                 )}
                               </div>
@@ -673,7 +689,7 @@ const StartTreatmentWorkspace = () => {
         </form>
 
         {feedback.open && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-100 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
             <div className="w-full max-w-md rounded-3xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
               <div className={`px-6 py-8 text-center ${
                 feedback.type === 'success' ? 'bg-emerald-50' : feedback.type === 'error' ? 'bg-rose-50' : 'bg-amber-50'

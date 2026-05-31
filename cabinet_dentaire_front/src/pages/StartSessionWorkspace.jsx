@@ -125,15 +125,47 @@ const StartSessionWorkspace = () => {
 
         const records = recordsRes?.data?.data || recordsRes?.data?.data?.data || [];
         
-        if (records.length > 0) {
-          const sortedRecords = records.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-          setPastSessions(sortedRecords);
-          setLastMedicalRecord(sortedRecords[0]);
-          
-          // Calculer le total encaissé directement à partir des séances pour la cohérence
-          const sum = records.reduce((s, r) => s + (Number(r.amount_collected || 0)), 0);
-          setCollectedSoFar(sum);
-        } else {
+        const sortedRecords = records.length > 0
+          ? [...records].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          : [];
+
+        try {
+          const receiptsRes = await sessionReceiptAPI.getAll({ patient_treatment_id: treatmentId, per_page: 200 });
+          const receipts = (receiptsRes?.data?.data || receiptsRes?.data || [])
+            .filter((receipt) => Number(receipt.total_amount || 0) >= 0)
+            .sort((a, b) => new Date(b.issue_date || b.created_at) - new Date(a.issue_date || a.created_at));
+
+          const sessionsFromReceipts = receipts.map((receipt) => ({
+            id: receipt.id,
+            created_at: receipt.issue_date || receipt.created_at,
+            issue_date: receipt.issue_date || receipt.created_at,
+            receipt_number: receipt.receipt_number,
+            receipt_total_amount: Number(receipt.total_amount || 0),
+            amount_collected: Number(receipt.total_amount || 0),
+            medical_record_id: receipt.medical_record_id,
+            receipt_source: 'session_receipt',
+          }));
+
+          setPastSessions(sessionsFromReceipts);
+          setCollectedSoFar(receipts.reduce((s, r) => s + (Number(r.total_amount || 0)), 0));
+
+          if (sortedRecords.length > 0) {
+            setLastMedicalRecord(sortedRecords[0]);
+          }
+        } catch (err) {
+          const sessionsWithRecordAmounts = sortedRecords.map((record) => ({
+            ...record,
+            receipt_total_amount: Number(record.amount_collected || 0),
+          }));
+
+          setPastSessions(sessionsWithRecordAmounts);
+          setCollectedSoFar(records.reduce((s, r) => s + (Number(r.amount_collected || 0)), 0));
+          if (sortedRecords.length > 0) {
+            setLastMedicalRecord(sortedRecords[0]);
+          }
+        }
+
+        if (records.length === 0) {
           setCollectedSoFar(0);
         }
       } catch (error) {
@@ -324,7 +356,7 @@ const StartSessionWorkspace = () => {
 
         {isLocked && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center gap-3 shadow-xs">
-            <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
             </svg>
             <span className="font-semibold">Attention : La facture est déjà payée. L'ajout de nouvelles séances est verrouillé.</span>
@@ -548,7 +580,9 @@ const StartSessionWorkspace = () => {
                         {new Date(session.created_at).toLocaleDateString('fr-FR')}
                       </td>
                       <td className="px-6 py-3 text-right font-bold text-slate-900">
-                        {session.amount_collected ? `${Number(session.amount_collected).toLocaleString('fr-FR')} XOF` : '–'}
+                        {session.receipt_total_amount != null
+                          ? `${Number(session.receipt_total_amount).toLocaleString('fr-FR')} XOF`
+                          : (session.amount_collected ? `${Number(session.amount_collected).toLocaleString('fr-FR')} XOF` : '–')}
                       </td>
                     </tr>
                   ))}
@@ -566,7 +600,7 @@ const StartSessionWorkspace = () => {
 
         {/* Feedback Modal */}
         {feedback.open && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-100 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
             <div className="w-full max-w-md rounded-3xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
               <div className={`px-6 py-8 text-center ${
                 feedback.type === 'success' ? 'bg-emerald-50' : feedback.type === 'error' ? 'bg-rose-50' : 'bg-amber-50'

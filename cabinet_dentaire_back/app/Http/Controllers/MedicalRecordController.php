@@ -112,7 +112,7 @@ class MedicalRecordController extends Controller
             if (!empty($validated['amount_collected']) && (float)$validated['amount_collected'] > 0) {
                 $existing = SessionReceipt::where('medical_record_id', $record->id)->exists();
                 if (!$existing) {
-                    DB::transaction(function () use ($record, $validated) {
+                    DB::transaction(function () use ($record, $validated, $request) {
                         $receipt = SessionReceipt::create([
                             'medical_record_id' => $record->id,
                             'patient_id' => $record->patient_id,
@@ -136,7 +136,7 @@ class MedicalRecordController extends Controller
                         try {
                             SessionReceiptEvent::create([
                                 'session_receipt_id' => $receipt->id,
-                                'user_id' => auth()->id(),
+                                'user_id' => $request->user()?->id,
                                 'event_type' => 'created',
                                 'metadata' => [
                                     'medical_record_id' => $record->id,
@@ -198,6 +198,9 @@ class MedicalRecordController extends Controller
 
         $medicalRecord->update($validated);
         $medicalRecord->load(['patient', 'appointment', 'patientTreatment', 'creator']);
+
+        // Ne pas réécrire le reçu existant depuis le dossier médical.
+        // Le montant financier affiché et les KPIs doivent rester pilotés par SessionReceipt.
 
         return response()->json($medicalRecord);
     }

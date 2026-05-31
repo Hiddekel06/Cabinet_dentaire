@@ -351,6 +351,10 @@ export const medicalRecordAPI = {
 
   create: (data) => {
     clearCache('medical-records');
+    clearCache('session-receipts');
+    clearCache('patient-treatments');
+    clearCache('statistics:overview');
+    clearCache('dashboard:overview');
     return api.post('/api/medical-records', data);
   },
 
