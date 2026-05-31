@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { patientAPI, patientTreatmentAPI, medicalRecordAPI, sessionReceiptAPI } from '../services/api';
+import { appointmentAPI, patientAPI, patientTreatmentAPI, medicalRecordAPI, sessionReceiptAPI } from '../services/api';
 
 const PatientTreatments = () => {
   const navigate = useNavigate();
@@ -10,8 +10,6 @@ const PatientTreatments = () => {
   const [patientTreatments, setPatientTreatments] = useState([]);
 
   const [loading, setLoading] = useState(false);
-  const [showFinishConfirmModal, setShowFinishConfirmModal] = useState(false);
-  const [treatmentToFinish, setTreatmentToFinish] = useState(null);
 
   const [auditLogsByTreatment, setAuditLogsByTreatment] = useState({});
   const [openAuditByTreatment, setOpenAuditByTreatment] = useState({});
@@ -107,25 +105,61 @@ const PatientTreatments = () => {
     }
   };
 
-  const handleFinishTreatment = async () => {
-    if (!treatmentToFinish) return;
+  const resolveAppointmentContext = async (treatment) => {
+    const appointmentId = treatment?.next_appointment_id || treatment?.nextAppointment?.id || null;
+    let defaultTreatmentPerformed = treatment?.nextAppointment?.reason || treatment?.next_appointment_reason || '';
 
-    setLoading(true);
-    try {
-      await patientTreatmentAPI.update(treatmentToFinish.id, {
-        status: 'completed',
-        end_date: new Date().toISOString().split('T')[0],
-      });
-      alert('Diagnostic terminé avec succès !');
-      setShowFinishConfirmModal(false);
-      setTreatmentToFinish(null);
-      loadTreatments();
-    } catch (error) {
-      console.error('Erreur fin diagnostic:', error);
-      alert('Erreur lors de la fin du diagnostic');
-    } finally {
-      setLoading(false);
+    // Fallback: some treatment payloads do not embed nextAppointment details.
+    if (!defaultTreatmentPerformed && appointmentId) {
+      try {
+        const appointmentRes = await appointmentAPI.getById(appointmentId);
+        const appointment = appointmentRes?.data?.data || appointmentRes?.data || null;
+        defaultTreatmentPerformed = appointment?.reason || appointment?.motif || '';
+      } catch (error) {
+        console.error('Impossible de récupérer le motif du rendez-vous:', error);
+      }
     }
+
+    return { appointmentId, defaultTreatmentPerformed };
+  };
+
+  const handleFinishFromTreatments = async (treatment) => {
+    const { appointmentId, defaultTreatmentPerformed } = await resolveAppointmentContext(treatment);
+
+    try {
+      if (appointmentId) {
+        // Align with appointment flow: mark linked appointment as completed.
+        await appointmentAPI.update(appointmentId, { status: 'completed' });
+      }
+    } catch (error) {
+      console.error('Erreur validation rendez-vous avant clôture:', error);
+    }
+
+    navigate(`/treatments/${treatment.id}/session`, {
+      state: {
+        finishTreatment: true,
+        defaultTreatmentPerformed,
+      },
+    });
+  };
+
+  const handleAddSessionFromTreatments = async (treatment) => {
+    const { appointmentId, defaultTreatmentPerformed } = await resolveAppointmentContext(treatment);
+
+    try {
+      if (appointmentId) {
+        // Align with appointment flow: mark linked appointment as completed.
+        await appointmentAPI.update(appointmentId, { status: 'completed' });
+      }
+    } catch (error) {
+      console.error('Erreur validation rendez-vous avant ajout de séance:', error);
+    }
+
+    navigate(`/treatments/${treatment.id}/session`, {
+      state: {
+        defaultTreatmentPerformed,
+      },
+    });
   };
 
   const handleToggleAuditLogs = async (treatmentId, forceReload = false) => {
@@ -661,18 +695,13 @@ const PatientTreatments = () => {
                       {pt.status !== 'completed' && pt.status !== 'cancelled' && tab === 'en_cours' && !pt.is_invoice_paid_locked && (
                         <>
                           <button
-                            onClick={() => {
-                              navigate(`/treatments/${pt.id}/session`);
-                            }}
+                            onClick={() => handleAddSessionFromTreatments(pt)}
                             className="px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
                           >
                             Ajouter séance
                           </button>
                           <button
-                            onClick={() => {
-                              setTreatmentToFinish(pt);
-                              setShowFinishConfirmModal(true);
-                            }}
+                            onClick={() => handleFinishFromTreatments(pt)}
                             className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 rounded-md hover:bg-rose-100 transition-colors"
                           >
                             Terminer
@@ -729,56 +758,6 @@ const PatientTreatments = () => {
             </button>
           </div>
         </div>
-
-        {/* Modal confirmation fin de suivi */}
-        {showFinishConfirmModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
-              <div className="px-6 py-4 border-b border-gray-100 bg-linear-to-r from-rose-50 to-orange-50">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-rose-100 rounded-lg">
-                    <svg className="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Confirmer la fin du diagnostic</h3>
-                </div>
-              </div>
-
-              <div className="px-6 py-5 space-y-3">
-                <p className="text-sm text-gray-700">Voulez-vous vraiment terminer ce diagnostic ?</p>
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <p className="text-sm text-gray-900 font-medium">{treatmentToFinish?.name || 'Diagnostic'}</p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Patient: {treatmentToFinish?.patient?.first_name} {treatmentToFinish?.patient?.last_name}
-                  </p>
-                </div>
-                <p className="text-xs text-gray-500">Cette action marquera le diagnostic comme terminé à la date du jour.</p>
-              </div>
-
-              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowFinishConfirmModal(false);
-                    setTreatmentToFinish(null);
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFinishTreatment}
-                  disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-rose-600 rounded-lg hover:bg-rose-700 disabled:opacity-50"
-                >
-                  {loading ? 'En cours...' : 'Oui, terminer'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </Layout>
   );

@@ -38,6 +38,8 @@ But: fichier mémo centralisé pour documenter l'architecture, les décisions r�
 - Patch: `SessionReceiptController::store()` — maintenant idempotent et renvoie 200 + reçu existant si déjà présent pour le MR.
 - Patch: Frontend — suppression des créations redondantes `sessionReceiptAPI.create()` dans les flows de séance/diagnostic; lecture du reçu existant à la place.
 - Patch: `AppointmentController::index()` — tri par défaut: aujourd'hui en premier, puis futurs; pages par défaut n'incluent plus les rendez-vous en retard (filtre dédié `status_group=overdue`).
+- Patch UX (page traitements): les boutons `Ajouter séance` et `Terminer` reproduisent le flow de validation rendez-vous, et récupèrent le motif du RDV lié pour préremplir `defaultTreatmentPerformed`.
+  - Fallback ajouté: si `nextAppointment` n'est pas embarqué dans la réponse `patient-treatments`, le front interroge `GET /api/appointments/{id}` pour récupérer `reason`/`motif`.
 
 **Fichiers importants**
 - Backend:
