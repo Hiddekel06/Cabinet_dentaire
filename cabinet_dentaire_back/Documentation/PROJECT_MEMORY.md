@@ -40,6 +40,12 @@ But: fichier mémo centralisé pour documenter l'architecture, les décisions r�
 - Patch: `AppointmentController::index()` — tri par défaut: aujourd'hui en premier, puis futurs; pages par défaut n'incluent plus les rendez-vous en retard (filtre dédié `status_group=overdue`).
 - Patch UX (page traitements): les boutons `Ajouter séance` et `Terminer` reproduisent le flow de validation rendez-vous, et récupèrent le motif du RDV lié pour préremplir `defaultTreatmentPerformed`.
   - Fallback ajouté: si `nextAppointment` n'est pas embarqué dans la réponse `patient-treatments`, le front interroge `GET /api/appointments/{id}` pour récupérer `reason`/`motif`.
+- Patch (Certificats Médicaux):
+  - Frontend: recherche de patients désormais dynamique via `patientAPI.search()` (correction de la limite des 20 premiers).
+  - Frontend: ajout d'un reset explicite du formulaire à l'ouverture de la modale pour éviter les données résiduelles.
+  - Frontend: ajout de spinners de chargement sur les boutons d'ajout et de téléchargement PDF.
+  - Backend: implémentation des méthodes `update()` et `destroy()` dans `MedicalCertificateController`.
+  - Backend: renforcement de la validation des `rest_days` (integer casting) pour corriger le bug de remise à 1.
 
 **Fichiers importants**
 - Backend:

@@ -22,8 +22,10 @@ const Achats = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [totalAmount, setTotalAmount] = useState(0);
   const [showTotalAmount, setShowTotalAmount] = useState(false);
+  const [typeNameSearch, setTypeNameSearch] = useState('');
+  const [showTypeSuggestions, setShowTypeSuggestions] = useState(false);
   const [quickForm, setQuickForm] = useState({
-    type_id: '',
+    type_name: '',
     name: '',
     quantity: 1,
     unit_price: '',
@@ -94,8 +96,9 @@ const Achats = () => {
 
   const handleEdit = (product) => {
     setEditingProduct(product);
+    setTypeNameSearch(product.type || '');
     setQuickForm({
-      type_id: product.type_id || '',
+      type_name: product.type || '',
       name: product.name || '',
       quantity: product.quantity || 1,
       unit_price: product.unit_price || '',
@@ -150,12 +153,12 @@ const Achats = () => {
 
   const handleQuickCreateSubmit = async (e) => {
     e.preventDefault();
-    if (!quickForm.type_id || !quickForm.name || !quickForm.unit_price || !quickForm.purchase_date) return;
+    if (!quickForm.type_name || !quickForm.name || !quickForm.unit_price || !quickForm.purchase_date) return;
 
     setIsSubmitting(true);
     try {
       const payload = {
-        type_id: Number(quickForm.type_id),
+        type_name: quickForm.type_name,
         name: quickForm.name,
         quantity: Number(quickForm.quantity),
         unit_price: parseFloat(quickForm.unit_price),
@@ -193,12 +196,16 @@ const Achats = () => {
         setProducts(prev => [newProduct, ...prev]);
         // Mettre à jour le total
         setTotalAmount(prev => prev + newProduct.total_amount);
+        
+        // Rafraîchir les types pour inclure le nouveau si nécessaire
+        void loadProductTypes();
       }
 
       setShowQuickCreate(false);
       setEditingProduct(null);
+      setTypeNameSearch('');
       setQuickForm({
-        type_id: '',
+        type_name: '',
         name: '',
         quantity: 1,
         unit_price: '',
@@ -244,23 +251,49 @@ const Achats = () => {
               <p className="text-sm text-gray-500 mt-1">Renseigner les détails du produit</p>
             </div>
             <form onSubmit={handleQuickCreateSubmit} className="px-6 py-4 grid grid-cols-1 gap-3">
-              <div>
+              <div className="relative">
                 <label className="text-xs font-semibold text-gray-700">Type de produit *</label>
-                <select
-                  name="type_id"
-                  value={quickForm.type_id}
-                  onChange={handleQuickCreateChange}
+                <input
+                  type="text"
+                  name="type_name"
+                  autoComplete="off"
+                  value={typeNameSearch}
+                  onChange={(e) => {
+                    setTypeNameSearch(e.target.value);
+                    setQuickForm(prev => ({ ...prev, type_name: e.target.value }));
+                    setShowTypeSuggestions(true);
+                  }}
+                  onFocus={() => setShowTypeSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowTypeSuggestions(false), 200)}
+                  placeholder="Ex: Consommables, Prothèses..."
                   className="mt-1 w-full bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:outline-none border border-transparent focus:border-blue-300"
                   required
-                  disabled={typesLoading}
-                >
-                  <option value="">{typesLoading ? 'Chargement...' : 'Sélectionner un type'}</option>
-                  {productTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
+                />
+                {showTypeSuggestions && (
+                  <div className="absolute top-full left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl z-30">
+                    {productTypes
+                      .filter(t => !typeNameSearch || t.name.toLowerCase().includes(typeNameSearch.toLowerCase()))
+                      .map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setTypeNameSearch(t.name);
+                            setQuickForm(prev => ({ ...prev, type_name: t.name }));
+                            setShowTypeSuggestions(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                        >
+                          {t.name}
+                        </button>
+                      ))}
+                    {typeNameSearch && !productTypes.some(t => t.name.toLowerCase() === typeNameSearch.toLowerCase()) && (
+                      <div className="px-4 py-2 text-xs text-blue-600 bg-blue-50 italic">
+                        Nouveau type : "{typeNameSearch}"
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -414,8 +447,9 @@ const Achats = () => {
         <button
           onClick={() => {
             setEditingProduct(null);
+            setTypeNameSearch('');
             setQuickForm({
-              type_id: '',
+              type_name: '',
               name: '',
               quantity: 1,
               unit_price: '',

@@ -63,12 +63,17 @@ class ProductController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'type_id' => 'required|exists:product_types,id',
+            'type_name' => 'required|string|max:255',
             'name' => 'required|string|max:255',
             'quantity' => 'required|integer|min:1',
             'unit_price' => 'required|numeric|min:0.01',
             'purchase_date' => 'required|date',
         ]);
+
+        // Trouver ou créer le type de produit par son nom
+        $type = ProductType::firstOrCreate(['name' => $validated['type_name']]);
+        $validated['type_id'] = $type->id;
+        unset($validated['type_name']);
 
         // Calculer le montant total
         $validated['total_amount'] = $validated['quantity'] * $validated['unit_price'];
@@ -102,12 +107,17 @@ class ProductController extends Controller
     public function update(Request $request, Product $product)
     {
         $validated = $request->validate([
-            'type_id' => 'required|exists:product_types,id',
+            'type_name' => 'required|string|max:255',
             'name' => 'required|string|max:255',
             'quantity' => 'required|integer|min:1',
             'unit_price' => 'required|numeric|min:0.01',
             'purchase_date' => 'required|date',
         ]);
+
+        // Trouver ou créer le type de produit par son nom
+        $type = ProductType::firstOrCreate(['name' => $validated['type_name']]);
+        $validated['type_id'] = $type->id;
+        unset($validated['type_name']);
 
         // Recalculer le montant total
         $validated['total_amount'] = $validated['quantity'] * $validated['unit_price'];

@@ -148,7 +148,20 @@ class MedicalCertificateController extends Controller {
      */
     public function update(Request $request, MedicalCertificate $medicalCertificate)
     {
-        //
+        $validated = $request->validate([
+            'patient_id' => ['required', 'integer', 'exists:patients,id'],
+            'issue_date' => ['required', 'date'],
+            'consultation_time' => ['nullable', 'date_format:H:i'],
+            'rest_days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'rest_start_date' => ['nullable', 'date'],
+        ]);
+
+        $validated['content'] = $this->buildStoredContent($validated);
+        
+        $medicalCertificate->update($validated);
+        $medicalCertificate->load(['patient', 'issuer']);
+        
+        return response()->json($medicalCertificate);
     }
 
     /**
@@ -156,7 +169,12 @@ class MedicalCertificateController extends Controller {
      */
     public function destroy(MedicalCertificate $medicalCertificate)
     {
-        //
+        try {
+            $medicalCertificate->delete();
+            return response()->json(['message' => 'Certificat supprimé avec succès']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Erreur lors de la suppression : ' . $e->getMessage()], 500);
+        }
     }
 
     private function buildStoredContent(array $validated): string

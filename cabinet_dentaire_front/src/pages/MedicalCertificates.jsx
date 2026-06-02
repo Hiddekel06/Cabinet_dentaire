@@ -36,24 +36,42 @@ const MedicalCertificates = () => {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [showPatientList, setShowPatientList] = useState(false);
+  const [searchingPatients, setSearchingPatients] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
 
   const selectedPatient = useMemo(() => {
-    return patients.find((p) => String(p.id) === String(form.patient_id)) || null;
-  }, [patients, form.patient_id]);
+    // On cherche d'abord dans les résultats de recherche, puis dans la liste globale
+    const allKnownPatients = [...patients, ...searchResults];
+    return allKnownPatients.find((p) => String(p.id) === String(form.patient_id)) || null;
+  }, [patients, searchResults, form.patient_id]);
 
-  const filteredPatients = useMemo(() => {
-    const term = patientSearchTerm.toLowerCase();
-    return patients.filter((p) => {
-      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
-      return fullName.includes(term) || (p.phone && p.phone.includes(patientSearchTerm));
-    });
-  }, [patients, patientSearchTerm]);
+  // Recherche de patients via API
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (patientSearchTerm && showPatientList && (!selectedPatient || `${selectedPatient.first_name} ${selectedPatient.last_name}` !== patientSearchTerm)) {
+        setSearchingPatients(true);
+        try {
+          const res = await patientAPI.search(patientSearchTerm);
+          setSearchResults(res.data.data || res.data || []);
+        } catch (err) {
+          console.error("Erreur recherche patients", err);
+        } finally {
+          setSearchingPatients(false);
+        }
+      } else if (!patientSearchTerm) {
+        setSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [patientSearchTerm, showPatientList, selectedPatient]);
 
   useEffect(() => {
     if (isNewMode) {
@@ -62,7 +80,7 @@ const MedicalCertificates = () => {
   }, [isNewMode]);
 
   useEffect(() => {
-    if (selectedPatient) {
+    if (selectedPatient && !patientSearchTerm) {
       setPatientSearchTerm(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
     }
   }, [selectedPatient]);
@@ -193,6 +211,7 @@ const MedicalCertificates = () => {
 
   // Téléchargement du certificat Word généré par le backend
   const handleDownloadWord = async (cert) => {
+    setDownloadingId(cert.id);
     try {
       const res = await medicalCertificateAPI.generate(cert.id);
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
@@ -205,6 +224,8 @@ const MedicalCertificates = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       alert("Erreur lors du téléchargement du certificat PDF");
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -227,8 +248,9 @@ const MedicalCertificates = () => {
           <div className="mt-3 sm:mt-0 flex space-x-2">
             <button
               onClick={() => {
+                resetForm(); // Reset everything first
                 setShowModal(true);
-                loadPatientsOnDemand();
+                void loadPatientsOnDemand();
               }}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-blue-600 text-sm font-medium rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer select-none border border-blue-100"
             >
@@ -267,15 +289,23 @@ const MedicalCertificates = () => {
                   </td>
                   <td className="py-2 px-2 sm:py-3 sm:px-4 whitespace-nowrap flex gap-2">
                     <button
-                      className="text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center justify-center"
+                      className="text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center justify-center disabled:opacity-50"
                       onClick={() => handleDownloadWord(c)}
+                      disabled={downloadingId === c.id}
                       title="Télécharger Word"
                       aria-label="Télécharger Word"
                       type="button"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v16h16V4H4zm4 8h8m-4-4v8" />
-                      </svg>
+                      {downloadingId === c.id ? (
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
+                          <path className="opacity-90" fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-3a7 7 0 0 0-7-7V2z"></path>
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v16h16V4H4zm4 8h8m-4-4v8" />
+                        </svg>
+                      )}
                     </button>
                     <button
                       className="text-red-600 hover:text-red-800 font-semibold inline-flex items-center justify-center"
@@ -358,8 +388,16 @@ const MedicalCertificates = () => {
 
                 {showPatientList && patientSearchTerm && (
                   <div className="absolute top-full left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl z-20">
-                    {filteredPatients.length > 0 ? (
-                      filteredPatients.map((p) => (
+                    {searchingPatients ? (
+                      <div className="px-4 py-3 text-sm text-gray-500 italic flex items-center gap-2">
+                        <svg className="w-4 h-4 animate-spin text-blue-500" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
+                          <path className="opacity-90" fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-3a7 7 0 0 0-7-7V2z"></path>
+                        </svg>
+                        Recherche en cours...
+                      </div>
+                    ) : searchResults.length > 0 ? (
+                      searchResults.map((p) => (
                         <button
                           key={p.id}
                           type="button"
@@ -367,6 +405,7 @@ const MedicalCertificates = () => {
                             setForm((prev) => ({ ...prev, patient_id: p.id }));
                             setPatientSearchTerm(`${p.first_name || ''} ${p.last_name || ''}`.trim());
                             setShowPatientList(false);
+                            setSearchResults([]);
                           }}
                           className="w-full text-left px-4 py-3 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
                         >
