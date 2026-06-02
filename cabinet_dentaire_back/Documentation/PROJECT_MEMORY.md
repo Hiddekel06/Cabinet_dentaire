@@ -46,6 +46,11 @@ But: fichier mémo centralisé pour documenter l'architecture, les décisions r�
   - Frontend: ajout de spinners de chargement sur les boutons d'ajout et de téléchargement PDF.
   - Backend: implémentation des méthodes `update()` et `destroy()` dans `MedicalCertificateController`.
   - Backend: renforcement de la validation des `rest_days` (integer casting) pour corriger le bug de remise à 1.
+- Patch (Gestion des Achats):
+  - Transition vers un système de "Types hybrides" : le docteur n'est plus limité à une liste prédéfinie.
+  - Backend: `ProductController` utilise `firstOrCreate` sur `type_name` pour créer automatiquement les nouveaux types à la volée.
+  - Frontend: Remplacement du `select` par un `input` intelligent avec suggestions (Combobox) affichant les types existants au focus/saisie.
+  - Frontend: Amélioration de l'UX avec spinners de chargement et reset complet de la modale d'ajout/édition.
 
 **Fichiers importants**
 - Backend:

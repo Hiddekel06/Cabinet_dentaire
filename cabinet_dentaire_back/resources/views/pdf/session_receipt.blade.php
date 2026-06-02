@@ -47,57 +47,25 @@
     </tr>
 </table>
 
-<div class="section-title">Patient et séance</div>
+<div class="section-title">Informations séance</div>
 <table class="items-table">
     <tbody>
         <tr>
             <td style="width: 25%; font-weight: bold; background: #f8fafc;">Patient</td>
             <td>{{ $patientName ?: '-' }}</td>
-            <td style="width: 25%; font-weight: bold; background: #f8fafc;">Traitement / Motif</td>
+        </tr>
+        <tr>
+            <td style="width: 25%; font-weight: bold; background: #f8fafc;">Traitement</td>
             <td>{{ $receipt->notes ?: ($receipt->patientTreatment?->name ?: '-') }}</td>
         </tr>
-        <tr>
-            <td style="font-weight: bold; background: #f8fafc;">Date séance</td>
-            <td>{{ $receipt->medicalRecord?->date ? \Carbon\Carbon::parse($receipt->medicalRecord->date)->format('d/m/Y') : '-' }}</td>
-            <td style="font-weight: bold; background: #f8fafc;">Référence séance</td>
-            <td>{{ $receipt->medical_record_id ? '#' . $receipt->medical_record_id : 'Saisie libre' }}</td>
-        </tr>
     </tbody>
 </table>
 
-<div class="section-title">Actes réalisés</div>
-<table class="items-table">
-    <thead>
-        <tr>
-            <th style="width: 40%;">Acte</th>
-            <th style="width: 15%;" class="right">Quantité</th>
-            <th style="width: 20%;" class="right">Prix unitaire</th>
-            <th class="right">Sous-total</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach($receipt->items as $item)
-        <tr>
-            <td>{{ $item->dentalAct?->name ?: 'Acte' }}</td>
-            <td class="right">{{ $item->quantity }}</td>
-            <td class="right">{{ number_format((float) $item->unit_price, 0, ',', ' ') }} FCFA</td>
-            <td class="right">{{ number_format((float) $item->line_total, 0, ',', ' ') }} FCFA</td>
-        </tr>
-    @endforeach
-    </tbody>
-</table>
-
-<table class="summary-table" style="margin-top: 12px;">
+<table class="summary-table" style="margin-top: 20px;">
     <tr>
-        <td class="label" style="width: 70%;">Total de la séance</td>
+        <td class="label" style="width: 70%;">Montant Total</td>
         <td class="value">{{ number_format((float) $receipt->total_amount, 0, ',', ' ') }} FCFA</td>
     </tr>
-    @if($receipt->medicalRecord?->amount_collected)
-    <tr style="background: #ecfdf5; border-top: 2px solid #10b981;">
-        <td class="label" style="width: 70%; font-weight: bold; color: #059669;">Montant encaissé</td>
-        <td class="value" style="color: #059669;">{{ number_format((float) $receipt->medicalRecord->amount_collected, 0, ',', ' ') }} FCFA</td>
-    </tr>
-    @endif
 </table>
 </body>
 </html>
