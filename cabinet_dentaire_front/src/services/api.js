@@ -610,6 +610,15 @@ export const productAPI = {
     clearCache('products');
     clearCache('statistics:overview');
     clearCache('dashboard:overview');
+    
+    // Si c'est un FormData (pour upload PDF), on l'envoie tel quel
+    if (data instanceof FormData) {
+      return api.post('/api/products', data, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+    }
     return api.post('/api/products', data);
   },
 
@@ -617,6 +626,16 @@ export const productAPI = {
     clearCache('products');
     clearCache('statistics:overview');
     clearCache('dashboard:overview');
+    
+    // Si c'est un FormData (pour upload PDF), on utilise POST avec _method=PUT
+    if (data instanceof FormData) {
+      data.append('_method', 'PUT');
+      return api.post(`/api/products/${id}`, data, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+    }
     return api.put(`/api/products/${id}`, data);
   },
 
@@ -637,6 +656,9 @@ export const productAPI = {
       return res;
     });
   },
+
+  getInvoice: (id) =>
+    api.get(`/api/products/${id}/invoice`, { responseType: 'blob' }),
 };
 
 // Endpoints pour les suggestions de médicaments

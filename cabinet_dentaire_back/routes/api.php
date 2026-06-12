@@ -81,6 +81,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Gestion des achats (produits)
     Route::get('products/statistics', [ProductController::class, 'statistics']);
+    Route::get('products/{product}/invoice', [ProductController::class, 'downloadInvoice']);
     Route::apiResource('products', ProductController::class);
 
     // Gestion des types de produits

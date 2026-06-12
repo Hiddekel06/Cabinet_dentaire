@@ -55,8 +55,8 @@
             <td>{{ $patientName ?: '-' }}</td>
         </tr>
         <tr>
-            <td style="width: 25%; font-weight: bold; background: #f8fafc;">Traitement</td>
-            <td>{{ $receipt->notes ?: ($receipt->patientTreatment?->name ?: '-') }}</td>
+            <td style="width: 25%; font-weight: bold; background: #f8fafc;">Soins prodigués</td>
+            <td>{{ $receipt->medicalRecord?->treatment_performed ?: ($receipt->medicalRecord?->appointment?->reason ?: ($receipt->notes ?: ($receipt->patientTreatment?->name ?: '-'))) }}</td>
         </tr>
     </tbody>
 </table>

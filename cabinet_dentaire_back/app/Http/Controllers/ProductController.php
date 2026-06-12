@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\ProductType;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
@@ -66,9 +67,13 @@ class ProductController extends Controller
             'type_name' => 'required|string|max:255',
             'name' => 'required|string|max:255',
             'quantity' => 'required|integer|min:1',
-            'unit_price' => 'required|numeric|min:0.01',
+            'unit_price' => 'nullable|numeric|min:0', // Rendu optionnel
             'purchase_date' => 'required|date',
+            'invoice' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:2048', // 2Mo max
         ]);
+
+        // Si le prix n'est pas renseigné, on met 0 par défaut
+        $validated['unit_price'] = $validated['unit_price'] ?? 0;
 
         // Trouver ou créer le type de produit par son nom
         $type = ProductType::firstOrCreate(['name' => $validated['type_name']]);
@@ -77,6 +82,11 @@ class ProductController extends Controller
 
         // Calculer le montant total
         $validated['total_amount'] = $validated['quantity'] * $validated['unit_price'];
+
+        // Gérer l'upload de la facture
+        if ($request->hasFile('invoice')) {
+            $validated['invoice_path'] = $request->file('invoice')->store('purchases/invoices', 'local');
+        }
 
         $product = Product::create($validated);
         $product->load('type');
@@ -110,9 +120,13 @@ class ProductController extends Controller
             'type_name' => 'required|string|max:255',
             'name' => 'required|string|max:255',
             'quantity' => 'required|integer|min:1',
-            'unit_price' => 'required|numeric|min:0.01',
+            'unit_price' => 'nullable|numeric|min:0',
             'purchase_date' => 'required|date',
+            'invoice' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:2048',
         ]);
+
+        // Si le prix n'est pas renseigné, on met 0 par défaut
+        $validated['unit_price'] = $validated['unit_price'] ?? 0;
 
         // Trouver ou créer le type de produit par son nom
         $type = ProductType::firstOrCreate(['name' => $validated['type_name']]);
@@ -121,6 +135,15 @@ class ProductController extends Controller
 
         // Recalculer le montant total
         $validated['total_amount'] = $validated['quantity'] * $validated['unit_price'];
+
+        // Gérer l'upload de la facture
+        if ($request->hasFile('invoice')) {
+            // Supprimer l'ancienne facture si elle existe
+            if ($product->invoice_path && Storage::disk('local')->exists($product->invoice_path)) {
+                Storage::disk('local')->delete($product->invoice_path);
+            }
+            $validated['invoice_path'] = $request->file('invoice')->store('purchases/invoices', 'local');
+        }
 
         $product->update($validated);
         $product->load('type');
@@ -137,12 +160,32 @@ class ProductController extends Controller
      */
     public function destroy(Product $product)
     {
+        // Supprimer la facture si elle existe
+        if ($product->invoice_path && Storage::disk('local')->exists($product->invoice_path)) {
+            Storage::disk('local')->delete($product->invoice_path);
+        }
+
         $product->delete();
 
         return response()->json([
             'success' => true,
             'message' => 'Produit supprimé avec succès',
         ]);
+    }
+
+    /**
+     * Serve the invoice file securely
+     */
+    public function downloadInvoice(Product $product)
+    {
+        if (!$product->invoice_path || !Storage::disk('local')->exists($product->invoice_path)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Facture introuvable.',
+            ], 404);
+        }
+
+        return Storage::disk('local')->response($product->invoice_path);
     }
 
     /**

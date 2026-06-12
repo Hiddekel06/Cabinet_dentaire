@@ -267,7 +267,7 @@ class SessionReceiptController extends Controller
 
     public function generate(Request $request, SessionReceipt $sessionReceipt)
     {
-        $sessionReceipt->load(['items.dentalAct', 'patient', 'medicalRecord', 'patientTreatment']);
+        $sessionReceipt->load(['items.dentalAct', 'patient', 'medicalRecord.appointment', 'patientTreatment']);
 
         $html = view('pdf.session_receipt', [
             'receipt' => $sessionReceipt,

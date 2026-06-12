@@ -16,6 +16,7 @@ class Product extends Model
         'unit_price',
         'total_amount',
         'purchase_date',
+        'invoice_path',
     ];
 
     protected $casts = [
