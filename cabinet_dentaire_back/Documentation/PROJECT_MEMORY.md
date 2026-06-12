@@ -51,26 +51,39 @@ But: fichier mémo centralisé pour documenter l'architecture, les décisions r�
   - Backend: `ProductController` utilise `firstOrCreate` sur `type_name` pour créer automatiquement les nouveaux types à la volée.
   - Frontend: Remplacement du `select` par un `input` intelligent avec suggestions (Combobox) affichant les types existants au focus/saisie.
   - Frontend: Amélioration de l'UX avec spinners de chargement et reset complet de la modale d'ajout/édition.
+- Patch (Gestion des Achats - Phase 2):
+  - Implémentation de l'upload de factures (PDF, PNG, JPG) avec stockage sécurisé dans `storage/app/private/purchases`.
+  - Ajout d'un bouton dédié "Importer Facture" pour un archivage rapide (montant optionnel).
+  - Correction bug validation: le prix peut désormais être nul (0) pour les imports de documents.
+  - Correction bug date: formatage strict `YYYY-MM-DD` pour éviter le reset du champ date lors de la modification.
+  - Correction bug UX: utilisation de `onMouseDown` sur les suggestions de types pour éviter le conflit avec le `onBlur` de l'input.
+- Patch (Reçus de séance):
+  - Mise à jour du template PDF pour afficher "Soins prodigués" (basé sur `treatment_performed` ou le motif du RDV) à la place du diagnostic médical.
+  - Eager loading de la relation `appointment` pour garantir la récupération du motif.
 
 **Fichiers importants**
 - Backend:
   - `app/Http/Controllers/MedicalRecordController.php`
   - `app/Http/Controllers/SessionReceiptController.php`
   - `app/Http/Controllers/AppointmentController.php`
-  - `app/Models/SessionReceipt.php`, `SessionReceiptEvent.php`, `MedicalRecord.php`, `Appointment.php`
-  - Migrations: `database/migrations/*` (notamment `create_session_receipts_table.php`, `create_medical_records_table.php`)
+  - `app/Http/Controllers/ProductController.php`
+  - `app/Models/SessionReceipt.php`, `SessionReceiptEvent.php`, `MedicalRecord.php`, `Appointment.php`, `Product.php`
+  - Migrations: `database/migrations/*` (notamment `add_invoice_path_to_products_table.php`)
 - Frontend:
   - `cabinet_dentaire_front/src/services/api.js`
   - `cabinet_dentaire_front/src/pages/StartSessionWorkspace.jsx`
   - `cabinet_dentaire_front/src/pages/StartTreatmentWorkspace.jsx`
   - `cabinet_dentaire_front/src/pages/PatientTreatments.jsx`
   - `cabinet_dentaire_front/src/pages/Appointments.jsx`
+  - `cabinet_dentaire_front/src/pages/Achats.jsx`
 
 **Tests manuels effectués**
 - Création MR avec `amount_collected` -> reçu automatique créé et marqué `paid`.
 - Exécution double `POST /api/session-receipts` pour le même `medical_record_id` -> backend retourne le même reçu (aucun doublon en base).
 - Flux RDV -> MR -> reçu: création d'un RDV, validation de MR lié, reçu créé; l'`Appointment.status` est mis à `completed` lors de la validation.
 - Filtre `overdue` vérifié côté serveur (retourne rendez-vous passés).
+- Upload PDF/Image sur un achat -> Visualisation OK via nouvel onglet (blob URL).
+- Modification achat sans retaper la date -> OK.
 
 **Comment lancer / tests locaux rapides**
 - Démarrer serveur Laravel (dev):
@@ -101,6 +114,8 @@ curl -X POST "http://127.0.0.1:8001/api/medical-records" \
 - Documenter la politique de conservation des reçus (unique per MR) et décider si on permet plusieurs reçus par MR (impliquerait migration DB).
 - Ajouter indicateur UI/feedback quand un reçu existe déjà (au lieu de créer un second).
 - Ajouter filtre `Overdue` visible clairement et option de tri dans l'UI (si souhaité).
+- Phase Ordonnances V1: Implémentation de la génération PDF sécurisée pour les ordonnances.
+- Optimisation: Mise en place d'un système de nettoyage périodique des factures d'achats orphelines dans le stockage.
 
 **Contacts / Références**
 - Dépôt local: workspace racine (Backend / Frontend folders)
