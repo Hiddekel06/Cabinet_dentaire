@@ -28,6 +28,9 @@ const Radiographies = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [patientSearch, setPatientSearch] = useState('');
+  const [patientResults, setPatientResults] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const [filters, setFilters] = useState({
     patient_id: '',
@@ -122,6 +125,23 @@ const Radiographies = () => {
       alert('Suppression impossible.');
     }
   };
+  const searchPatients = async (search) => {
+  if (!search.trim()) {
+    setPatientResults([]);
+    return;
+  }
+
+  try {
+    const res = await patientAPI.getAll(1, {
+      search,
+      per_page: 10
+    });
+
+    setPatientResults(res.data?.data || []);
+  } catch {
+    setPatientResults([]);
+  }
+};
 
   return (
     <Layout>
@@ -136,18 +156,65 @@ const Radiographies = () => {
           <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Patient *</label>
-              <select
+  <div className="relative">
+  <input
+    type="text"
+    placeholder="Rechercher un patient..."
+    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+    value={patientSearch}
+    onChange={(e) => {
+      const value = e.target.value;
+
+      setPatientSearch(value);
+      searchPatients(value);
+      setShowSuggestions(true);
+
+      // On vide l'id tant qu'aucun patient n'est sélectionné
+      setForm((prev) => ({
+        ...prev,
+        patient_id: '',
+      }));
+    }}
+    onFocus={() => setShowSuggestions(true)}
+  />
+
+  {showSuggestions && patientResults.length > 0 && (
+    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+      {patientResults.map((patient) => (
+        <div
+          key={patient.id}
+          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+          onClick={() => {
+            // Stocker l'id pour l'envoi
+            setForm((prev) => ({
+              ...prev,
+              patient_id: patient.id,
+            }));
+
+            // Afficher le nom dans le champ
+            setPatientSearch(getPatientName(patient));
+
+            // Fermer les suggestions
+            setPatientResults([]);
+            setShowSuggestions(false);
+          }}
+        >
+          {getPatientName(patient)}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date du scan *</label>
+              <input
+                type="date"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                value={form.patient_id}
-                onChange={(e) => setForm((prev) => ({ ...prev, patient_id: e.target.value }))}
-              >
-                <option value="">Sélectionner un patient</option>
-                {patients.map((patient) => (
-                  <option key={patient.id} value={patient.id}>
-                    {getPatientName(patient)}
-                  </option>
-                ))}
-              </select>
+                value={form.scan_date}
+                onChange={(e) => setForm((prev) => ({ ...prev, scan_date: e.target.value }))}
+              />
             </div>
 
             <div>
