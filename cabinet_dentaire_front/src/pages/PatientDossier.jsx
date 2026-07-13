@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { medicalCertificateAPI, medicalRecordAPI, patientAPI, patientTreatmentAPI, radiographyAPI, sessionReceiptAPI } from '../services/api';
@@ -130,6 +130,29 @@ const PatientDossier = () => {
     };
     loadData();
   }, [id]);
+
+  const totalPaidByTreatmentId = useMemo(() => {
+    return sessionReceipts.reduce((acc, receipt) => {
+      const ptId = receipt.patient_treatment_id;
+      if (ptId) {
+        acc[ptId] = (acc[ptId] || 0) + Number(receipt.total_amount || 0);
+      }
+      return acc;
+    }, {});
+  }, [sessionReceipts]);
+
+  const outstandingDebt = useMemo(() => {
+    return patientTreatments.reduce((acc, pt) => {
+      if (pt.status === 'completed' && pt.agreed_amount !== null) {
+        const paid = totalPaidByTreatmentId[pt.id] || 0;
+        const due = Number(pt.agreed_amount) - paid;
+        if (due > 0) {
+          acc += due;
+        }
+      }
+      return acc;
+    }, 0);
+  }, [patientTreatments, totalPaidByTreatmentId]);
 
   const ptNameById = patientTreatments.reduce((acc, pt) => {
     acc[pt.id] = pt.name || 'Diagnostic';
@@ -272,10 +295,18 @@ const PatientDossier = () => {
                 {getInitials()}
               </div>
               <div>
-                <div className="text-xl font-semibold text-gray-900">
-                  {patient.first_name} {patient.last_name}
+                <div className="text-xl font-semibold text-gray-900 flex flex-wrap items-center gap-3">
+                  <span>{patient.first_name} {patient.last_name}</span>
+                  {outstandingDebt > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 border border-amber-200 text-amber-800 animate-pulse">
+                      <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      Ce patient doit {outstandingDebt.toLocaleString('fr-FR')} XOF
+                    </span>
+                  )}
                 </div>
-                <div className="text-sm text-gray-500 flex items-center gap-2">
+                <div className="text-sm text-gray-500 flex items-center gap-2 mt-1">
                   <span>ID patient: #{patient.id}</span>
                   {patient.date_of_birth && (
                     <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[11px] font-bold">
@@ -345,6 +376,9 @@ const PatientDossier = () => {
                         Fin
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Règlement
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Sessions
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -363,6 +397,37 @@ const PatientDossier = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {pt.end_date ? new Date(pt.end_date).toLocaleDateString('fr-FR') : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {pt.agreed_amount !== null ? (
+                            <div className="space-y-0.5 text-xs">
+                              <div>
+                                <span className="text-gray-500">Convenu :</span> <span className="font-semibold text-gray-800">{Number(pt.agreed_amount).toLocaleString('fr-FR')} XOF</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Réglé :</span> <span className="font-semibold text-emerald-700">{(totalPaidByTreatmentId[pt.id] || 0).toLocaleString('fr-FR')} XOF</span>
+                              </div>
+                              {Number(pt.agreed_amount) - (totalPaidByTreatmentId[pt.id] || 0) > 0 ? (
+                                pt.status === 'completed' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 border border-amber-200 text-amber-800 mt-1">
+                                    ⚠️ Reste dû : {(Number(pt.agreed_amount) - (totalPaidByTreatmentId[pt.id] || 0)).toLocaleString('fr-FR')} XOF
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500 font-medium block">
+                                    Restant : <span className="font-semibold text-blue-700">{(Number(pt.agreed_amount) - (totalPaidByTreatmentId[pt.id] || 0)).toLocaleString('fr-FR')} XOF</span>
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-emerald-600 font-semibold text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 inline-block mt-1">
+                                  Soldé
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-xs">
+                              <span className="text-gray-500">Réglé :</span> <span className="font-semibold text-gray-800">{(totalPaidByTreatmentId[pt.id] || 0).toLocaleString('fr-FR')} XOF</span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           <span className="font-semibold">{pt.completed_sessions || 0}</span>

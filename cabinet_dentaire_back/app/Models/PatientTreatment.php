@@ -18,11 +18,15 @@ class PatientTreatment extends Model
         'status',
         'notes',
         'next_appointment_id',
+        'agreed_amount',
+        'agreed_amount_date',
     ];
 
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
+        'agreed_amount_date' => 'date',
+        'agreed_amount' => 'decimal:2',
     ];
 
     /**

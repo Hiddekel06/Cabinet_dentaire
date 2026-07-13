@@ -121,6 +121,8 @@ class PatientTreatmentController extends Controller
             'acts.*.dental_act_id' => ['required_with:acts', 'integer', 'exists:dental_acts,id'],
             'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
             'acts.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'agreed_amount' => ['nullable', 'numeric', 'min:0'],
+            'agreed_amount_date' => ['nullable', 'date'],
         ]);
 
         $consultationSimple = $this->resolveConsultationSimpleAct();
@@ -270,6 +272,8 @@ class PatientTreatmentController extends Controller
             'acts' => ['nullable', 'array'],
             'acts.*.dental_act_id' => ['required_with:acts', 'integer', 'exists:dental_acts,id'],
             'acts.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'agreed_amount' => ['nullable', 'numeric', 'min:0'],
+            'agreed_amount_date' => ['nullable', 'date'],
         ]);
 
         // On permet la clôture même sans séance pour les cas de réorientation de diagnostic ou erreur de saisie.
