@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/Layout';
@@ -107,6 +107,13 @@ export const Dashboard = () => {
   const [selectedRecentPatient, setSelectedRecentPatient] = useState(null);
   const [continuingTreatment, setContinuingTreatment] = useState(false);
   const [showCashModal, setShowCashModal] = useState(false);
+  const [financeVisible, setFinanceVisible] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinDigits, setPinDigits] = useState(['', '', '', '']);
+  const [pinError, setPinError] = useState(false);
+  const pinRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
+
+  const DASHBOARD_PIN = '1990';
 
   const isMultiDoctorMode = useMemo(() => doctors.length > 1, [doctors]);
 
@@ -122,6 +129,43 @@ export const Dashboard = () => {
       setLoading(false);
     }
   }, []);
+
+  const handlePinDigit = (index, value) => {
+    if (!/^[0-9]?$/.test(value)) return;
+    const next = [...pinDigits];
+    next[index] = value;
+    setPinDigits(next);
+    setPinError(false);
+    if (value && index < 3) {
+      pinRefs[index + 1].current?.focus();
+    }
+    if (value && index === 3) {
+      const code = next.join('');
+      if (code === DASHBOARD_PIN) {
+        setFinanceVisible(true);
+        setShowPinModal(false);
+        setPinDigits(['', '', '', '']);
+        setPinError(false);
+      } else {
+        setPinError(true);
+        setPinDigits(['', '', '', '']);
+        setTimeout(() => pinRefs[0].current?.focus(), 50);
+      }
+    }
+  };
+
+  const handlePinKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !pinDigits[index] && index > 0) {
+      pinRefs[index - 1].current?.focus();
+    }
+  };
+
+  const openPinModal = () => {
+    setPinDigits(['', '', '', '']);
+    setPinError(false);
+    setShowPinModal(true);
+    setTimeout(() => pinRefs[0].current?.focus(), 100);
+  };
 
   const loadDoctors = useCallback(async () => {
     try {
@@ -282,6 +326,21 @@ export const Dashboard = () => {
     }
   ];
 
+  // Icon œil ouvert
+  const EyeOpenIcon = () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    </svg>
+  );
+
+  // Icon œil fermé
+  const EyeClosedIcon = () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+    </svg>
+  );
+
   return (
     <Layout>
       <div className="min-h-screen bg-white p-6">
@@ -298,8 +357,8 @@ export const Dashboard = () => {
         {!loading && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {cashWidgets.map((widget) => (
-              <div 
-                key={widget.label} 
+              <div
+                key={widget.label}
                 className={`relative overflow-hidden rounded-2xl border bg-white p-5 shadow-sm transition-all hover:shadow-md ${
                   widget.color === 'emerald' ? 'border-emerald-100 hover:border-emerald-200' :
                   widget.color === 'blue' ? 'border-blue-100 hover:border-blue-200' :
@@ -311,31 +370,52 @@ export const Dashboard = () => {
                   widget.color === 'blue' ? 'bg-blue-500' :
                   'bg-indigo-500'
                 }`} />
-                
+
                 <div className="relative z-10 flex items-start justify-between">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">{widget.label}</p>
-                    <h3 className={`text-2xl font-black ${
-                      widget.color === 'emerald' ? 'text-emerald-600' :
-                      widget.color === 'blue' ? 'text-blue-600' :
-                      'text-indigo-600'
-                    }`}>
-                      {Number(widget.value).toLocaleString()} <span className="text-xs font-bold">XOF</span>
-                    </h3>
+                    {financeVisible ? (
+                      <h3 className={`text-2xl font-black ${
+                        widget.color === 'emerald' ? 'text-emerald-600' :
+                        widget.color === 'blue' ? 'text-blue-600' :
+                        'text-indigo-600'
+                      }`}>
+                        {Number(widget.value).toLocaleString()} <span className="text-xs font-bold">XOF</span>
+                      </h3>
+                    ) : (
+                      <h3 className={`text-2xl font-black tracking-widest ${
+                        widget.color === 'emerald' ? 'text-emerald-300' :
+                        widget.color === 'blue' ? 'text-blue-300' :
+                        'text-indigo-300'
+                      }`}>
+                        ••••••
+                      </h3>
+                    )}
                   </div>
-                  <div className={`p-2 rounded-xl ${
-                    widget.color === 'emerald' ? 'bg-emerald-50 text-emerald-500' :
-                    widget.color === 'blue' ? 'bg-blue-50 text-blue-500' :
-                    'bg-indigo-50 text-indigo-500'
-                  }`}>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
+
+                  {/* Bouton oeil pour toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (financeVisible) {
+                        setFinanceVisible(false);
+                      } else {
+                        openPinModal();
+                      }
+                    }}
+                    className={`p-2 rounded-xl transition-all ${
+                      widget.color === 'emerald' ? 'bg-emerald-50 text-emerald-400 hover:text-emerald-600 hover:bg-emerald-100' :
+                      widget.color === 'blue' ? 'bg-blue-50 text-blue-400 hover:text-blue-600 hover:bg-blue-100' :
+                      'bg-indigo-50 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100'
+                    }`}
+                    title={financeVisible ? 'Masquer les montants' : 'Afficher les montants'}
+                  >
+                    {financeVisible ? <EyeOpenIcon /> : <EyeClosedIcon />}
+                  </button>
                 </div>
 
-                {widget.action && (
-                  <button 
+                {widget.action && financeVisible && (
+                  <button
                     onClick={widget.action}
                     className="mt-4 flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-700 transition-colors uppercase tracking-tight"
                   >
@@ -345,6 +425,66 @@ export const Dashboard = () => {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Modale PIN */}
+        {showPinModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md"
+            onClick={() => setShowPinModal(false)}
+          >
+            <div
+              className="bg-white w-full max-w-xs rounded-3xl shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-6 pt-8 pb-6 flex flex-col items-center gap-5">
+                <div className="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg">
+                  <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <h3 className="text-base font-bold text-slate-900">Code confidentiel</h3>
+                  <p className="text-xs text-slate-400 mt-1">Saisissez votre PIN pour afficher les montants</p>
+                </div>
+
+                <div className="flex gap-3">
+                  {pinDigits.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={pinRefs[i]}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={e => handlePinDigit(i, e.target.value)}
+                      onKeyDown={e => handlePinKeyDown(i, e)}
+                      className={`w-12 h-14 text-center text-2xl font-black rounded-xl border-2 outline-none transition-all
+                        ${
+                          pinError
+                            ? 'border-red-400 bg-red-50 text-red-600 animate-pulse'
+                            : digit
+                            ? 'border-slate-900 bg-slate-900 text-white'
+                            : 'border-slate-200 bg-slate-50 text-slate-900 focus:border-slate-400'
+                        }`}
+                    />
+                  ))}
+                </div>
+
+                {pinError && (
+                  <p className="text-xs font-semibold text-red-500">Code incorrect, réessayez.</p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowPinModal(false)}
+                  className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
