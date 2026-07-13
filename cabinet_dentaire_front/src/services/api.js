@@ -659,6 +659,9 @@ export const productAPI = {
 
   getInvoice: (id) =>
     api.get(`/api/products/${id}/invoice`, { responseType: 'blob' }),
+
+  generateReport: (params = {}) =>
+    api.post('/api/products/report', params, { responseType: 'blob' }),
 };
 
 // Endpoints pour les suggestions de médicaments

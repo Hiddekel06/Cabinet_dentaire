@@ -7,6 +7,10 @@ use App\Models\ProductType;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
+use Mpdf\Mpdf;
+use Carbon\Carbon;
 
 class ProductController extends Controller
 {
@@ -210,5 +214,156 @@ class ProductController extends Controller
                 'by_type' => $byType,
             ],
         ]);
+    }
+
+    /**
+     * Generate a PDF report of purchases with optional period and type filters.
+     */
+    public function generateReport(Request $request)
+    {
+        $validated = $request->validate([
+            'period'     => 'nullable|string|in:today,week,month,quarter,custom',
+            'start_date' => 'nullable|date',
+            'end_date'   => 'nullable|date',
+            'type_id'    => 'nullable|integer|exists:product_types,id',
+        ]);
+
+        $query = Product::with('type')->orderBy('purchase_date', 'desc');
+
+        // ── Apply date filter based on period ──────────────────
+        $period    = $validated['period'] ?? 'month';
+        $periodLabel = '';
+        $now       = Carbon::now();
+
+        switch ($period) {
+            case 'today':
+                $query->whereDate('purchase_date', $now->toDateString());
+                $periodLabel = "Aujourd'hui (" . $now->format('d/m/Y') . ')';
+                break;
+
+            case 'week':
+                $start = $now->copy()->startOfWeek();
+                $end   = $now->copy()->endOfWeek();
+                $query->whereBetween('purchase_date', [$start->toDateString(), $end->toDateString()]);
+                $periodLabel = 'Cette semaine (' . $start->format('d/m') . ' – ' . $end->format('d/m/Y') . ')';
+                break;
+
+            case 'month':
+                $query->whereYear('purchase_date', $now->year)
+                      ->whereMonth('purchase_date', $now->month);
+                $periodLabel = 'Ce mois (' . $now->translatedFormat('F Y') . ')';
+                break;
+
+            case 'quarter':
+                $start = $now->copy()->firstOfQuarter();
+                $end   = $now->copy()->lastOfQuarter();
+                $query->whereBetween('purchase_date', [$start->toDateString(), $end->toDateString()]);
+                $periodLabel = 'Ce trimestre (' . $start->format('d/m') . ' – ' . $end->format('d/m/Y') . ')';
+                break;
+
+            case 'custom':
+                if (!empty($validated['start_date'])) {
+                    $query->whereDate('purchase_date', '>=', $validated['start_date']);
+                }
+                if (!empty($validated['end_date'])) {
+                    $query->whereDate('purchase_date', '<=', $validated['end_date']);
+                }
+                $from  = !empty($validated['start_date']) ? Carbon::parse($validated['start_date'])->format('d/m/Y') : '...';
+                $to    = !empty($validated['end_date'])   ? Carbon::parse($validated['end_date'])->format('d/m/Y') : '...';
+                $periodLabel = "Période personnalisée ({$from} – {$to})";
+                break;
+
+            default:
+                $periodLabel = 'Toutes les dates';
+        }
+
+        // ── Apply type filter ──────────────────────────────────
+        $typeLabel = '';
+        if (!empty($validated['type_id'])) {
+            $query->where('type_id', $validated['type_id']);
+            $type      = ProductType::find($validated['type_id']);
+            $typeLabel = $type ? $type->name : '';
+        }
+
+        $products   = $query->get();
+        $grandTotal = $products->sum('total_amount');
+
+        // ── Build per-type summary ─────────────────────────────
+        $byType = $products->groupBy(function ($p) {
+            return $p->type->name ?? 'Inconnu';
+        })->map(function ($group, $typeName) {
+            return [
+                'type'  => $typeName,
+                'count' => $group->count(),
+                'total' => $group->sum('total_amount'),
+            ];
+        })->sortByDesc('total')->values()->all();
+
+        // ── Cabinet info ───────────────────────────────────────
+        $cabinetName    = trim(str_replace('_', ' ', config('app.cabinet_name', 'Matlabul Shifah')));
+        $cabinetAddress = (string) config('app.cabinet_address', '');
+        $cabinetPhone   = (string) config('app.cabinet_phone', '');
+        $logoPath       = public_path('images/logoCabinet.png');
+        $logoDataUri    = null;
+        if (file_exists($logoPath)) {
+            $mime        = mime_content_type($logoPath) ?: 'image/png';
+            $logoDataUri = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoPath));
+        }
+
+        // ── Render blade & generate PDF ────────────────────────
+        try {
+            $html = view('pdf.purchases_report', [
+                'cabinetName'  => $cabinetName ?: 'Matlabul Shifah',
+                'cabinetAddress' => $cabinetAddress,
+                'cabinetPhone' => $cabinetPhone,
+                'logoDataUri'  => $logoDataUri,
+                'generatedAt'  => Carbon::now()->format('d/m/Y à H:i'),
+                'periodLabel'  => $periodLabel,
+                'typeLabel'    => $typeLabel,
+                'products'     => $products,
+                'grandTotal'   => $grandTotal,
+                'byType'       => $byType,
+            ])->render();
+
+            $tempDir = storage_path('app/mpdf');
+            File::ensureDirectoryExists($tempDir);
+
+            $mpdf = new Mpdf([
+                'format'       => 'A4',
+                'orientation'  => 'P',
+                'tempDir'      => $tempDir,
+                'margin_left'  => 10,
+                'margin_right' => 10,
+                'margin_top'   => 10,
+                'margin_bottom'=> 10,
+                'default_font' => 'dejavusans',
+                'default_font_size' => 10,
+            ]);
+
+            $mpdf->SetTitle('Rapport des Achats');
+            $mpdf->SetAuthor($cabinetName);
+            $mpdf->SetSubject('Rapport des dépenses cabinet dentaire');
+            $mpdf->WriteHTML($html);
+
+            $pdfContent = $mpdf->Output('', 'S'); // Return as string
+
+            $slug = preg_replace('/\s+/', '_', strtolower($period));
+            $filename = 'rapport_achats_' . $slug . '_' . Carbon::now()->format('Ymd_His') . '.pdf';
+
+            return response($pdfContent, 200, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Content-Length'      => strlen($pdfContent),
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Purchases report PDF generation failed', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Erreur lors de la génération du rapport : ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }
