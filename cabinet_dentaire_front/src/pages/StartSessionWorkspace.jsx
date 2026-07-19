@@ -153,16 +153,20 @@ const StartSessionWorkspace = () => {
             .filter((receipt) => Number(receipt.total_amount || 0) >= 0)
             .sort((a, b) => new Date(b.issue_date || b.created_at) - new Date(a.issue_date || a.created_at));
 
-          const sessionsFromReceipts = receipts.map((receipt) => ({
-            id: receipt.id,
-            created_at: receipt.issue_date || receipt.created_at,
-            issue_date: receipt.issue_date || receipt.created_at,
-            receipt_number: receipt.receipt_number,
-            receipt_total_amount: Number(receipt.total_amount || 0),
-            amount_collected: Number(receipt.total_amount || 0),
-            medical_record_id: receipt.medical_record_id,
-            receipt_source: 'session_receipt',
-          }));
+          const sessionsFromReceipts = receipts.map((receipt) => {
+            const matchingRecord = records.find(r => Number(r.id) === Number(receipt.medical_record_id));
+            return {
+              id: receipt.id,
+              created_at: receipt.issue_date || receipt.created_at,
+              issue_date: receipt.issue_date || receipt.created_at,
+              receipt_number: receipt.receipt_number,
+              receipt_total_amount: Number(receipt.total_amount || 0),
+              amount_collected: Number(receipt.total_amount || 0),
+              medical_record_id: receipt.medical_record_id,
+              receipt_source: 'session_receipt',
+              motif: matchingRecord?.appointment?.reason || matchingRecord?.treatment_performed || '',
+            };
+          });
 
           setPastSessions(sessionsFromReceipts);
           setCollectedSoFar(receipts.reduce((s, r) => s + (Number(r.total_amount || 0)), 0));
@@ -174,6 +178,7 @@ const StartSessionWorkspace = () => {
           const sessionsWithRecordAmounts = sortedRecords.map((record) => ({
             ...record,
             receipt_total_amount: Number(record.amount_collected || 0),
+            motif: record.appointment?.reason || record.treatment_performed || '',
           }));
 
           setPastSessions(sessionsWithRecordAmounts);
@@ -726,7 +731,12 @@ const StartSessionWorkspace = () => {
                 <tbody className="divide-y divide-slate-50">
                   {pastSessions.map((session, idx) => (
                     <tr key={session.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-3 font-semibold text-slate-700">Séance #{pastSessions.length - idx}</td>
+                      <td className="px-6 py-3 font-semibold text-slate-700">
+                        Séance #{pastSessions.length - idx}
+                        {session.motif && (
+                          <span className="text-xs font-normal text-slate-500"> : "{session.motif}"</span>
+                        )}
+                      </td>
                       <td className="px-6 py-3 text-slate-600">
                         {new Date(session.created_at).toLocaleDateString('fr-FR')}
                       </td>

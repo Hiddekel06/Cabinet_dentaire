@@ -45,6 +45,8 @@ const StartTreatmentWorkspace = () => {
     name: '', // Nom du traitement
     planned_treatment: '', // Champ libre pour le traitement
     amount_collected: '', // Premier encaissement
+    agreed_amount: '', // Montant convenu
+    agreed_amount_date: new Date().toISOString().split('T')[0], // Date de l'accord
     start_date: new Date().toISOString().split('T')[0],
     next_appointment_date: '',
     next_appointment_reason: '',
@@ -242,6 +244,19 @@ const StartTreatmentWorkspace = () => {
       return;
     }
 
+    // Validation du montant convenu si renseigné
+    if (form.agreed_amount) {
+      if (isNaN(Number(form.agreed_amount)) || Number(form.agreed_amount) < 0) {
+        showFeedback('warning', 'Montant incorrect', 'Veuillez entrer un montant convenu valide.');
+        return;
+      }
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (form.agreed_amount_date > todayStr) {
+        showFeedback('warning', 'Date incorrecte', 'La date de l\'accord ne peut pas être dans le futur.');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const res = await patientTreatmentAPI.create({ 
@@ -251,6 +266,8 @@ const StartTreatmentWorkspace = () => {
         next_appointment_date: form.next_appointment_date, // Correction : on passait la date mais elle n'était pas lue par le controller car le nom de champ doit correspondre
         next_appointment_reason: form.next_appointment_reason,
         notes: form.planned_treatment,
+        agreed_amount: form.agreed_amount ? Number(form.agreed_amount) : null,
+        agreed_amount_date: form.agreed_amount ? form.agreed_amount_date : null,
         acts: [] 
       });
       
@@ -623,6 +640,59 @@ const StartTreatmentWorkspace = () => {
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-600 font-bold">XOF</span>
                 </div>
                 <p className="mt-2 text-[10px] text-emerald-600 font-medium">L'encaissement générera automatiquement un reçu de séance.</p>
+              </div>
+
+              {/* Accord Financier Global */}
+              <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Accord financier global
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Montant convenu (XOF)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={form.agreed_amount}
+                        onChange={(e) => setForm((prev) => ({ ...prev, agreed_amount: e.target.value }))}
+                        placeholder="Aucun montant"
+                        className="w-full pl-3 pr-10 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-slate-50/30"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">XOF</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Date de l'accord</label>
+                    <input
+                      type="date"
+                      max={new Date().toISOString().slice(0, 10)}
+                      value={form.agreed_amount_date}
+                      onChange={(e) => setForm((prev) => ({ ...prev, agreed_amount_date: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-slate-50/30"
+                    />
+                  </div>
+                </div>
+
+                {/* Affichage dynamique du restant */}
+                {form.agreed_amount && !isNaN(Number(form.agreed_amount)) && (
+                  <div className="bg-indigo-50/50 rounded-lg p-2.5 border border-indigo-100/50 text-[11px] text-indigo-950 flex justify-between items-center">
+                    <div>
+                      <span>Reste à encaisser : </span>
+                      <span className="font-bold text-indigo-700">
+                        {Math.max(0, Number(form.agreed_amount) - Number(form.amount_collected || 0)).toLocaleString('fr-FR')} XOF
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

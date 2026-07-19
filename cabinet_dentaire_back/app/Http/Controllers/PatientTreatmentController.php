@@ -180,6 +180,8 @@ class PatientTreatmentController extends Controller
             'status' => $validated['status'] ?? 'planned',
             'notes' => $validated['notes'] ?? null,
             'next_appointment_id' => $appointmentId,
+            'agreed_amount' => $validated['agreed_amount'] ?? null,
+            'agreed_amount_date' => $validated['agreed_amount_date'] ?? null,
         ]);
 
         // Consultation simple obligatoire ajoutee automatiquement au demarrage.

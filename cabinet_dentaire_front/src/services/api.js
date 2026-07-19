@@ -11,10 +11,10 @@ const api = axios.create({
   },
 });
 
-// Mini système de cache
+// 🔥 Mini système de cache (5 minutes par défaut)
 const cache = new Map();
 const inFlightRequests = new Map();
-const CACHE_DURATION = 5 * 60 * 1000;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 const getCachedData = (key) => {
   const cached = cache.get(key);
@@ -55,35 +55,29 @@ const clearCache = (pattern = null) => {
     inFlightRequests.clear();
   } else {
     for (const key of cache.keys()) {
-      if (key.includes(pattern)) cache.delete(key);
+      if (key.includes(pattern)) {
+        cache.delete(key);
+      }
     }
     for (const key of inFlightRequests.keys()) {
-      if (key.includes(pattern)) inFlightRequests.delete(key);
+      if (key.includes(pattern)) {
+        inFlightRequests.delete(key);
+      }
     }
   }
 };
 
-// Interceptor corrigé
+// 🔥 Interceptor pour ajouter le Bearer token à chaque requête
 api.interceptors.request.use((config) => {
-  const url = config.url || '';
-  config.withCredentials = true;
-  config.headers = config.headers || {};
-
-  // IMPORTANT: ne pas envoyer Authorization ni X-XSRF-TOKEN sur csrf-cookie
-  if (url.includes('/sanctum/csrf-cookie')) {
-    delete config.headers.Authorization;
-    delete config.headers['X-XSRF-TOKEN'];
-    return config;
-  }
-
   const bearerToken = localStorage.getItem('token');
   if (bearerToken) {
-    config.headers.Authorization = `Bearer ${bearerToken}`;
+    config.headers['Authorization'] = `Bearer ${bearerToken}`;
   }
 
+  // Garder aussi le XSRF token en cas de besoin
   const xsrfToken = document.cookie
     .split('; ')
-    .find((row) => row.startsWith('XSRF-TOKEN='))
+    .find(row => row.startsWith('XSRF-TOKEN='))
     ?.split('=')[1];
 
   if (xsrfToken) {
@@ -94,35 +88,32 @@ api.interceptors.request.use((config) => {
 });
 
 export async function getCsrfToken() {
-  await api.get('/sanctum/csrf-cookie', {
-    withCredentials: true,
-    headers: {
-      Accept: 'application/json',
-    },
-  });
+  await api.get('/sanctum/csrf-cookie');
 }
 
 // Endpoints d'authentification
 export const authAPI = {
   login: async (email, password) => {
     await getCsrfToken();
-    clearCache();
+    clearCache(); // Vider le cache à la connexion
     const response = await api.post('/api/login', { email, password });
-
+    
+    // Stocker le token Bearer si fourni
     if (response.data?.token) {
       localStorage.setItem('token', response.data.token);
     }
-
+    
     return response;
   },
 
   logout: () => {
-    clearCache();
+    clearCache(); // Vider le cache à la déconnexion
     localStorage.removeItem('token');
     return api.post('/api/logout');
   },
 
-  getUser: () => fetchWithCache('auth:user', () => api.get('/api/user')),
+  getUser: () =>
+    fetchWithCache('auth:user', () => api.get('/api/user')),
 };
 
 // Endpoints pour le staff
@@ -131,11 +122,11 @@ export const doctorAPI = {
     const cacheKey = 'users:doctors';
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-    return api.get('/api/users/doctors').then((res) => {
+    return api.get('/api/users/doctors').then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
-  },
+  }
 };
 
 // Endpoints pour les patients
@@ -145,8 +136,8 @@ export const patientAPI = {
     const cacheKey = `patients:${query}`;
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/patients?${query}`).then((res) => {
+    
+    return api.get(`/api/patients?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -206,6 +197,7 @@ export const radiographyAPI = {
 // Endpoints pour les rendez-vous
 export const appointmentAPI = {
   getAll: (params = {}) => {
+    // Si params est un nombre, on le convertit en objet pour la compatibilité
     const p = typeof params === 'number' ? { page: params } : params;
     const query = new URLSearchParams(p).toString();
     const cacheKey = `appointments:${query}`;
@@ -213,12 +205,11 @@ export const appointmentAPI = {
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
 
-    return api.get(`/api/appointments?${query}`).then((res) => {
+    return api.get(`/api/appointments?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
   },
-
   getByDate: (date) => {
     const queryDate = encodeURIComponent(date);
     const cacheKey = `appointments:date:${queryDate}`;
@@ -247,14 +238,14 @@ export const appointmentAPI = {
     api.get(`/api/appointments/${id}/treatment-link`),
 };
 
-// Endpoints pour les traitements
+// Endpoints pour les traitements (catalogue)
 export const treatmentAPI = {
   getAll: (page = 1) => {
     const cacheKey = `treatments:${page}`;
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/treatments?page=${page}`).then((res) => {
+    
+    return api.get(`/api/treatments?page=${page}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -279,15 +270,15 @@ export const treatmentAPI = {
   },
 };
 
-// Endpoints pour les suivis patients
+// Endpoints pour les suivis patients (patient-treatments)
 export const patientTreatmentAPI = {
   getAll: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     const cacheKey = `patient-treatments:${query}`;
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/patient-treatments?${query}`).then((res) => {
+    
+    return api.get(`/api/patient-treatments?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -311,16 +302,19 @@ export const patientTreatmentAPI = {
     return api.delete(`/api/patient-treatments/${id}`);
   },
 
+  // Ajouter des actes à un traitement existant
   addActs: (id, acts) => {
     clearCache('patient-treatments');
     return api.post(`/api/patient-treatments/${id}/acts`, { acts });
   },
 
+  // Modifier un acte d'un traitement existant
   updateAct: (treatmentId, actId, data) => {
     clearCache('patient-treatments');
     return api.patch(`/api/patient-treatments/${treatmentId}/acts/${actId}`, data);
   },
 
+  // Supprimer un acte d'un traitement existant
   removeAct: (treatmentId, actId, auditNote = '') => {
     clearCache('patient-treatments');
     return api.delete(`/api/patient-treatments/${treatmentId}/acts/${actId}`, {
@@ -330,6 +324,7 @@ export const patientTreatmentAPI = {
     });
   },
 
+  // Historique d'audit d'un traitement
   getAuditLogs: (id) =>
     api.get(`/api/patient-treatments/${id}/audit-logs`),
 };
@@ -341,8 +336,8 @@ export const medicalRecordAPI = {
     const cacheKey = `medical-records:${query}`;
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/medical-records?${query}`).then((res) => {
+    
+    return api.get(`/api/medical-records?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -350,7 +345,7 @@ export const medicalRecordAPI = {
 
   getById: (id) =>
     api.get(`/api/medical-records/${id}`),
-
+  
   getByPatient: (patientId) =>
     api.get(`/api/medical-records?patient_id=${patientId}`),
 
@@ -374,63 +369,59 @@ export const medicalRecordAPI = {
   },
 };
 
-// Observations cliniques
+// Endpoints pour les observations cliniques (Anamnèse / Examen complet)
 export const clinicalObservationAPI = {
   getAll: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     const cacheKey = `clinical_observations:${query}`;
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/clinical-observations?${query}`).then((res) => {
+    
+    return api.get(`/api/clinical-observations?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
   },
-
   getById: (id) => api.get(`/api/clinical-observations/${id}`),
-
   create: (data) => {
     clearCache('clinical_observations');
     return api.post('/api/clinical-observations', data);
   },
-
   update: (id, data) => {
     clearCache('clinical_observations');
     return api.put(`/api/clinical-observations/${id}`, data);
   },
-
   delete: (id) => {
     clearCache('clinical_observations');
     return api.delete(`/api/clinical-observations/${id}`);
   },
-
   generatePDF: (id) =>
     api.post(`/api/clinical-observations/${id}/generate`, {}, { responseType: 'blob' }),
 };
 
+// Endpoints pour les actes dentaires
 export const dentalActAPI = {
   getAll: () => {
     const cacheKey = 'dental-acts:all';
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-    return api.get('/api/dental-acts').then((res) => {
+    return api.get('/api/dental-acts').then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
   },
 };
 
+// Endpoints pour les certificats médicaux
 export const medicalCertificateAPI = {
   generate: (id) =>
     api.post(`/api/medical-certificates/${id}/generate`, {}, { responseType: 'blob' }),
-
   getAll: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     const cacheKey = `medical-certificates:${query}`;
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-    return api.get(`/api/medical-certificates?${query}`).then((res) => {
+    return api.get(`/api/medical-certificates?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -438,7 +429,7 @@ export const medicalCertificateAPI = {
 
   getById: (id) =>
     api.get(`/api/medical-certificates/${id}`),
-
+  
   getByPatient: (patientId) =>
     api.get(`/api/medical-certificates?patient_id=${patientId}`),
 
@@ -458,6 +449,7 @@ export const medicalCertificateAPI = {
   },
 };
 
+// Endpoints pour les ordonnances
 export const ordonnanceAPI = {
   getAll: (params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -465,7 +457,7 @@ export const ordonnanceAPI = {
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
 
-    return api.get(`/api/ordonnances?${query}`).then((res) => {
+    return api.get(`/api/ordonnances?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -488,6 +480,7 @@ export const ordonnanceAPI = {
     api.post(`/api/ordonnances/${id}/generate`, data, { responseType: 'blob' }),
 };
 
+// Endpoints pour les factures
 export const invoiceAPI = {
   getAll: (params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -495,7 +488,7 @@ export const invoiceAPI = {
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
 
-    return api.get(`/api/invoices?${query}`).then((res) => {
+    return api.get(`/api/invoices?${query}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -505,7 +498,7 @@ export const invoiceAPI = {
     api.get(`/api/invoices/${id}`),
 
   create: (data) => {
-    return api.post('/api/invoices', data).then((res) => {
+    return api.post('/api/invoices', data).then(res => {
       clearCache('invoices');
       clearCache('statistics:overview');
       clearCache('dashboard:overview');
@@ -524,6 +517,7 @@ export const invoiceAPI = {
     api.post(`/api/invoices/${id}/generate`, {}, { responseType: 'blob' }),
 };
 
+// Endpoints pour les recus de seance (distincts des factures finales)
 export const sessionReceiptAPI = {
   getAll: (params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -550,7 +544,7 @@ export const sessionReceiptAPI = {
   },
 
   delete: (id) => {
-    return api.delete(`/api/session-receipts/${id}`).then((res) => {
+    return api.delete(`/api/session-receipts/${id}`).then(res => {
       clearCache('session-receipts');
       clearCache('statistics:overview');
       clearCache('dashboard:overview');
@@ -560,13 +554,14 @@ export const sessionReceiptAPI = {
   },
 };
 
+// Endpoints pour les types de produits
 export const productTypeAPI = {
   getAll: () => {
     const cacheKey = 'product-types:all';
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-
-    return api.get('/api/product-types').then((res) => {
+    
+    return api.get('/api/product-types').then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -591,14 +586,18 @@ export const productTypeAPI = {
   },
 };
 
+// Endpoints pour les produits (achats)
 export const productAPI = {
   getAll: (page = 1, params = {}) => {
-    const queryParams = new URLSearchParams({ page, ...params }).toString();
+    const queryParams = new URLSearchParams({
+      page,
+      ...params,
+    }).toString();
     const cacheKey = `products:${queryParams}`;
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-
-    return api.get(`/api/products?${queryParams}`).then((res) => {
+    
+    return api.get(`/api/products?${queryParams}`).then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -611,7 +610,8 @@ export const productAPI = {
     clearCache('products');
     clearCache('statistics:overview');
     clearCache('dashboard:overview');
-
+    
+    // Si c'est un FormData (pour upload PDF), on l'envoie tel quel
     if (data instanceof FormData) {
       return api.post('/api/products', data, {
         headers: {
@@ -619,7 +619,6 @@ export const productAPI = {
         },
       });
     }
-
     return api.post('/api/products', data);
   },
 
@@ -627,7 +626,8 @@ export const productAPI = {
     clearCache('products');
     clearCache('statistics:overview');
     clearCache('dashboard:overview');
-
+    
+    // Si c'est un FormData (pour upload PDF), on utilise POST avec _method=PUT
     if (data instanceof FormData) {
       data.append('_method', 'PUT');
       return api.post(`/api/products/${id}`, data, {
@@ -636,7 +636,6 @@ export const productAPI = {
         },
       });
     }
-
     return api.put(`/api/products/${id}`, data);
   },
 
@@ -651,8 +650,8 @@ export const productAPI = {
     const cacheKey = 'products:statistics';
     const cached = getCachedData(cacheKey);
     if (cached) return Promise.resolve(cached);
-
-    return api.get('/api/products/statistics').then((res) => {
+    
+    return api.get('/api/products/statistics').then(res => {
       setCachedData(cacheKey, res);
       return res;
     });
@@ -665,11 +664,13 @@ export const productAPI = {
     api.post('/api/products/report', params, { responseType: 'blob' }),
 };
 
+// Endpoints pour les suggestions de médicaments
 export const medicationAPI = {
   suggestions: (query = '') =>
     api.get(`/api/medications/suggestions?query=${encodeURIComponent(query)}`),
 };
 
+// Endpoint pour le tableau de bord statistiques
 export const statisticsAPI = {
   getOverview: (period = 'month') => {
     const cacheKey = `statistics:overview:${period}`;
@@ -680,6 +681,7 @@ export const statisticsAPI = {
   },
 };
 
+// Endpoint pour la vue dashboard
 export const dashboardAPI = {
   getOverview: (period = 'month') => {
     const cacheKey = `dashboard:overview:${period}`;
@@ -688,7 +690,6 @@ export const dashboardAPI = {
       () => api.get(`/api/dashboard/overview?period=${encodeURIComponent(period)}`)
     );
   },
-
   getPendingActions: () => api.get('/api/dashboard/pending-actions'),
 };
 
