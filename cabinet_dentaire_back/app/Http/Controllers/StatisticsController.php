@@ -71,7 +71,6 @@ class StatisticsController extends Controller
                 ->where('status', 'pending')
                 ->sum('total_amount');
 
-            $revenueCollected += $sessionReceiptsPaid;
             $receivableAmount += $sessionReceiptsPending;
 
             $invoicesPaid = Invoice::query()
@@ -227,16 +226,10 @@ class StatisticsController extends Controller
 
     private function sumRevenue(Carbon $from, Carbon $to): float
     {
-        $invoiceRevenue = (float) Invoice::query()
-            ->whereBetween('issue_date', [$from->toDateString(), $to->toDateString()])
-            ->sum('paid_amount');
-
-        $receiptRevenue = (float) SessionReceipt::query()
+        return (float) SessionReceipt::query()
             ->whereBetween('issue_date', [$from->toDateString(), $to->toDateString()])
             ->where('status', 'paid')
             ->sum('total_amount');
-
-        return $invoiceRevenue + $receiptRevenue;
     }
 
     private function sumExpenses(Carbon $from, Carbon $to): float
@@ -263,9 +256,10 @@ class StatisticsController extends Controller
         $startMonth = Carbon::now()->subMonths(5)->startOfMonth();
         $endMonth = Carbon::now()->endOfMonth();
 
-        $invoiceRows = Invoice::query()
-            ->selectRaw("DATE_FORMAT(issue_date, '%Y-%m') as ym, COALESCE(SUM(paid_amount), 0) as total")
+        $receiptRows = SessionReceipt::query()
+            ->selectRaw("DATE_FORMAT(issue_date, '%Y-%m') as ym, COALESCE(SUM(total_amount), 0) as total")
             ->whereBetween('issue_date', [$startMonth->toDateString(), $endMonth->toDateString()])
+            ->where('status', 'paid')
             ->groupBy('ym')
             ->pluck('total', 'ym');
 
@@ -282,7 +276,7 @@ class StatisticsController extends Controller
             $ym = $cursor->format('Y-m');
             $series[] = [
                 'month' => ucfirst($cursor->locale('fr')->isoFormat('MMM')),
-                'revenue' => (float) ($invoiceRows[$ym] ?? 0),
+                'revenue' => (float) ($receiptRows[$ym] ?? 0),
                 'expenses' => (float) ($productRows[$ym] ?? 0),
             ];
             $cursor->addMonth();
