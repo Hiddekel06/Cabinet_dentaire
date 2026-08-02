@@ -232,6 +232,7 @@ class StatisticsController extends Controller
             ->sum('total_amount');
     }
 
+
     private function sumExpenses(Carbon $from, Carbon $to): float
     {
         return (float) Product::query()

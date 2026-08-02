@@ -111,28 +111,8 @@ class SessionReceiptController extends Controller
 
         $patientId = $medicalRecord ? $medicalRecord->patient_id : $validated['patient_id'];
 
-        if ($medicalRecordId) {
-            $existingReceipt = SessionReceipt::query()
-                ->where('medical_record_id', $medicalRecordId)
-                ->latest('id')
-                ->first();
-
-            if ($existingReceipt) {
-                $existingReceipt->load(['items.dentalAct', 'patient', 'medicalRecord'])
-                    ->loadCount([
-                        'events as downloads_count' => function ($eventQuery) {
-                            $eventQuery->where('event_type', 'downloaded');
-                        },
-                    ]);
-
-                $existingReceipt->setAttribute(
-                    'last_downloaded_at',
-                    $existingReceipt->events()->where('event_type', 'downloaded')->max('created_at')
-                );
-
-                return response()->json($existingReceipt, 200);
-            }
-        }
+        // On autorise la création de reçus multiples liés à une même séance (medical_record_id),
+        // par exemple pour enregistrer des paiements complémentaires/manuels.
 
         // If acts are provided, build a detailed receipt. Otherwise if amount_collected is provided,
         // create a simple receipt representing the collected amount (no items).
@@ -197,7 +177,7 @@ class SessionReceiptController extends Controller
 
             $receipt->update([
                 'receipt_number' => sprintf('REC-%s-%06d', date('Y'), $receipt->id),
-                'total_amount' => $receipt->total_amount ?: $total,
+                'total_amount' => ((float) $receipt->total_amount > 0) ? $receipt->total_amount : $total,
             ]);
 
             $this->logReceiptEvent(

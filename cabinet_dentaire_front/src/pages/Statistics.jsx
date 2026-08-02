@@ -307,6 +307,7 @@ const Statistics = () => {
             })}
           </div>
 
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Recettes vs dépenses (6 mois)</h2>
