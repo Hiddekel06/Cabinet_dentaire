@@ -701,13 +701,19 @@ export const settingAPI = {
     return fetchWithCache('settings:all', () => api.get('/api/settings'));
   },
 
+  getBranding: () => {
+    return fetchWithCache('settings:branding', () => api.get('/api/branding'));
+  },
+
   update: (data) => {
     clearCache('settings:all');
+    clearCache('settings:branding');
     return api.put('/api/settings', data);
   },
 
   uploadLogo: (file) => {
     clearCache('settings:all');
+    clearCache('settings:branding');
     const formData = new FormData();
     formData.append('logo', file);
     return api.post('/api/settings/logo', formData, {
@@ -717,6 +723,7 @@ export const settingAPI = {
 
   deleteLogo: () => {
     clearCache('settings:all');
+    clearCache('settings:branding');
     return api.delete('/api/settings/logo');
   },
 };

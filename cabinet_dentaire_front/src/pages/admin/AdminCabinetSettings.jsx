@@ -6,6 +6,7 @@ import { CABINET_THEME_OPTIONS } from '../../theme/cabinetThemes';
 const BACKEND_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
   .replace(/\/+$/, '')
   .replace(/\/api$/, '');
+const DEFAULT_LOGO_SRC = '/images/logoCabinet.png';
 
 const AdminCabinetSettings = () => {
   const [form, setForm] = useState({
@@ -46,7 +47,7 @@ const AdminCabinetSettings = () => {
       if (data.cabinet_logo) {
         setLogoUrl(`${BACKEND_URL}/storage/${data.cabinet_logo}`);
       } else {
-        setLogoUrl(null);
+        setLogoUrl(DEFAULT_LOGO_SRC);
       }
     } catch (err) {
       setError('Impossible de charger les paramètres.');
@@ -112,7 +113,7 @@ const AdminCabinetSettings = () => {
     try {
       await settingAPI.deleteLogo();
       window.dispatchEvent(new Event('cabinet-settings-updated'));
-      setLogoUrl(null);
+      setLogoUrl(DEFAULT_LOGO_SRC);
       setLogoPreview(null);
       setLogoFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -196,9 +197,7 @@ const AdminCabinetSettings = () => {
                     alt="Logo cabinet"
                     className="w-full h-full object-contain"
                   />
-                ) : (
-                  <span className="text-xs text-gray-400 text-center px-2">Logo par défaut</span>
-                )}
+                ) : null}
               </div>
             </div>
 

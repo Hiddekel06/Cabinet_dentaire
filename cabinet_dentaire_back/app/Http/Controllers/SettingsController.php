@@ -54,6 +54,26 @@ class SettingsController extends Controller
     }
 
     /**
+     * Retourne uniquement les éléments publics de branding.
+     */
+    public function branding()
+    {
+        try {
+            $settings = Setting::all()->pluck('value', 'key')->toArray();
+        } catch (\Throwable) {
+            $settings = [];
+        }
+
+        $cabinetLogo = $settings['cabinet_logo'] ?? null;
+
+        return response()->json([
+            'cabinet_name' => $settings['cabinet_name'] ?? config('app.cabinet_name', 'Matlabul Shifah'),
+            'cabinet_logo' => $cabinetLogo,
+            'cabinet_logo_url' => $cabinetLogo ? Storage::url($cabinetLogo) : null,
+        ]);
+    }
+
+    /**
      * Met à jour les paramètres textuels du cabinet.
      */
     public function update(Request $request)

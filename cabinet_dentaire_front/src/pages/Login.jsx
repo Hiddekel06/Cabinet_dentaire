@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { CabinetLogo } from '../components/CabinetLogo';
 
 export const Login = () => {
   const navigate = useNavigate();
@@ -31,11 +32,21 @@ export const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100 p-4">
       <div className="relative z-10 w-full max-w-4xl mx-auto px-2">
         <div className="bg-white rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 md:grid-cols-2 border border-gray-200">
           {/* Left: illustration/image */}
-          <div className="hidden md:block bg-cover bg-center" style={{ backgroundImage: `url(/images/logoCabinet.png)`, minHeight: 420 }}></div>
+          <div className="hidden md:block relative overflow-hidden min-h-105 bg-linear-to-br from-blue-50 via-white to-indigo-50">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.14),transparent_36%),radial-gradient(circle_at_bottom_left,rgba(79,70,229,0.12),transparent_28%)]" />
+            <div className="relative h-full min-h-105 flex items-center justify-center p-10">
+              <div className="w-full h-full rounded-2xl bg-white/70 backdrop-blur-sm border border-white/60 shadow-inner flex items-center justify-center p-10">
+                <CabinetLogo
+                  alt="Logo du cabinet"
+                  className="w-full h-full max-w-85 max-h-85 object-contain drop-shadow-sm rounded-none border-0 bg-transparent"
+                />
+              </div>
+            </div>
+          </div>
 
           {/* Right: form section */}
           <div className="p-8 md:p-12 flex flex-col justify-center">

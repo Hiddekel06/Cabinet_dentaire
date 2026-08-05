@@ -2,6 +2,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { appointmentAPI, settingAPI } from '../services/api';
+import { CabinetLogo } from './CabinetLogo';
 
 export const Header = () => {
   const { user, logout } = useAuth();
@@ -91,18 +92,13 @@ export const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-gradient-to-r from-white via-gray-50 to-gray-100 border-b border-gray-200 shadow backdrop-blur-md bg-opacity-90">
+    <header className="sticky top-0 z-50 bg-linear-to-r from-white via-gray-50 to-gray-100 border-b border-gray-200 shadow backdrop-blur-md bg-opacity-90">
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo et titre - Côté gauche */}
           <div className="flex items-center space-x-4">
             <Link to="/dashboard" className="flex items-center space-x-3 hover:opacity-90 transition-opacity">
-              <img
-                src="/images/logoCabinet.png"
-                alt="Logo Cabinet Dentaire"
-                className="w-12 h-12 rounded-full object-cover shadow-sm border border-gray-200 bg-white"
-                style={{ backgroundColor: '#fff' }}
-              />
+              <CabinetLogo alt="Logo Cabinet Dentaire" />
               <div className="hidden sm:block">
                 <h1 className="text-lg font-bold text-gray-900 leading-tight">{cabinetName}</h1>
                 <p className="text-xs text-gray-500">Gestion médicale intelligente</p>
@@ -136,7 +132,7 @@ export const Header = () => {
                   </svg>
                   Alertes
                   {alertCount > 0 && (
-                    <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] leading-[18px] text-center font-bold border border-white">
+                    <span className="absolute -top-2 -right-2 min-w-4.5 h-4.5 px-1 rounded-full bg-red-600 text-white text-[10px] leading-4.5 text-center font-bold border border-white">
                       {alertCount > 99 ? '99+' : alertCount}
                     </span>
                   )}
@@ -193,7 +189,7 @@ export const Header = () => {
               >
                 {/* Avatar utilisateur */}
                 <div className="relative">
-                  <div className="w-9 h-9 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center border border-blue-50">
+                  <div className="w-9 h-9 bg-linear-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center border border-blue-50">
                     <span className="text-blue-700 font-semibold text-sm">
                       {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                     </span>
@@ -233,7 +229,7 @@ export const Header = () => {
                     {/* En-tête du menu */}
                     <div className="px-4 py-3 border-b border-gray-100">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center">
+                        <div className="w-10 h-10 bg-linear-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center">
                           <span className="text-blue-700 font-semibold">
                             {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                           </span>
