@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { settingAPI } from '../../services/api';
+import { CABINET_THEME_OPTIONS } from '../../theme/cabinetThemes';
 
 const BACKEND_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
   .replace(/\/+$/, '')
@@ -13,6 +14,7 @@ const AdminCabinetSettings = () => {
     cabinet_phone: '',
     pdf_header_text: '',
     module_clinical_observations_enabled: false,
+    cabinet_theme: 'default',
   });
   const [logoUrl, setLogoUrl] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -39,6 +41,7 @@ const AdminCabinetSettings = () => {
         cabinet_phone: data.cabinet_phone || '',
         pdf_header_text: data.pdf_header_text || '',
         module_clinical_observations_enabled: Boolean(data.module_clinical_observations_enabled),
+        cabinet_theme: data.cabinet_theme || 'default',
       });
       if (data.cabinet_logo) {
         setLogoUrl(`${BACKEND_URL}/storage/${data.cabinet_logo}`);
@@ -65,6 +68,7 @@ const AdminCabinetSettings = () => {
     setError('');
     try {
       await settingAPI.update(form);
+      window.dispatchEvent(new Event('cabinet-settings-updated'));
       setSuccess('Paramètres enregistrés avec succès !');
     } catch (err) {
       setError(err?.response?.data?.message || 'Erreur lors de la sauvegarde.');
@@ -89,6 +93,7 @@ const AdminCabinetSettings = () => {
     setError('');
     try {
       const { data } = await settingAPI.uploadLogo(logoFile);
+      window.dispatchEvent(new Event('cabinet-settings-updated'));
       setLogoUrl(`${BACKEND_URL}/storage/${data.cabinet_logo}`);
       setLogoPreview(null);
       setLogoFile(null);
@@ -106,6 +111,7 @@ const AdminCabinetSettings = () => {
     setDeletingLogo(true);
     try {
       await settingAPI.deleteLogo();
+      window.dispatchEvent(new Event('cabinet-settings-updated'));
       setLogoUrl(null);
       setLogoPreview(null);
       setLogoFile(null);
@@ -116,6 +122,12 @@ const AdminCabinetSettings = () => {
     } finally {
       setDeletingLogo(false);
     }
+  };
+
+  const handleThemeSelect = (themeKey) => {
+    setForm((prev) => ({ ...prev, cabinet_theme: themeKey }));
+    setSuccess('');
+    setError('');
   };
 
   if (loading) {
@@ -290,6 +302,60 @@ const AdminCabinetSettings = () => {
               placeholder="Ex: Cabinet agréé Ministère de la Santé · NINEA 12345"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all resize-none"
             />
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold text-gray-800">Thème du cabinet</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Choisissez une palette validée. Vous pouvez revenir au thème par défaut à tout moment.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleThemeSelect('default')}
+                className="text-xs font-semibold text-blue-700 hover:text-blue-800 hover:underline whitespace-nowrap"
+              >
+                Réinitialiser
+              </button>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {CABINET_THEME_OPTIONS.map((theme) => {
+                const isActive = form.cabinet_theme === theme.key;
+                return (
+                  <button
+                    key={theme.key}
+                    type="button"
+                    onClick={() => handleThemeSelect(theme.key)}
+                    className={`rounded-xl border p-4 text-left transition-all hover:shadow-sm ${
+                      isActive
+                        ? 'border-blue-500 bg-white ring-2 ring-blue-100'
+                        : 'border-gray-200 bg-white hover:border-blue-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">{theme.label}</div>
+                        <div className="text-xs text-gray-500 mt-1">{theme.description}</div>
+                      </div>
+                      {isActive && (
+                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+                          Actif
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-2">
+                      <span className="h-3 w-10 rounded-full" style={{ backgroundColor: theme.preview.primary }} />
+                      <span className="h-3 w-10 rounded-full" style={{ backgroundColor: theme.preview.secondary }} />
+                      <span className="h-3 w-10 rounded-full" style={{ backgroundColor: theme.preview.background }} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">

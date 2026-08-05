@@ -1,7 +1,14 @@
 
 @import "tailwindcss";
 
+html,
+body,
+#root {
+	min-height: 100%;
+}
+
 body {
 	font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-	background: #fff;
+	background: var(--color-gray-50, #f9fafb);
+	transition: background-color 200ms ease, color 200ms ease;
 }

@@ -32,8 +32,9 @@ class Setting extends Model
             'cabinet_name'                        => $fallback ?? config('app.cabinet_name', 'Matlabul Shifah'),
             'cabinet_address'                     => $fallback ?? config('app.cabinet_address', ''),
             'cabinet_phone'                       => $fallback ?? config('app.cabinet_phone', ''),
+            'cabinet_theme'                       => $fallback ?? 'default',
             'module_clinical_observations_enabled' => $fallback ?? false,
-            'module_medical_folder_enabled'      => $fallback ?? false,
+            'module_medical_folder_enabled'       => $fallback ?? false,
             default                               => $fallback,
         };
     }

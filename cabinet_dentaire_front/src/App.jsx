@@ -27,6 +27,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
 import ImportDentalActs from './pages/admin/ImportDentalActs';
 import AdminCabinetSettings from './pages/admin/AdminCabinetSettings';
+import { CabinetThemeProvider } from './components/CabinetThemeProvider';
 import { settingAPI } from './services/api';
 import './App.css';
 
@@ -71,7 +72,8 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
+        <CabinetThemeProvider>
+          <Routes>
           {/* Routes publiques */}
           <Route path="/login" element={<Login />} />
 
@@ -304,7 +306,8 @@ function App() {
           {/* Redirection par défaut */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+          </Routes>
+        </CabinetThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   );
