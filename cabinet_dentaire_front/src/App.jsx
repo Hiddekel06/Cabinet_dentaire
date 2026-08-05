@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -26,7 +27,45 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
 import ImportDentalActs from './pages/admin/ImportDentalActs';
 import AdminCabinetSettings from './pages/admin/AdminCabinetSettings';
+import { settingAPI } from './services/api';
 import './App.css';
+
+const isClinicalObservationsEnabled = (value) => {
+  return value === true || value === 1 || value === '1' || value === 'true';
+};
+
+const FeatureRoute = ({ children }) => {
+  const [enabled, setEnabled] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSetting = async () => {
+      try {
+        const { data } = await settingAPI.getAll();
+        if (isMounted) {
+          setEnabled(isClinicalObservationsEnabled(data?.module_clinical_observations_enabled));
+        }
+      } catch {
+        if (isMounted) {
+          setEnabled(false);
+        }
+      }
+    };
+
+    loadSetting();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (enabled === null) {
+    return null;
+  }
+
+  return enabled ? children : <Navigate to="/dashboard" replace />;
+};
 
 function App() {
   return (
@@ -236,7 +275,9 @@ function App() {
             path="/clinical-observations"
             element={
               <ProtectedRoute>
-                <ClinicalObservations />
+                <FeatureRoute>
+                  <ClinicalObservations />
+                </FeatureRoute>
               </ProtectedRoute>
             }
           />
@@ -244,7 +285,9 @@ function App() {
             path="/clinical-observations/new"
             element={
               <ProtectedRoute>
-                <ClinicalObservationWorkspace />
+                <FeatureRoute>
+                  <ClinicalObservationWorkspace />
+                </FeatureRoute>
               </ProtectedRoute>
             }
           />
@@ -252,7 +295,9 @@ function App() {
             path="/clinical-observations/:id"
             element={
               <ProtectedRoute>
-                <ClinicalObservationDetails />
+                <FeatureRoute>
+                  <ClinicalObservationDetails />
+                </FeatureRoute>
               </ProtectedRoute>
             }
           />

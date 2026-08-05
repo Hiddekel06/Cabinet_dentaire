@@ -12,6 +12,7 @@ const AdminCabinetSettings = () => {
     cabinet_address: '',
     cabinet_phone: '',
     pdf_header_text: '',
+    module_clinical_observations_enabled: false,
   });
   const [logoUrl, setLogoUrl] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -37,6 +38,7 @@ const AdminCabinetSettings = () => {
         cabinet_address: data.cabinet_address || '',
         cabinet_phone: data.cabinet_phone || '',
         pdf_header_text: data.pdf_header_text || '',
+        module_clinical_observations_enabled: Boolean(data.module_clinical_observations_enabled),
       });
       if (data.cabinet_logo) {
         setLogoUrl(`${BACKEND_URL}/storage/${data.cabinet_logo}`);
@@ -288,6 +290,24 @@ const AdminCabinetSettings = () => {
               placeholder="Ex: Cabinet agréé Ministère de la Santé · NINEA 12345"
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all resize-none"
             />
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <label className="flex items-center justify-between gap-4 cursor-pointer">
+              <div>
+                <div className="text-sm font-semibold text-gray-800">Activer le module Observations cliniques</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Le module devient visible dans la barre latérale et accessible aux utilisateurs autorisés.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                name="module_clinical_observations_enabled"
+                checked={Boolean(form.module_clinical_observations_enabled)}
+                onChange={(e) => setForm(prev => ({ ...prev, module_clinical_observations_enabled: e.target.checked }))}
+                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+            </label>
           </div>
 
           <div className="flex justify-end pt-2">

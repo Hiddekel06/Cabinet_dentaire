@@ -1,19 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { doctorAPI } from '../services/api';
+import { doctorAPI, settingAPI } from '../services/api';
 
 export const Sidebar = () => {
   const { user } = useAuth();
   const location = useLocation();
 
-  // Configuration des modules (Feature Flags)
-  const FEATURES = {
-    CLINICAL_OBSERVATIONS: false, // Désactivé par défaut
-  };
-
   // État pour le mode Multi/Solo
   const [isMultiMode, setIsMultiMode] = useState(false);
+  const [clinicalObservationsEnabled, setClinicalObservationsEnabled] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebarCollapsed');
     return saved ? JSON.parse(saved) : false;
@@ -34,7 +30,19 @@ export const Sidebar = () => {
         console.error('Erreur détection mode:', error);
       }
     };
+
+    const loadFeatureFlags = async () => {
+      try {
+        const { data } = await settingAPI.getAll();
+        const value = data?.module_clinical_observations_enabled;
+        setClinicalObservationsEnabled(value === true || value === 1 || value === '1' || value === 'true');
+      } catch (error) {
+        console.error('Erreur chargement réglages:', error);
+      }
+    };
+
     checkMode();
+    loadFeatureFlags();
   }, []);
   
   useEffect(() => {
@@ -99,7 +107,7 @@ export const Sidebar = () => {
       roles: ['admin', 'doctor', 'secretary'],
       children: [
         { path: '/treatments/history', label: 'Diagnostics' },
-        ...(FEATURES.CLINICAL_OBSERVATIONS ? [{ path: '/clinical-observations', label: 'Obs. Cliniques' }] : []),
+        ...(clinicalObservationsEnabled ? [{ path: '/clinical-observations', label: 'Obs. Cliniques' }] : []),
         { path: '/radiographies', label: 'Radiographies' },
       ]
     },
@@ -164,7 +172,7 @@ export const Sidebar = () => {
       label: 'Paramètres Cabinet',
       roles: ['superviseur']
     },
-  ], []);
+  ], [clinicalObservationsEnabled]);
 
   // Items dont l'accès est TOUJOURS restreint par rôle, quel que soit le mode (solo ou multi)
   const ALWAYS_RESTRICTED_PATHS = ['/admin/parametres'];

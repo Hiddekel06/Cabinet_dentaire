@@ -29,10 +29,12 @@ class Setting extends Model
 
         // Fallback sur la configuration existante (rétrocompatibilité totale)
         return match ($key) {
-            'cabinet_name'    => $fallback ?? config('app.cabinet_name', 'Matlabul Shifah'),
-            'cabinet_address' => $fallback ?? config('app.cabinet_address', ''),
-            'cabinet_phone'   => $fallback ?? config('app.cabinet_phone', ''),
-            default           => $fallback,
+            'cabinet_name'                        => $fallback ?? config('app.cabinet_name', 'Matlabul Shifah'),
+            'cabinet_address'                     => $fallback ?? config('app.cabinet_address', ''),
+            'cabinet_phone'                       => $fallback ?? config('app.cabinet_phone', ''),
+            'module_clinical_observations_enabled' => $fallback ?? false,
+            'module_medical_folder_enabled'      => $fallback ?? false,
+            default                               => $fallback,
         };
     }
 }

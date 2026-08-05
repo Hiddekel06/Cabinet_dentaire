@@ -22,11 +22,13 @@ class SettingsController extends Controller
         }
 
         $defaults = [
-            'cabinet_name'    => config('app.cabinet_name', 'Matlabul Shifah'),
-            'cabinet_address' => config('app.cabinet_address', ''),
-            'cabinet_phone'   => config('app.cabinet_phone', ''),
-            'cabinet_logo'    => null,
-            'pdf_header_text' => null,
+            'cabinet_name'                  => config('app.cabinet_name', 'Matlabul Shifah'),
+            'cabinet_address'               => config('app.cabinet_address', ''),
+            'cabinet_phone'                 => config('app.cabinet_phone', ''),
+            'cabinet_logo'                      => null,
+            'pdf_header_text'                  => null,
+            'module_clinical_observations_enabled' => false,
+            'module_medical_folder_enabled'    => false,
         ];
 
         $merged = array_merge($defaults, array_filter($settings, fn($v) => $v !== null && $v !== ''));
@@ -47,10 +49,12 @@ class SettingsController extends Controller
     public function update(Request $request)
     {
         $validated = $request->validate([
-            'cabinet_name'    => ['sometimes', 'nullable', 'string', 'max:150'],
-            'cabinet_address' => ['sometimes', 'nullable', 'string', 'max:300'],
-            'cabinet_phone'   => ['sometimes', 'nullable', 'string', 'max:50'],
-            'pdf_header_text' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'cabinet_name'                       => ['sometimes', 'nullable', 'string', 'max:150'],
+            'cabinet_address'                    => ['sometimes', 'nullable', 'string', 'max:300'],
+            'cabinet_phone'                      => ['sometimes', 'nullable', 'string', 'max:50'],
+            'pdf_header_text'                   => ['sometimes', 'nullable', 'string', 'max:500'],
+            'module_clinical_observations_enabled' => ['sometimes', 'nullable', 'boolean'],
+            'module_medical_folder_enabled'     => ['sometimes', 'nullable', 'boolean'],
         ]);
 
         foreach ($validated as $key => $value) {
