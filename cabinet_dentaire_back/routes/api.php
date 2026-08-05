@@ -15,6 +15,7 @@ use App\Http\Controllers\RadiographyController;
 use App\Http\Controllers\SessionReceiptController;
 use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\MedicalFolderController;
+use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 // Routes publiques (sans protection)
@@ -119,4 +120,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/medical-folder/radiographies', [MedicalFolderController::class, 'radiographies']);
         Route::get('/treatment-summaries', [PatientController::class, 'treatmentSummaries']);
     });
+
+    // Paramètres du cabinet (SaaS) - Réservé uniquement au superviseur
+    Route::get('settings', [SettingsController::class, 'index']);
+    Route::put('settings', [SettingsController::class, 'update'])->middleware('role:superviseur');
+    Route::post('settings/logo', [SettingsController::class, 'uploadLogo'])->middleware('role:superviseur');
+    Route::delete('settings/logo', [SettingsController::class, 'deleteLogo'])->middleware('role:superviseur');
 });

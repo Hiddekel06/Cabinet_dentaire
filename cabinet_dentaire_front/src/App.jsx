@@ -25,6 +25,7 @@ import ClinicalObservationDetails from './pages/ClinicalObservationDetails';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
 import ImportDentalActs from './pages/admin/ImportDentalActs';
+import AdminCabinetSettings from './pages/admin/AdminCabinetSettings';
 import './App.css';
 
 function App() {
@@ -131,6 +132,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ImportDentalActs />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/parametres"
+            element={
+              <ProtectedRoute roles="superviseur">
+                <AdminCabinetSettings />
               </ProtectedRoute>
             }
           />

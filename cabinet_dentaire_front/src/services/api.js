@@ -693,4 +693,32 @@ export const dashboardAPI = {
   getPendingActions: () => api.get('/api/dashboard/pending-actions'),
 };
 
+// ==========================================
+// Endpoints pour les paramètres du cabinet
+// ==========================================
+export const settingAPI = {
+  getAll: () => {
+    return fetchWithCache('settings:all', () => api.get('/api/settings'));
+  },
+
+  update: (data) => {
+    clearCache('settings:all');
+    return api.put('/api/settings', data);
+  },
+
+  uploadLogo: (file) => {
+    clearCache('settings:all');
+    const formData = new FormData();
+    formData.append('logo', file);
+    return api.post('/api/settings/logo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  deleteLogo: () => {
+    clearCache('settings:all');
+    return api.delete('/api/settings/logo');
+  },
+};
+
 export default api;

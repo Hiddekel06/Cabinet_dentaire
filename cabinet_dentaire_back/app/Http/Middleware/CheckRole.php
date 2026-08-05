@@ -20,7 +20,18 @@ class CheckRole
     {
         $user = $request->user();
 
-        // If not logged in or doesn't have the required role, block access
+        // Le superviseur a un accès total à toutes les routes — il bypass tous les filtres
+        if ($user && $user->role === 'superviseur') {
+            // Vérifier seulement que le compte est actif
+            if (!$user->is_active) {
+                return response()->json([
+                    'message' => 'Votre compte a été suspendu. Veuillez contacter l\'administrateur.'
+                ], 403);
+            }
+            return $next($request);
+        }
+
+        // Pour les autres rôles : vérification normale
         if (!$user || !in_array($user->role, $roles)) {
             return response()->json([
                 'message' => 'Accès refusé. Vous n\'avez pas les permissions nécessaires pour effectuer cette action.',

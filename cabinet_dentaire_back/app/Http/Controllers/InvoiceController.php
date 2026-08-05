@@ -10,6 +10,8 @@ use Mpdf\Mpdf;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use App\Models\Setting;
 
 class InvoiceController extends Controller
 {
@@ -250,13 +252,16 @@ class InvoiceController extends Controller
             ];
         })->values()->all();
 
+        $logoPath = Setting::getValue('cabinet_logo');
+        $logoDataUri = ($logoPath && Storage::disk('public')->exists($logoPath))
+            ? $this->fileToDataUri(Storage::disk('public')->path($logoPath))
+            : $this->fileToDataUri(public_path('images/logoCabinet.png'));
+
         return [
-            'cabinetName' => $this->normalizeCabinetName(
-                (string) config('app.cabinet_name', 'Matlabul Shifah')
-            ),
-            'cabinetAddress' => (string) config('app.cabinet_address', ''),
-            'cabinetPhone' => (string) config('app.cabinet_phone', ''),
-            'logoDataUri' => $this->fileToDataUri(public_path('images/logoCabinet.png')),
+            'cabinetName' => $this->normalizeCabinetName((string) Setting::getValue('cabinet_name')),
+            'cabinetAddress' => (string) (Setting::getValue('cabinet_address') ?? ''),
+            'cabinetPhone' => (string) (Setting::getValue('cabinet_phone') ?? ''),
+            'logoDataUri' => $logoDataUri,
             'invoiceNumber' => $invoice->invoice_number,
             'issueDate' => (string) $invoice->issue_date,
             'dueDate' => (string) $invoice->issue_date,
@@ -272,12 +277,16 @@ class InvoiceController extends Controller
     private function resolveInvoiceTemplateVersion(): string
     {
         $templatePath = resource_path('views/pdf/invoice.blade.php');
-        $logoPath = public_path('images/logoCabinet.png');
+        $logoSetting = Setting::getValue('cabinet_logo');
+        $logoPath = ($logoSetting && Storage::disk('public')->exists($logoSetting))
+            ? Storage::disk('public')->path($logoSetting)
+            : public_path('images/logoCabinet.png');
 
         $templateHash = file_exists($templatePath) ? md5_file($templatePath) : 'no-template';
         $logoHash = file_exists($logoPath) ? md5_file($logoPath) : 'no-logo';
+        $settingsHash = md5((string) Setting::getValue('cabinet_name') . (string) Setting::getValue('cabinet_address') . (string) Setting::getValue('cabinet_phone'));
 
-        return $templateHash . ':' . $logoHash;
+        return $templateHash . ':' . $logoHash . ':' . $settingsHash;
     }
 
     private function normalizeCabinetName(string $name): string

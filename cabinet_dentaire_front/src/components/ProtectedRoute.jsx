@@ -1,8 +1,8 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-export const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+export const ProtectedRoute = ({ children, roles }) => {
+  const { user, isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return (
@@ -19,6 +19,14 @@ export const ProtectedRoute = ({ children }) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (roles && user?.role !== 'superviseur') {
+    // Le superviseur a un accès total — il bypass tous les filtres de rôle
+    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+    if (!user || !user.role || !allowedRoles.includes(user.role)) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;

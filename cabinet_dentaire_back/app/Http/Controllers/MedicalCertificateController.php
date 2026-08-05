@@ -6,6 +6,8 @@ use App\Models\MedicalCertificate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use App\Models\Setting;
 use Mpdf\Mpdf;
 
 class MedicalCertificateController extends Controller {
@@ -203,10 +205,10 @@ class MedicalCertificateController extends Controller {
         $patientFullName = trim(($medicalCertificate->patient->first_name ?? '') . ' ' . ($medicalCertificate->patient->last_name ?? ''));
 
         return [
-            'adresse' => config('app.cabinet_address', 'Parcelle'),
-            'telephone' => config('app.cabinet_phone', '0600000000'),
+            'adresse' => (string) (Setting::getValue('cabinet_address') ?? ''),
+            'telephone' => (string) (Setting::getValue('cabinet_phone') ?? ''),
             'nom du docteur' => (string) ($medicalCertificate->issuer->name ?? ''),
-            'MATLABUL SHIFAH' => $this->normalizeCabinetName((string) config('app.cabinet_name', 'Matlabul Shifah')),
+            'MATLABUL SHIFAH' => $this->normalizeCabinetName((string) Setting::getValue('cabinet_name')),
             'nom de la personne' => $patientFullName,
             'date' => (string) $medicalCertificate->issue_date,
             'heure' => (string) ($medicalCertificate->consultation_time ?? ''),
@@ -260,8 +262,8 @@ class MedicalCertificateController extends Controller {
             'default_font_size' => 11,
         ]);
 
-        $mpdf->SetTitle('Certificat médical');
-        $mpdf->SetAuthor((string) ($variables['nom du docteur'] ?? ''));
+        $mpdf->SetTitle('Certificat médical ' . $baseName);
+        $mpdf->SetAuthor((string) Setting::getValue('cabinet_name'));
         $mpdf->SetSubject('Certificat médical cabinet dentaire');
         $mpdf->WriteHTML($html);
         $mpdf->Output($outputPdf, 'F');
@@ -272,12 +274,16 @@ class MedicalCertificateController extends Controller {
     private function buildMedicalCertificatePdfData(array $variables): array
     {
         $personName = (string) ($variables['nom de la personne'] ?? '');
+        $logoPath = Setting::getValue('cabinet_logo');
+        $logoDataUri = ($logoPath && Storage::disk('public')->exists($logoPath))
+            ? $this->fileToDataUri(Storage::disk('public')->path($logoPath))
+            : $this->fileToDataUri(public_path('images/logoCabinet.png'));
 
         return [
-            'cabinetName' => $this->normalizeCabinetName((string) ($variables['MATLABUL SHIFAH'] ?? 'Matlabul Shifah')),
-            'cabinetAddress' => (string) ($variables['adresse'] ?? ''),
-            'cabinetPhone' => (string) ($variables['telephone'] ?? ''),
-            'logoDataUri' => $this->fileToDataUri(public_path('images/logoCabinet.png')),
+            'cabinetName' => $this->normalizeCabinetName((string) ($variables['MATLABUL SHIFAH'] ?? Setting::getValue('cabinet_name'))),
+            'cabinetAddress' => (string) ($variables['adresse'] ?? Setting::getValue('cabinet_address') ?? ''),
+            'cabinetPhone' => (string) ($variables['telephone'] ?? Setting::getValue('cabinet_phone') ?? ''),
+            'logoDataUri' => $logoDataUri,
             'doctorName' => (string) ($variables['nom du docteur'] ?? ''),
             'personName' => $personName,
             'issueDate' => (string) ($variables['date'] ?? ''),
@@ -290,12 +296,16 @@ class MedicalCertificateController extends Controller {
     private function resolveMedicalCertificateTemplateVersion(): string
     {
         $templatePath = resource_path('views/pdf/medical_certificate.blade.php');
-        $logoPath = public_path('images/logoCabinet.png');
+        $logoSetting = Setting::getValue('cabinet_logo');
+        $logoPath = ($logoSetting && Storage::disk('public')->exists($logoSetting))
+            ? Storage::disk('public')->path($logoSetting)
+            : public_path('images/logoCabinet.png');
 
         $templateHash = file_exists($templatePath) ? md5_file($templatePath) : 'no-template';
         $logoHash = file_exists($logoPath) ? md5_file($logoPath) : 'no-logo';
+        $settingsHash = md5((string) Setting::getValue('cabinet_name') . (string) Setting::getValue('cabinet_address') . (string) Setting::getValue('cabinet_phone'));
 
-        return $templateHash . ':' . $logoHash;
+        return $templateHash . ':' . $logoHash . ':' . $settingsHash;
     }
 
     private function normalizeCabinetName(string $name): string

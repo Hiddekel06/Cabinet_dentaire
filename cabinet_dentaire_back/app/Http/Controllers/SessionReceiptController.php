@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
+use App\Models\Setting;
 use Mpdf\Mpdf;
 use Throwable;
 
@@ -249,13 +251,18 @@ class SessionReceiptController extends Controller
     {
         $sessionReceipt->load(['items.dentalAct', 'patient', 'medicalRecord.appointment', 'patientTreatment']);
 
+        $logoPath    = Setting::getValue('cabinet_logo');
+        $logoDataUri = ($logoPath && Storage::disk('public')->exists($logoPath))
+            ? $this->fileToDataUri(Storage::disk('public')->path($logoPath))
+            : $this->fileToDataUri(public_path('images/logoCabinet.png'));
+
         $html = view('pdf.session_receipt', [
-            'receipt' => $sessionReceipt,
-            'cabinetName' => $this->normalizeCabinetName((string) config('app.cabinet_name', 'Matlabul Shifah')),
-            'cabinetAddress' => (string) config('app.cabinet_address', ''),
-            'cabinetPhone' => (string) config('app.cabinet_phone', ''),
-            'logoDataUri' => $this->fileToDataUri(public_path('images/logoCabinet.png')),
-            'patientName' => trim(($sessionReceipt->patient?->first_name ?? '') . ' ' . ($sessionReceipt->patient?->last_name ?? '')),
+            'receipt'        => $sessionReceipt,
+            'cabinetName'    => $this->normalizeCabinetName(Setting::getValue('cabinet_name')),
+            'cabinetAddress' => Setting::getValue('cabinet_address') ?? '',
+            'cabinetPhone'   => Setting::getValue('cabinet_phone') ?? '',
+            'logoDataUri'    => $logoDataUri,
+            'patientName'    => trim(($sessionReceipt->patient?->first_name ?? '') . ' ' . ($sessionReceipt->patient?->last_name ?? '')),
         ])->render();
 
         $tempDir = storage_path('app/mpdf');

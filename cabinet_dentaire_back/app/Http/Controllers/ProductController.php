@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use App\Models\Setting;
 use Mpdf\Mpdf;
 use Carbon\Carbon;
 
@@ -300,10 +301,13 @@ class ProductController extends Controller
         })->sortByDesc('total')->values()->all();
 
         // ── Cabinet info ───────────────────────────────────────
-        $cabinetName    = trim(str_replace('_', ' ', config('app.cabinet_name', 'Matlabul Shifah')));
-        $cabinetAddress = (string) config('app.cabinet_address', '');
-        $cabinetPhone   = (string) config('app.cabinet_phone', '');
-        $logoPath       = public_path('images/logoCabinet.png');
+        $cabinetName    = trim(str_replace('_', ' ', Setting::getValue('cabinet_name')));
+        $cabinetAddress = (string) (Setting::getValue('cabinet_address') ?? '');
+        $cabinetPhone   = (string) (Setting::getValue('cabinet_phone') ?? '');
+        $logoSetting    = Setting::getValue('cabinet_logo');
+        $logoPath       = ($logoSetting && Storage::disk('public')->exists($logoSetting))
+            ? Storage::disk('public')->path($logoSetting)
+            : public_path('images/logoCabinet.png');
         $logoDataUri    = null;
         if (file_exists($logoPath)) {
             $mime        = mime_content_type($logoPath) ?: 'image/png';
