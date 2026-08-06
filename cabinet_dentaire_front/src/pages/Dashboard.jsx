@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/Layout';
 import { Can } from '../components/Can';
-import { dashboardAPI, patientTreatmentAPI, doctorAPI } from '../services/api';
+import { dashboardAPI, patientTreatmentAPI, doctorAPI, settingAPI } from '../services/api';
 
 const statusClasses = {
   Nouveau: 'bg-blue-50 text-blue-700 border-blue-100',
@@ -112,8 +112,7 @@ export const Dashboard = () => {
   const [pinDigits, setPinDigits] = useState(['', '', '', '']);
   const [pinError, setPinError] = useState(false);
   const pinRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
-
-  const DASHBOARD_PIN = '1990';
+  const [dashboardPin, setDashboardPin] = useState('1990');
 
   const isMultiDoctorMode = useMemo(() => doctors.length > 1, [doctors]);
 
@@ -141,7 +140,7 @@ export const Dashboard = () => {
     }
     if (value && index === 3) {
       const code = next.join('');
-      if (code === DASHBOARD_PIN) {
+      if (code === dashboardPin) {
         setFinanceVisible(true);
         setShowPinModal(false);
         setPinDigits(['', '', '', '']);
@@ -193,7 +192,27 @@ export const Dashboard = () => {
     loadDashboard();
     loadDoctors();
     loadPendingActions();
+    // Charger le code confidentiel depuis les paramètres du cabinet
+    settingAPI.getAll().then(({ data }) => {
+      if (data?.cabinet_confidential_code) {
+        setDashboardPin(data.cabinet_confidential_code);
+      }
+    }).catch(() => { /* fallback sur '1990' */ });
   }, [loadDashboard, loadDoctors, loadPendingActions]);
+
+  // Mettre à jour le PIN en temps réel si les paramètres changent
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      settingAPI.getAll().then(({ data }) => {
+        if (data?.cabinet_confidential_code) {
+          setDashboardPin(data.cabinet_confidential_code);
+        }
+      }).catch(() => {});
+    };
+    window.addEventListener('cabinet-settings-updated', handleSettingsUpdate);
+    return () => window.removeEventListener('cabinet-settings-updated', handleSettingsUpdate);
+  }, []);
+
 
   const cards = data.cards || initialData.cards;
   const finance = data.finance_summary || initialData.finance_summary;

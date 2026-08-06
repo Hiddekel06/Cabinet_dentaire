@@ -17,6 +17,7 @@ const AdminCabinetSettings = () => {
     pdf_header_text: '',
     module_clinical_observations_enabled: false,
     cabinet_theme: 'default',
+    cabinet_confidential_code: '1990',
   });
   const [logoUrl, setLogoUrl] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -44,6 +45,7 @@ const AdminCabinetSettings = () => {
         pdf_header_text: data.pdf_header_text || '',
         module_clinical_observations_enabled: Boolean(data.module_clinical_observations_enabled),
         cabinet_theme: data.cabinet_theme || 'default',
+        cabinet_confidential_code: data.cabinet_confidential_code || '1990',
       });
       if (data.cabinet_logo) {
         setLogoUrl(`${BACKEND_URL}/storage/${data.cabinet_logo}`);
@@ -128,6 +130,12 @@ const AdminCabinetSettings = () => {
 
   const handleThemeSelect = (themeKey) => {
     setForm((prev) => ({ ...prev, cabinet_theme: themeKey }));
+    setSuccess('');
+    setError('');
+  };
+
+  const handleResetConfidentialCode = () => {
+    setForm((prev) => ({ ...prev, cabinet_confidential_code: '1990' }));
     setSuccess('');
     setError('');
   };
@@ -355,6 +363,37 @@ const AdminCabinetSettings = () => {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold text-gray-800">Code confidentiel du dashboard</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Utilisé pour afficher les montants du tableau de bord. Valeur par défaut : 1990.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleResetConfidentialCode}
+                className="text-xs font-semibold text-blue-700 hover:text-blue-800 hover:underline whitespace-nowrap"
+              >
+                Rétablir 1990
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Code confidentiel</label>
+              <input
+                type="password"
+                name="cabinet_confidential_code"
+                value={form.cabinet_confidential_code}
+                onChange={handleChange}
+                inputMode="numeric"
+                placeholder="1990"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all"
+              />
             </div>
           </div>
 

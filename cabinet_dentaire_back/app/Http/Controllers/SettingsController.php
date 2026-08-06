@@ -37,6 +37,7 @@ class SettingsController extends Controller
             'cabinet_logo'                  => null,
             'pdf_header_text'               => null,
             'cabinet_theme'                 => 'default',
+            'cabinet_confidential_code'     => '1990',
             'module_clinical_observations_enabled' => false,
             'module_medical_folder_enabled'    => false,
         ];
@@ -84,6 +85,7 @@ class SettingsController extends Controller
             'cabinet_phone'                      => ['sometimes', 'nullable', 'string', 'max:50'],
             'pdf_header_text'                    => ['sometimes', 'nullable', 'string', 'max:500'],
             'cabinet_theme'                      => ['sometimes', 'nullable', 'string', 'in:' . implode(',', self::CABINET_THEMES)],
+            'cabinet_confidential_code'          => ['sometimes', 'nullable', 'string', 'max:20'],
             'module_clinical_observations_enabled' => ['sometimes', 'nullable', 'boolean'],
             'module_medical_folder_enabled'     => ['sometimes', 'nullable', 'boolean'],
         ]);

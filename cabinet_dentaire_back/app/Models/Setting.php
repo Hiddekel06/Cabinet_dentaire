@@ -33,6 +33,7 @@ class Setting extends Model
             'cabinet_address'                     => $fallback ?? config('app.cabinet_address', ''),
             'cabinet_phone'                       => $fallback ?? config('app.cabinet_phone', ''),
             'cabinet_theme'                       => $fallback ?? 'default',
+            'cabinet_confidential_code'           => $fallback ?? '1990',
             'module_clinical_observations_enabled' => $fallback ?? false,
             'module_medical_folder_enabled'       => $fallback ?? false,
             default                               => $fallback,
