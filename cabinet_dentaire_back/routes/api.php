@@ -16,6 +16,7 @@ use App\Http\Controllers\SessionReceiptController;
 use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\MedicalFolderController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\UserManagementController;
 use Illuminate\Support\Facades\Route;
 
 // Routes publiques (sans protection)
@@ -39,6 +40,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
             ->where('is_active', true)
             ->select('id', 'name', 'role', 'specialty')
             ->get();
+    });
+
+    Route::prefix('users')->middleware('role:superviseur')->group(function () {
+        Route::get('/', [UserManagementController::class, 'index']);
+        Route::post('/', [UserManagementController::class, 'store']);
+        Route::match(['put', 'patch'], '/{user}', [UserManagementController::class, 'update']);
+        Route::delete('/{user}', [UserManagementController::class, 'destroy']);
     });
     
     // Gestion des actes dentaires (admin)

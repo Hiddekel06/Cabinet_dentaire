@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Layout } from '../../components/Layout';
 import { settingAPI } from '../../services/api';
 import { CABINET_THEME_OPTIONS } from '../../theme/cabinetThemes';
@@ -373,6 +374,26 @@ const AdminCabinetSettings = () => {
                 className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
             </label>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold text-gray-800">Comptes du cabinet</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Créer, modifier ou suspendre les comptes du personnel.
+                </p>
+              </div>
+              <Link
+                to="/admin/parametres/comptes"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 shadow-sm transition-colors"
+              >
+                Gérer les comptes
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
           </div>
 
           <div className="flex justify-end pt-2">

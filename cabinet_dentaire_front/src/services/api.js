@@ -129,6 +129,36 @@ export const doctorAPI = {
   }
 };
 
+// Endpoints pour les comptes du cabinet
+export const userAPI = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const cacheKey = `users:all:${query}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    return api.get(`/api/users${query ? `?${query}` : ''}`).then((res) => {
+      setCachedData(cacheKey, res);
+      return res;
+    });
+  },
+
+  create: (data) => {
+    clearCache('users:all');
+    return api.post('/api/users', data);
+  },
+
+  update: (id, data) => {
+    clearCache('users:all');
+    return api.put(`/api/users/${id}`, data);
+  },
+
+  delete: (id) => {
+    clearCache('users:all');
+    return api.delete(`/api/users/${id}`);
+  },
+};
+
 // Endpoints pour les patients
 export const patientAPI = {
   getAll: (page = 1, params = {}) => {

@@ -27,6 +27,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminTreatments from './pages/admin/AdminTreatments';
 import ImportDentalActs from './pages/admin/ImportDentalActs';
 import AdminCabinetSettings from './pages/admin/AdminCabinetSettings';
+import AdminCabinetAccounts from './pages/admin/AdminCabinetAccounts';
 import { CabinetThemeProvider } from './components/CabinetThemeProvider';
 import { settingAPI } from './services/api';
 import './App.css';
@@ -181,6 +182,14 @@ function App() {
             element={
               <ProtectedRoute roles="superviseur">
                 <AdminCabinetSettings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/parametres/comptes"
+            element={
+              <ProtectedRoute roles="superviseur">
+                <AdminCabinetAccounts />
               </ProtectedRoute>
             }
           />

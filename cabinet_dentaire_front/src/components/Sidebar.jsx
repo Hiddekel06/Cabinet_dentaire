@@ -16,7 +16,8 @@ export const Sidebar = () => {
   });
 
   const [openGroups, setOpenGroups] = useState({
-    patientDossier: true
+    patientDossier: true,
+    cabinetSettings: true,
   });
 
   // Détection du mode Multi-praticiens
@@ -162,7 +163,7 @@ export const Sidebar = () => {
       roles: ['admin', 'doctor', 'secretary']
     },
     {
-      path: '/admin/parametres',
+      id: 'cabinetSettings',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -170,12 +171,16 @@ export const Sidebar = () => {
         </svg>
       ),
       label: 'Paramètres Cabinet',
-      roles: ['superviseur']
+      roles: ['superviseur'],
+      children: [
+        { path: '/admin/parametres', label: 'Général' },
+        { path: '/admin/parametres/comptes', label: 'Comptes' },
+      ]
     },
   ], [clinicalObservationsEnabled]);
 
   // Items dont l'accès est TOUJOURS restreint par rôle, quel que soit le mode (solo ou multi)
-  const ALWAYS_RESTRICTED_PATHS = ['/admin/parametres'];
+  const ALWAYS_RESTRICTED_PATHS = ['/admin/parametres', '/admin/parametres/comptes'];
 
   // Le superviseur a accès à TOUT (all-access), sauf que les routes restreintes
   // restent invisibles pour les autres rôles.
@@ -195,7 +200,7 @@ export const Sidebar = () => {
   }, [isMultiMode, menuItems, user?.role, isSuperviseur]);
 
   const isActive = (path) => location.pathname === path;
-  const isGroupActive = (items) => items.some(child => location.pathname === child.path);
+  const isGroupActive = (items) => items.some(child => location.pathname === child.path || location.pathname.startsWith(child.path + '/'));
 
   return (
     <aside
