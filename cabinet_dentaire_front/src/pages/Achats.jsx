@@ -181,8 +181,8 @@ const Achats = () => {
     const file = e.target.files[0];
     const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
     if (file && allowedTypes.includes(file.type)) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('Le fichier est trop volumineux (max 2Mo)');
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Le fichier est trop volumineux (max 10Mo)');
         e.target.value = null;
         return;
       }
@@ -594,7 +594,7 @@ const Achats = () => {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-700">Facture (PDF, PNG, JPG - max 2Mo)</label>
+                <label className="text-xs font-semibold text-gray-700">Facture (PDF, PNG, JPG - max 10Mo)</label>
                 <div className="mt-1 flex items-center gap-3">
                   <input
                     type="file"

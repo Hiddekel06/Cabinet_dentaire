@@ -84,6 +84,11 @@ const AdminCabinetSettings = () => {
   const handleLogoSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Le logo est trop volumineux (max 10Mo)');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     setLogoFile(file);
     setLogoPreview(URL.createObjectURL(file));
     setSuccess('');
@@ -223,7 +228,7 @@ const AdminCabinetSettings = () => {
                   onChange={handleLogoSelect}
                   className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">PNG, JPG, WEBP ou SVG · Max 2 Mo</p>
+                <p className="text-[11px] text-gray-400 mt-1">PNG, JPG, WEBP ou SVG · Max 10 Mo</p>
               </div>
 
               <div className="flex gap-2">

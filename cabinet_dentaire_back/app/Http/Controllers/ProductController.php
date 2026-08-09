@@ -74,7 +74,7 @@ class ProductController extends Controller
             'quantity' => 'required|integer|min:1',
             'unit_price' => 'nullable|numeric|min:0', // Rendu optionnel
             'purchase_date' => 'required|date',
-            'invoice' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:2048', // 2Mo max
+            'invoice' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:20480', // 20Mo max
         ]);
 
         // Si le prix n'est pas renseigné, on met 0 par défaut
@@ -127,7 +127,7 @@ class ProductController extends Controller
             'quantity' => 'required|integer|min:1',
             'unit_price' => 'nullable|numeric|min:0',
             'purchase_date' => 'required|date',
-            'invoice' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:2048',
+            'invoice' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:20480', // 20Mo max
         ]);
 
         // Si le prix n'est pas renseigné, on met 0 par défaut
