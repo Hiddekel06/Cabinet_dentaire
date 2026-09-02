@@ -118,16 +118,22 @@ class SettingsController extends Controller
             'logo' => ['required', 'file', 'image', 'mimes:png,jpg,jpeg,webp,svg', 'max:10240'],
         ]);
 
+        // Supprimer l'ancien logo du disk public (pas le disk local par défaut)
         try {
             $old = Setting::find('cabinet_logo');
             if ($old && $old->value) {
-                Storage::delete($old->value);
+                Storage::disk('public')->delete($old->value);
             }
-        } catch (\Throwable) {
-            // swallow
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Impossible de supprimer lancien logo: ' . $e->getMessage());
         }
 
+        // Stocker le nouveau logo sur disk public
         $path = $request->file('logo')->store('logos', 'public');
+
+        if (!$path) {
+            return response()->json(['message' => 'Erreur lors du stockage du fichier.'], 500);
+        }
 
         Setting::updateOrCreate(
             ['key' => 'cabinet_logo'],
@@ -137,7 +143,7 @@ class SettingsController extends Controller
         return response()->json([
             'message'          => 'Logo mis à jour avec succès.',
             'cabinet_logo'     => $path,
-            'cabinet_logo_url' => Storage::url($path),
+            'cabinet_logo_url' => Storage::disk('public')->url($path),
         ]);
     }
 
@@ -149,11 +155,12 @@ class SettingsController extends Controller
         try {
             $setting = Setting::find('cabinet_logo');
             if ($setting && $setting->value) {
-                Storage::delete($setting->value);
+                // Utiliser disk('public') explicitement
+                Storage::disk('public')->delete($setting->value);
                 $setting->update(['value' => null]);
             }
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Erreur lors de la suppression du logo.'], 500);
+            return response()->json(['message' => 'Erreur lors de la suppression du logo: ' . $e->getMessage()], 500);
         }
 
         return response()->json(['message' => 'Logo supprimé.']);

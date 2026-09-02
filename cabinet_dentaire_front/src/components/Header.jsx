@@ -1,16 +1,17 @@
 import { useAuth } from '../context/AuthContext';
+import { useCabinet } from '../context/CabinetContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
-import { appointmentAPI, settingAPI } from '../services/api';
+import { appointmentAPI } from '../services/api';
 import { CabinetLogo } from './CabinetLogo';
 
 export const Header = () => {
   const { user, logout } = useAuth();
+  const { cabinetName } = useCabinet();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAlertsMenu, setShowAlertsMenu] = useState(false);
   const [todayPotentialOverdue, setTodayPotentialOverdue] = useState([]);
-  const [cabinetName, setCabinetName] = useState('Clinique Medicale');
 
   const todayDateStr = useMemo(() => {
     const now = new Date();
@@ -75,11 +76,6 @@ export const Header = () => {
     return () => clearInterval(intervalId);
   }, [todayDateStr]);
 
-  useEffect(() => {
-    settingAPI.getAll().then(({ data }) => {
-      if (data?.cabinet_name) setCabinetName(data.cabinet_name);
-    }).catch(() => {});
-  }, []);
 
   const handleLogout = async () => {
     await logout();

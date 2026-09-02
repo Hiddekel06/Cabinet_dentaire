@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { CabinetProvider } from './context/CabinetContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -73,8 +74,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <CabinetThemeProvider>
-          <Routes>
+        <CabinetProvider>
+          <CabinetThemeProvider>
+            <Routes>
           {/* Routes publiques */}
           <Route path="/login" element={<Login />} />
 
@@ -316,7 +318,8 @@ function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
-        </CabinetThemeProvider>
+          </CabinetThemeProvider>
+        </CabinetProvider>
       </AuthProvider>
     </BrowserRouter>
   );
