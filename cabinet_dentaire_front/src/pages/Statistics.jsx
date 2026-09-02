@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
-import { statisticsAPI } from "../services/api";
+import { statisticsAPI, settingAPI } from "../services/api";
 import {
   BanknotesIcon,
   ShoppingCartIcon,
@@ -15,10 +16,33 @@ import {
   ArrowTrendingDownIcon,
 } from "@heroicons/react/24/outline";
 
+const LockIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+  </svg>
+);
+
+const getTodayStr = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const getFirstDayOfMonthStr = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
+};
+
 const timePeriods = [
   { label: "Ce mois", value: "month" },
+  { label: "Mois dernier", value: "last_month" },
   { label: "Ce trimestre", value: "quarter" },
   { label: "Cette année", value: "year" },
+  { label: "Période personnalisée", value: "custom" },
 ];
 
 const badgeClasses = {
@@ -87,16 +111,89 @@ const formatTrend = (value) => {
 };
 
 const Statistics = () => {
+  const navigate = useNavigate();
   const [selectedPeriod, setSelectedPeriod] = useState("month");
+  const [startDate, setStartDate] = useState(getFirstDayOfMonthStr());
+  const [endDate, setEndDate] = useState(getTodayStr());
   const [stats, setStats] = useState(defaultStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Gestion du déverrouillage préalable par Code Confidentiel (PIN)
+  const [statsUnlocked, setStatsUnlocked] = useState(false);
+  const [pinDigits, setPinDigits] = useState(['', '', '', '']);
+  const [pinError, setPinError] = useState(false);
+  const pinRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
+  const [confidentialCode, setConfidentialCode] = useState('1990');
+
+  useEffect(() => {
+    settingAPI.getAll().then(({ data }) => {
+      if (data?.cabinet_confidential_code) {
+        setConfidentialCode(data.cabinet_confidential_code);
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      settingAPI.getAll().then(({ data }) => {
+        if (data?.cabinet_confidential_code) {
+          setConfidentialCode(data.cabinet_confidential_code);
+        }
+      }).catch(() => {});
+    };
+    window.addEventListener('cabinet-settings-updated', handleSettingsUpdate);
+    return () => window.removeEventListener('cabinet-settings-updated', handleSettingsUpdate);
+  }, []);
+
+  // Focus automatique sur le premier input du PIN au chargement
+  useEffect(() => {
+    if (!statsUnlocked) {
+      const timer = setTimeout(() => {
+        pinRefs[0].current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [statsUnlocked]);
+
+  const handlePinDigit = (index, value) => {
+    if (!/^[0-9]?$/.test(value)) return;
+    const next = [...pinDigits];
+    next[index] = value;
+    setPinDigits(next);
+    setPinError(false);
+    if (value && index < 3) {
+      pinRefs[index + 1].current?.focus();
+    }
+    if (value && index === 3) {
+      const code = next.join('');
+      if (code === confidentialCode) {
+        setStatsUnlocked(true);
+        setPinDigits(['', '', '', '']);
+        setPinError(false);
+      } else {
+        setPinError(true);
+        setPinDigits(['', '', '', '']);
+        setTimeout(() => pinRefs[0].current?.focus(), 50);
+      }
+    }
+  };
+
+  const handlePinKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !pinDigits[index] && index > 0) {
+      pinRefs[index - 1].current?.focus();
+    }
+  };
+
+  const handleCancelAccess = () => {
+    navigate('/dashboard');
+  };
 
   const loadOverview = async () => {
     setLoading(true);
     setError("");
     try {
-      const { data } = await statisticsAPI.getOverview(selectedPeriod);
+      const { data } = await statisticsAPI.getOverview(selectedPeriod, startDate, endDate);
       setStats({ ...defaultStats, ...(data || {}) });
     } catch (e) {
       setError("Impossible de charger les statistiques.");
@@ -106,8 +203,75 @@ const Statistics = () => {
   };
 
   useEffect(() => {
-    loadOverview();
-  }, [selectedPeriod]);
+    if (statsUnlocked) {
+      if (selectedPeriod === 'custom') {
+        if (startDate && endDate) {
+          loadOverview();
+        }
+      } else {
+        loadOverview();
+      }
+    }
+  }, [selectedPeriod, startDate, endDate, statsUnlocked]);
+
+  // Écran d'accès verrouillé (si le code n'est pas encore validé)
+  if (!statsUnlocked) {
+    return (
+      <Layout>
+        <div className="min-h-[75vh] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-slate-100 p-8 flex flex-col items-center gap-6">
+            <div className="w-16 h-16 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-slate-900">Code confidentiel requis</h2>
+              <p className="text-xs text-slate-500 mt-2">
+                Saisissez votre code PIN pour accéder à la vue des statistiques
+              </p>
+            </div>
+
+            <div className="flex gap-3 my-2">
+              {pinDigits.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={pinRefs[i]}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handlePinDigit(i, e.target.value)}
+                  onKeyDown={(e) => handlePinKeyDown(i, e)}
+                  className={`w-12 h-14 text-center text-2xl font-black rounded-xl border-2 outline-none transition-all
+                    ${
+                      pinError
+                        ? 'border-red-400 bg-red-50 text-red-600 animate-pulse'
+                        : digit
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-slate-50 text-slate-900 focus:border-slate-400'
+                    }`}
+                />
+              ))}
+            </div>
+
+            {pinError && (
+              <p className="text-xs font-semibold text-red-500">Code incorrect, réessayez.</p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleCancelAccess}
+              className="w-full py-3 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all uppercase tracking-wider border border-slate-200"
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   const kpiData = stats.kpis || defaultStats.kpis;
   const financeByMonth = Array.isArray(stats.finance_by_month) ? stats.finance_by_month : [];
@@ -208,27 +372,69 @@ const Statistics = () => {
 
   return (
     <Layout>
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Statistiques</h1>
-          <p className="text-gray-600 mt-1">Vue consolidée achats + factures + activité</p>
+          <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-gray-600">
+            <span>Vue consolidée achats + factures + activité</span>
+            {stats?.period?.from && stats?.period?.to && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                {stats.period.label || 'Période'}: {new Date(stats.period.from).toLocaleDateString('fr-FR')} au {new Date(stats.period.to).toLocaleDateString('fr-FR')}
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Période :</span>
-          <div className="relative">
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              {timePeriods.map((period) => (
-                <option key={period.value} value={period.value}>
-                  {period.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDownIcon className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Bouton de verrouillage manuelle */}
+          <button
+            type="button"
+            onClick={() => {
+              setStatsUnlocked(false);
+              setPinDigits(['', '', '', '']);
+            }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+            title="Verrouiller la vue des statistiques"
+          >
+            <LockIcon />
+            <span>Verrouiller</span>
+          </button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-gray-500">Période :</span>
+            <div className="relative">
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-2 pr-8 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+              >
+                {timePeriods.map((period) => (
+                  <option key={period.value} value={period.value}>
+                    {period.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+
+            {selectedPeriod === 'custom' && (
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-xl shadow-xs">
+                <span className="text-xs font-medium text-slate-500 pl-1">Du</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 outline-none focus:border-blue-500"
+                />
+                <span className="text-xs font-medium text-slate-500">au</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 outline-none focus:border-blue-500"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -277,7 +483,7 @@ const Statistics = () => {
               return (
                 <div
                   key={kpi.label}
-                  className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow duration-200"
+                  className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-all duration-200"
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -306,7 +512,6 @@ const Statistics = () => {
               );
             })}
           </div>
-
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -354,7 +559,7 @@ const Statistics = () => {
                     <div key={s.key || s.label}>
                       <div className="flex items-center justify-between text-sm mb-1">
                         <span className="font-medium text-gray-700">{s.label}</span>
-                        <span className="text-gray-900 font-semibold">
+                        <span className="font-semibold text-gray-900">
                           {s.value} ({percent}%)
                         </span>
                       </div>
@@ -380,7 +585,7 @@ const Statistics = () => {
                     <div key={s.key || s.label}>
                       <div className="flex items-center justify-between text-sm mb-1">
                         <span className="font-medium text-gray-700">{s.label}</span>
-                        <span className="text-gray-900 font-semibold">
+                        <span className="font-semibold text-gray-900">
                           {s.value} ({percent}%)
                         </span>
                       </div>
@@ -402,11 +607,15 @@ const Statistics = () => {
               <div className="mt-6 grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
                   <p className="text-xs text-emerald-700">Encaissement total</p>
-                  <p className="text-sm font-bold text-gray-900 mt-1">{formatMoney(totalRevenue)}</p>
+                  <p className="text-sm font-bold mt-1 text-gray-900">
+                    {formatMoney(totalRevenue)}
+                  </p>
                 </div>
                 <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
                   <p className="text-xs text-amber-700">À encaisser</p>
-                  <p className="text-sm font-bold text-gray-900 mt-1">{formatMoney(receivableAmount)}</p>
+                  <p className="text-sm font-bold mt-1 text-gray-900">
+                    {formatMoney(receivableAmount)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -427,8 +636,12 @@ const Statistics = () => {
                       <div className="flex items-center justify-between text-sm mb-1">
                         <span className="text-gray-700 font-medium">{act.name}</span>
                         <div className="text-right">
-                          <p className="text-gray-900 font-semibold">{act.count} actes</p>
-                          <p className="text-xs text-gray-500">{formatMoney(act.revenue)}</p>
+                          <p className="font-semibold text-gray-900">
+                            {act.count} actes
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {formatMoney(act.revenue)}
+                          </p>
                         </div>
                       </div>
                       <div className="w-full h-2 bg-gray-100 rounded-full">
@@ -465,15 +678,21 @@ const Statistics = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-100">
                 <p className="text-gray-500 text-sm">Recettes encaissées</p>
-                <p className="text-xl font-bold text-gray-900 mt-1">{formatMoney(totalRevenue)}</p>
+                <p className="text-xl font-bold mt-1 text-gray-900">
+                  {formatMoney(totalRevenue)}
+                </p>
               </div>
               <div className="p-4 rounded-xl bg-gradient-to-br from-red-50 to-white border border-red-100">
                 <p className="text-gray-500 text-sm">Dépenses achats</p>
-                <p className="text-xl font-bold text-gray-900 mt-1">{formatMoney(totalExpenses)}</p>
+                <p className="text-xl font-bold mt-1 text-gray-900">
+                  {formatMoney(totalExpenses)}
+                </p>
               </div>
               <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-100">
                 <p className="text-gray-500 text-sm">Résultat net</p>
-                <p className="text-xl font-bold text-gray-900 mt-1">{formatMoney(netResult)}</p>
+                <p className="text-xl font-bold mt-1 text-gray-900">
+                  {formatMoney(netResult)}
+                </p>
               </div>
             </div>
           </div>

@@ -52,7 +52,7 @@ export const Login = () => {
           <div className="p-8 md:p-12 flex flex-col justify-center">
             {/* Header */}
             <div className="text-center space-y-2 mb-6">
-              <h1 className="text-3xl font-bold text-gray-900">Cabinet Dentaire</h1>
+              <h1 className="text-3xl font-bold text-gray-900">Clinique Médicale</h1>
               <p className="text-gray-600">Connectez-vous à votre compte</p>
             </div>
 

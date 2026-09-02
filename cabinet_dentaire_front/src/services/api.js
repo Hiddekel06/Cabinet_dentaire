@@ -702,11 +702,15 @@ export const medicationAPI = {
 
 // Endpoint pour le tableau de bord statistiques
 export const statisticsAPI = {
-  getOverview: (period = 'month') => {
-    const cacheKey = `statistics:overview:${period}`;
+  getOverview: (period = 'month', startDate = '', endDate = '') => {
+    let params = `period=${encodeURIComponent(period)}`;
+    if (period === 'custom' && startDate && endDate) {
+      params += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+    }
+    const cacheKey = `statistics:overview:${params}`;
     return fetchWithCache(
       cacheKey,
-      () => api.get(`/api/statistics/overview?period=${encodeURIComponent(period)}`)
+      () => api.get(`/api/statistics/overview?${params}`)
     );
   },
 };

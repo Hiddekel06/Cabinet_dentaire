@@ -20,7 +20,7 @@ class StatisticsController extends Controller
     public function overview(Request $request)
     {
         [$periodKey, $periodLabel, $startDate, $endDate, $prevStartDate, $prevEndDate] = $this->resolvePeriodRange(
-            $request->input('period')
+            $request
         );
 
         $cacheKey = sprintf(
@@ -196,26 +196,50 @@ class StatisticsController extends Controller
         return response()->json($payload);
     }
 
-    private function resolvePeriodRange(?string $rawPeriod): array
+    private function resolvePeriodRange(Request $request): array
     {
+        $rawPeriod = $request->input('period');
         $period = strtolower(trim((string) $rawPeriod));
 
         $now = Carbon::now();
         $start = $now->copy()->startOfMonth();
+        $end = $now->copy()->endOfDay();
         $label = 'Ce mois';
         $key = 'month';
 
-        if (in_array($period, ['quarter', 'trimestre', 'ce trimestre', 'this_quarter'], true)) {
+        if (in_array($period, ['last_month', 'mois_dernier', 'mois passe', 'mois passé', 'previous_month'], true)) {
+            $start = $now->copy()->subMonth()->startOfMonth();
+            $end = $now->copy()->subMonth()->endOfMonth();
+            $label = 'Mois dernier';
+            $key = 'last_month';
+        } elseif (in_array($period, ['quarter', 'trimestre', 'ce trimestre', 'this_quarter'], true)) {
             $start = $now->copy()->startOfQuarter();
+            $end = $now->copy()->endOfDay();
             $label = 'Ce trimestre';
             $key = 'quarter';
         } elseif (in_array($period, ['year', 'annee', 'année', 'cette annee', 'cette année', 'this_year'], true)) {
             $start = $now->copy()->startOfYear();
-            $label = 'Cette annee';
+            $end = $now->copy()->endOfDay();
+            $label = 'Cette année';
             $key = 'year';
+        } elseif (in_array($period, ['custom', 'custom_period', 'personnalise', 'personnalisée'], true) && $request->filled('start_date') && $request->filled('end_date')) {
+            try {
+                $start = Carbon::parse($request->input('start_date'))->startOfDay();
+                $end = Carbon::parse($request->input('end_date'))->endOfDay();
+                if ($start->gt($end)) {
+                    $tmp = $start;
+                    $start = $end->copy()->startOfDay();
+                    $end = $tmp->copy()->endOfDay();
+                }
+                $label = 'Période personnalisée';
+                $key = 'custom';
+            } catch (\Exception $e) {
+                $start = $now->copy()->startOfMonth();
+                $end = $now->copy()->endOfDay();
+                $label = 'Ce mois';
+                $key = 'month';
+            }
         }
-
-        $end = $now->copy()->endOfDay();
 
         $durationDays = max($start->diffInDays($end), 1);
         $prevEnd = $start->copy()->subDay()->endOfDay();
