@@ -107,6 +107,20 @@ const Appointments = () => {
     'Annulé': 'cancelled',
   };
 
+  const getAppDateStr = (rawDate) => {
+    if (!rawDate) return '';
+    if (typeof rawDate === 'string') {
+      const match = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match) return match[1];
+    }
+    const d = new Date(rawDate);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   const loadDoctors = async () => {
     try {
       const { data } = await doctorAPI.getAll();
@@ -133,6 +147,7 @@ const Appointments = () => {
 
       const params = { 
         page,
+        per_page: viewMode === 'calendar' ? 300 : 15,
         search: searchTerm, // Ajout du support de la recherche côté serveur
         status_group: statusGroupBySelection[selectedStatus] || 'all',
       };
@@ -142,8 +157,8 @@ const Appointments = () => {
       const { data } = await appointmentAPI.getAll(params);
       const list = Array.isArray(data?.data) ? data.data : [];
       const mapped = list.map((a) => {
+        const date = getAppDateStr(a.appointment_date);
         const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
-        const date = dateObj ? dateObj.toISOString().slice(0, 10) : '';
         const timeSpecified = typeof a.appointment_time_specified === 'boolean'
           ? a.appointment_time_specified
           : true;
@@ -233,7 +248,7 @@ const Appointments = () => {
     loadPatients();
     loadDoctors();
     // eslint-disable-next-line
-  }, [page, selectedDoctorId, searchTerm, selectedStatus]);
+  }, [page, selectedDoctorId, searchTerm, selectedStatus, viewMode]);
 
   useEffect(() => {
     if (page !== 1) {
@@ -395,6 +410,18 @@ const Appointments = () => {
     ];
   }, [appointments]);
 
+  const getStatusPriority = (statut) => {
+    switch (statut) {
+      case "Aujourd'hui": return 0;
+      case "À venir": return 1;
+      case "En retard": return 2;
+      case "Terminé": return 3;
+      case "Absent": return 4;
+      case "Annulé": return 5;
+      default: return 6;
+    }
+  };
+
   const filteredAppointments = useMemo(() => {
     let results = [...appointments];
 
@@ -410,8 +437,8 @@ const Appointments = () => {
 
     // Filtre par statut
     if (selectedStatus === 'all') {
-      // Option 2: Par défaut, masquer les rendez-vous Terminés, Absents et Annulés
-      results = results.filter(app => !['Terminé', 'Absent', 'Annulé'].includes(app.statut));
+      // Par défaut, afficher Aujourd'hui, À venir, En retard et Terminé (masquer uniquement Absent et Annulé)
+      results = results.filter(app => !['Absent', 'Annulé'].includes(app.statut));
     } else if (selectedStatus !== 'everything') {
       results = results.filter(app => app.statut === selectedStatus);
     }
@@ -420,6 +447,19 @@ const Appointments = () => {
     if (selectedMotif !== 'all') {
       results = results.filter(app => app.motif === selectedMotif);
     }
+
+    // Tri prioritaire strict par défaut : Aujourd'hui (0) -> À venir (1) -> En retard (2) -> Terminé (3) -> Absent (4) -> Annulé (5)
+    results.sort((a, b) => {
+      const priorityA = getStatusPriority(a.statut);
+      const priorityB = getStatusPriority(b.statut);
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      if (a.date !== b.date) {
+        return a.date.localeCompare(b.date);
+      }
+      return (a.heureValue || '').localeCompare(b.heureValue || '');
+    });
 
     return results;
   }, [appointments, searchTerm, selectedStatus, selectedMotif]);
@@ -724,22 +764,6 @@ const Appointments = () => {
     }
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (viewMode !== 'calendar') return;
-      const tag = e.target?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-      if (e.key === 'ArrowLeft') {
-        handlePrev();
-      }
-      if (e.key === 'ArrowRight') {
-        handleNext();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [viewMode, calendarView, currentDate]);
-
   const handlePrev = () => {
     if (calendarView === 'month') {
       setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -772,6 +796,22 @@ const Appointments = () => {
     setCurrentDate(new Date());
     setSelectedDate(new Date());
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (viewMode !== 'calendar') return;
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (e.key === 'ArrowLeft') {
+        handlePrev();
+      }
+      if (e.key === 'ArrowRight') {
+        handleNext();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewMode, calendarView, currentDate]);
 
   const handleValidateInitiate = async (appointment) => {
     try {

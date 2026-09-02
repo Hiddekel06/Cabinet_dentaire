@@ -59,6 +59,7 @@ class AppointmentController extends Controller
 
         $statusGroup = $request->input('status_group', 'all');
         $activeStatuses = ['pending', 'confirmed'];
+        $activeAndCompletedStatuses = ['pending', 'confirmed', 'completed'];
 
         if ($statusGroup === 'today') {
             $query->whereDate('appointment_date', Carbon::today())
@@ -75,11 +76,13 @@ class AppointmentController extends Controller
             $query->where('status', 'absent');
         } elseif ($statusGroup === 'cancelled') {
             $query->where('status', 'cancelled');
+        } elseif ($statusGroup === 'all') {
+            $query->whereIn('status', $activeAndCompletedStatuses);
         } elseif ($statusGroup !== 'everything') {
             $query->whereIn('status', $activeStatuses);
         }
 
-        $perPage = max(1, min(100, (int) $request->input('per_page', 15)));
+        $perPage = max(1, min(500, (int) $request->input('per_page', 15)));
 
         if ($request->filled('date')) {
             return response()->json(
