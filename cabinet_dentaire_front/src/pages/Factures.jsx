@@ -310,7 +310,8 @@ const Factures = () => {
 
         {error && <div className="px-4 py-2 text-red-600 text-sm">{error}</div>}
 
-        <div className="w-full overflow-x-auto">
+        {/* Vue Desktop (Tableau) */}
+        <div className="hidden md:block w-full overflow-x-auto">
           {loading ? (
             <div className="p-6 text-gray-600 font-medium italic animate-pulse">Chargement des factures...</div>
           ) : (
@@ -357,6 +358,55 @@ const Factures = () => {
                 )}
               </tbody>
             </table>
+          )}
+        </div>
+
+        {/* Vue Mobile (Cartes Factures) */}
+        <div className="block md:hidden p-3 space-y-3 bg-slate-50/40">
+          {loading ? (
+            <div className="py-10 text-center text-sm font-medium text-gray-500 animate-pulse">Chargement des factures...</div>
+          ) : invoices.length === 0 ? (
+            <div className="py-8 text-center text-sm text-gray-400">Aucune facture trouvée</div>
+          ) : (
+            invoices.map((inv) => (
+              <div
+                key={inv.id}
+                className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs transition-all relative"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div>
+                    <span className="font-extrabold text-blue-600 text-sm">{inv.invoice_number}</span>
+                    <p className="font-bold text-slate-900 text-sm mt-0.5">
+                      {inv.patient ? `${inv.patient.first_name} ${inv.patient.last_name}` : 'Patient inconnu'}
+                    </p>
+                  </div>
+                  <span className="text-sm font-black text-slate-900 bg-blue-50 px-2.5 py-1 rounded-xl">
+                    {Number(inv.total_amount).toLocaleString()} <span className="text-[10px] font-bold">XOF</span>
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100 text-xs">
+                  <span className="text-slate-500 font-medium">
+                    Émise le {new Date(inv.issue_date).toLocaleDateString('fr-FR')}
+                  </span>
+
+                  <button
+                    onClick={() => downloadPdf(inv)}
+                    disabled={pdfLoadingId === inv.id}
+                    className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    {pdfLoadingId === inv.id ? (
+                      <span className="animate-pulse">PDF...</span>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" /></svg>
+                        Télécharger PDF
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))
           )}
         </div>
 

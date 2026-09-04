@@ -282,7 +282,8 @@ const Patients = () => {
             Nouveau
           </button>
         </div>
-        <div className="overflow-x-auto">
+        {/* Vue Desktop (Tableau) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
@@ -334,6 +335,54 @@ const Patients = () => {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Vue Mobile (Cartes fluides) */}
+        <div className="block md:hidden p-3 space-y-3 bg-slate-50/50">
+          {patientsLoading ? (
+            <div className="py-10 text-center font-bold text-slate-400 animate-pulse">Chargement intelligent...</div>
+          ) : filteredPatients.length === 0 ? (
+            <div className="py-8 text-center text-sm text-gray-500">Aucun patient trouvé</div>
+          ) : (
+            filteredPatients.map(p => (
+              <div 
+                key={p.apiId} 
+                onClick={() => handleRowClick(p)} 
+                className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs hover:border-blue-300 transition-all cursor-pointer relative"
+              >
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm shrink-0">
+                      {p.initials}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                        {p.name}
+                        {p.age && <span className="text-slate-400 font-normal text-xs">({p.age} ans)</span>}
+                        {p.generalState && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{p.id}</p>
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border shrink-0 ${colorClasses[p.color] || colorClasses.blue}`}>
+                    {p.status}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 text-xs">
+                  <span className="flex items-center gap-1 text-slate-600 font-medium">
+                    <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    {p.phone || 'Non renseigné'}
+                  </span>
+                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg">
+                    {p.date}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
         <div className="px-6 py-5 border-t border-slate-50 bg-slate-50/30 flex justify-between items-center">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Page {page} / {totalPages}</p>

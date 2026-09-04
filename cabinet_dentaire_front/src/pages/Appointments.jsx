@@ -1619,7 +1619,8 @@ const Appointments = () => {
               </button>
             </div>
           </div>
-          <div className="w-full overflow-x-auto">
+          {/* Vue Desktop (Tableau) */}
+          <div className="hidden md:block w-full overflow-x-auto">
             <table className="min-w-[600px] w-full text-xs sm:text-sm md:text-base">
               <thead>
                 <tr className="bg-gray-50">
@@ -1808,6 +1809,129 @@ const Appointments = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Vue Mobile (Cartes Rendez-vous) */}
+          <div className="block md:hidden p-3 space-y-3 bg-slate-50/40">
+            {appointmentsLoading ? (
+              <div className="py-10 text-center text-sm font-medium text-gray-500 animate-pulse">Chargement des rendez-vous...</div>
+            ) : appointmentsError ? (
+              <div className="py-8 text-center text-sm text-red-600">{appointmentsError}</div>
+            ) : filteredAppointments.length === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-400">Aucun rendez-vous trouvé</div>
+            ) : (
+              filteredAppointments.map((a) => (
+                <div
+                  key={a.id}
+                  className={`bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs transition-all relative ${
+                    flashAppointmentId === a.id || flashAppointmentId === a.apiId ? 'bg-amber-100/80 animate-pulse' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">{a.patient}</p>
+                      <p className="text-xs text-slate-500 font-medium">{a.motif}</p>
+                    </div>
+                    <span className={getStatusBadgeClasses(a.statut)}>
+                      {a.statut}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 px-3 py-2 rounded-xl my-2 border border-slate-100">
+                    <span className="font-bold text-blue-700 flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      {a.date} à {a.heure}
+                    </span>
+                    <span className="text-slate-500 font-medium">{a.praticien}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
+                    <div className="flex items-center gap-2">
+                      {['À venir', 'Aujourd\'hui', 'En retard'].includes(a.statut) && (
+                        <button
+                          onClick={() => handleValidateInitiate(a)}
+                          disabled={isValidating}
+                          className="px-3 py-1 text-xs font-bold text-black bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors shadow-xs disabled:opacity-50"
+                        >
+                          {isValidating ? '...' : 'Valider'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleViewDetails(a)}
+                        className="px-3 py-1 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                      >
+                        Détails
+                      </button>
+                    </div>
+
+                    <div className="relative" data-appointment-menu="true">
+                      <button
+                        onClick={() => setOpenMenu(openMenu === a.id ? null : a.id)}
+                        className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg border border-slate-200"
+                        title="Actions"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        </svg>
+                      </button>
+
+                      {openMenu === a.id && (
+                        <div className="absolute right-0 bottom-full mb-1 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50">
+                          <button
+                            onClick={() => {
+                              navigate('/treatments/new', { state: { patientId: a.patientId } });
+                              setOpenMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50 flex items-center gap-2"
+                          >
+                            Commencer traitement
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigate(`/ordonnances/new?patient_id=${a.patientId}`);
+                              setOpenMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"
+                          >
+                            Créer ordonnance
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigate(`/medical-certificates/new?patient_id=${a.patientId}`);
+                              setOpenMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+                          >
+                            Créer certificat
+                          </button>
+                          <div className="border-t border-slate-100 my-1"></div>
+                          <button
+                            onClick={() => {
+                              handleEdit(a);
+                              setOpenMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleDelete(a);
+                              setOpenMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
