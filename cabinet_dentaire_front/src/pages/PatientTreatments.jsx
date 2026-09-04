@@ -344,10 +344,10 @@ const PatientTreatments = () => {
     <Layout>
       <div className="p-6 space-y-6">
         {/* En-tête */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Diagnostic des patients</h1>
-            <p className="text-sm text-gray-600 mt-1">Gestion des traitements et diagnostics médicaux</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Diagnostic des patients</h1>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Gestion des traitements et diagnostics médicaux</p>
           </div>
           <button
             onClick={() => navigate('/treatments/new')}

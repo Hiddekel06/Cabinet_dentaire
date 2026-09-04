@@ -235,10 +235,10 @@ const Ordonnances = () => {
 
   return (
     <Layout>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Ordonnances</h1>
-          <p className="text-gray-600 mt-1">Gerez toutes les ordonnances depuis une vue globale</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Ordonnances</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Gérez toutes les ordonnances depuis une vue globale</p>
         </div>
       </div>
 

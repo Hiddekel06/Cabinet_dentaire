@@ -189,8 +189,8 @@ const Radiographies = () => {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Radiographies</h1>
-          <p className="text-gray-600 mt-1">Importez et gérez les radios/scanners de vos patients.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Radiographies</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Importez et gérez les radios/scanners de vos patients.</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">

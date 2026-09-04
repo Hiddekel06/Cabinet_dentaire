@@ -372,10 +372,10 @@ const Statistics = () => {
 
   return (
     <Layout>
-      <div className="mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Statistiques</h1>
-          <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-gray-600">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Statistiques</h1>
+          <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs sm:text-sm text-gray-500">
             <span>Vue consolidée achats + factures + activité</span>
             {stats?.period?.from && stats?.period?.to && (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">

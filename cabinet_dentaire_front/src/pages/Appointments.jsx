@@ -1415,10 +1415,10 @@ const Appointments = () => {
         isValidating={isValidating}
       />
 
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestion des rendez-vous</h1>
-          <p className="text-gray-600 mt-1">Consultez, planifiez et gérez tous les rendez-vous du cabinet</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Gestion des rendez-vous</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Consultez, planifiez et gérez tous les rendez-vous du cabinet</p>
         </div>
         
         {/* Boutons de vue */}

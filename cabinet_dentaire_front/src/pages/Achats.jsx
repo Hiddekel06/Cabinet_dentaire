@@ -706,12 +706,12 @@ const Achats = () => {
         </div>
       )}
 
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestion des achats</h1>
-          <p className="text-gray-600 mt-1">Consultez et gérez tous les achats du cabinet</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Gestion des achats</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Consultez et gérez tous les achats du cabinet</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* ── Rapport button ── */}
           <button
             onClick={() => setShowRapportModal(true)}

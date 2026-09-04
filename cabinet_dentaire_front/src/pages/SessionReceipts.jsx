@@ -216,8 +216,8 @@ const SessionReceipts = () => {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reçus de séance</h1>
-            <p className="text-gray-600 mt-1">Historique complet des reçus générés, consultables et téléchargeables à tout moment.</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Reçus de séance</h1>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Historique complet des reçus générés, consultables et téléchargeables à tout moment.</p>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <button
