@@ -125,13 +125,6 @@ class PatientTreatmentController extends Controller
             'agreed_amount_date' => ['nullable', 'date'],
         ]);
 
-        $consultationSimple = $this->resolveConsultationSimpleAct();
-        if (!$consultationSimple) {
-            return response()->json([
-                'message' => 'Acte obligatoire introuvable: Consultation simple.',
-            ], 422);
-        }
-
         // Vérifier si le patient a déjà un suivi en cours
         $existingTreatment = PatientTreatment::where('patient_id', $validated['patient_id'])
             ->whereIn('status', ['planned', 'in_progress'])
@@ -184,24 +177,9 @@ class PatientTreatmentController extends Controller
             'agreed_amount_date' => $validated['agreed_amount_date'] ?? null,
         ]);
 
-        // Consultation simple obligatoire ajoutee automatiquement au demarrage.
-        $mandatoryAct = new PatientTreatmentAct([
-            'dental_act_id' => $consultationSimple->id,
-            'quantity' => 1,
-            'tarif_snapshot' => $consultationSimple->tarif,
-        ]);
-        $mandatoryAct->patient_treatment_id = $patientTreatment->id;
-        $mandatoryAct->created_at = $validated['start_date'] . ' 00:00:00';
-        $mandatoryAct->updated_at = $validated['start_date'] . ' 00:00:00';
-        $mandatoryAct->save();
-
-        // Associer les actes saisis, hors Consultation simple pour eviter les doublons.
+        // Associer les actes saisis si fournis
         if (!empty($validated['acts'])) {
             foreach ($validated['acts'] as $act) {
-                if ((int) $act['dental_act_id'] === (int) $consultationSimple->id) {
-                    continue;
-                }
-
                 $dentalAct = DentalAct::find($act['dental_act_id']);
                 if (!$dentalAct) {
                     continue;
@@ -297,24 +275,7 @@ class PatientTreatmentController extends Controller
                 ], 422);
             }
 
-            $consultationSimple = $this->resolveConsultationSimpleAct();
-            if (!$consultationSimple) {
-                return response()->json([
-                    'message' => 'Acte obligatoire introuvable: Consultation simple.',
-                ], 422);
-            }
-
             $acts = collect($validated['acts'] ?? []);
-            $hasConsultation = $acts->contains(function ($act) use ($consultationSimple) {
-                return (int) ($act['dental_act_id'] ?? 0) === (int) $consultationSimple->id;
-            });
-
-            if (!$hasConsultation) {
-                $acts->prepend([
-                    'dental_act_id' => $consultationSimple->id,
-                    'quantity' => 1,
-                ]);
-            }
 
             // On supprime les anciens actes pour ce traitement
             $patientTreatment->acts()->delete();
@@ -435,13 +396,6 @@ class PatientTreatmentController extends Controller
             ], 422);
         }
 
-        $consultationSimple = $this->resolveConsultationSimpleAct();
-        if ($consultationSimple && (int) $patientTreatmentAct->dental_act_id === (int) $consultationSimple->id) {
-            return response()->json([
-                'message' => 'Suppression impossible: Consultation simple est obligatoire.',
-            ], 422);
-        }
-
         $deletedPayload = [
             'id' => $patientTreatmentAct->id,
             'patient_treatment_id' => $patientTreatmentAct->patient_treatment_id,
@@ -481,13 +435,6 @@ class PatientTreatmentController extends Controller
         if ($this->hasPaidInvoice($patientTreatment->id)) {
             return response()->json([
                 'message' => 'Modification impossible: la facture du traitement est deja payee.',
-            ], 422);
-        }
-
-        $consultationSimple = $this->resolveConsultationSimpleAct();
-        if ($consultationSimple && (int) $patientTreatmentAct->dental_act_id === (int) $consultationSimple->id) {
-            return response()->json([
-                'message' => 'Modification impossible: Consultation simple est obligatoire.',
             ], 422);
         }
 

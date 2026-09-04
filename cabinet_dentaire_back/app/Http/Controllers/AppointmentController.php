@@ -426,12 +426,4 @@ class AppointmentController extends Controller
         // et le temps d'exécution de la requête.
         return $appointmentDate->addMinutes(10)->lt(Carbon::now());
     }
-
-    private function resolveConsultationSimpleAct(): ?DentalAct
-    {
-        return DentalAct::query()
-            ->whereRaw('LOWER(name) = ?', ['consultation simple'])
-            ->orWhereRaw('LOWER(code) = ?', ['cs'])
-            ->first();
-    }
 }
