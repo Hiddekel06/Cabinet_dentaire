@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { appointmentAPI } from '../services/api';
 import { CabinetLogo } from './CabinetLogo';
 
-export const Header = () => {
+export const Header = ({ onToggleMobileMenu }) => {
   const { user, logout } = useAuth();
   const { cabinetName } = useCabinet();
   const navigate = useNavigate();
@@ -91,8 +91,18 @@ export const Header = () => {
     <header className="sticky top-0 z-50 bg-linear-to-r from-white via-gray-50 to-gray-100 border-b border-gray-200 shadow backdrop-blur-md bg-opacity-90">
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo et titre - Côté gauche */}
-          <div className="flex items-center space-x-4">
+          {/* Logo et titre - Côté gauche avec bouton hamburger sur mobile */}
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={onToggleMobileMenu}
+              className="md:hidden p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Ouvrir le menu"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
             <Link to="/dashboard" className="flex items-center space-x-3 hover:opacity-90 transition-opacity">
               <CabinetLogo alt="Logo Cabinet Dentaire" />
               <div className="hidden sm:block">

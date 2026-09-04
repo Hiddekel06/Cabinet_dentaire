@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { doctorAPI, settingAPI } from '../services/api';
 
-export const Sidebar = () => {
+export const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
   const { user } = useAuth();
   const location = useLocation();
 
@@ -19,6 +19,13 @@ export const Sidebar = () => {
     patientDossier: true,
     cabinetSettings: true,
   });
+
+  // Fermer le menu mobile lors d'une navigation
+  useEffect(() => {
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  }, [location.pathname]);
 
   // Détection du mode Multi-praticiens
   useEffect(() => {
@@ -203,96 +210,121 @@ export const Sidebar = () => {
   const isGroupActive = (items) => items.some(child => location.pathname === child.path || location.pathname.startsWith(child.path + '/'));
 
   return (
-    <aside
-      className={`bg-white border-r border-gray-200 transition-all duration-300 flex flex-col h-full ${
-        isCollapsed ? 'w-16' : 'w-52'
-      }`}
-    >
-      <nav className="flex-1 pl-0 pr-2 py-4 space-y-1 overflow-y-auto">
-        {filteredMenuItems.map((item) => (
-          <div key={item.id || item.path}>
-            {item.children ? (
-              <div>
-                <button
-                  onClick={() => toggleGroup(item.id)}
-                  className={`w-full flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
-                    isCollapsed ? 'justify-center' : 'justify-between'
-                  } ${
-                    isGroupActive(item.children) ? 'bg-gray-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <div className="flex items-center" style={{ minWidth: 20 }}>
-                      {item.icon}
-                    </div>
-                    {!isCollapsed && <span className="text-sm font-semibold">{item.label}</span>}
-                  </div>
-                  {!isCollapsed && (
-                    <svg className={`w-4 h-4 transition-transform duration-200 ${openGroups[item.id] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  )}
-                </button>
-                
-                {!isCollapsed && openGroups[item.id] && (
-                  <div className="mt-1 ml-4 pl-4 border-l border-gray-100 space-y-1">
-                    {item.children.map((child) => (
-                      <Link
-                        key={child.path}
-                        to={child.path}
-                        className={`block px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-200 ${
-                          isActive(child.path) ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:text-blue-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Link
-                to={item.path}
-                className={`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
-                  isCollapsed ? 'justify-center' : 'space-x-2'
-                } ${
-                  isActive(item.path)
-                    ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
-                    : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
-                }`}
-                title={isCollapsed ? item.label : ''}
-              >
-                <div className={`${isActive(item.path) ? 'text-blue-600' : 'text-gray-500'} flex items-center`} style={{ minWidth: 20 }}>
-                  {item.icon}
-                </div>
-                {!isCollapsed && (
-                  <span className="text-sm text-gray-700 font-medium">
-                    {item.label}
-                  </span>
-                )}
-              </Link>
-            )}
-          </div>
-        ))}
-      </nav>
+    <>
+      {/* Backdrop sombre sur mobile quand le menu est ouvert */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-gray-900/50 backdrop-blur-xs z-40 md:hidden transition-opacity"
+          onClick={onCloseMobile}
+        />
+      )}
 
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex justify-center mt-2">
+      <aside
+        className={`bg-white border-r border-gray-200 transition-all duration-300 flex flex-col
+          fixed inset-y-0 left-0 z-50 h-full
+          md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:z-auto md:translate-x-0
+          ${isMobileOpen ? 'translate-x-0 w-64 shadow-2xl' : '-translate-x-full md:translate-x-0'}
+          ${isCollapsed ? 'md:w-16' : 'md:w-52'}
+        `}
+      >
+        {/* En-tête mobile de la Sidebar avec bouton fermer */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 md:hidden">
+          <span className="text-sm font-bold text-gray-800">Navigation</span>
           <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
-            title={isCollapsed ? 'Agrandir' : 'Réduire'}
+            onClick={onCloseMobile}
+            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            aria-label="Fermer le menu"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {isCollapsed ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 19l-7-7 7-7m8 14l-7-7 7-7z" />
-              )}
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-      </div>
-    </aside>
+
+        <nav className="flex-1 pl-0 pr-2 py-4 space-y-1 overflow-y-auto">
+          {filteredMenuItems.map((item) => (
+            <div key={item.id || item.path}>
+              {item.children ? (
+                <div>
+                  <button
+                    onClick={() => toggleGroup(item.id)}
+                    className={`w-full flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
+                      isCollapsed ? 'md:justify-center' : 'justify-between'
+                    } ${
+                      isGroupActive(item.children) ? 'bg-gray-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className="flex items-center" style={{ minWidth: 20 }}>
+                        {item.icon}
+                      </div>
+                      <span className={`text-sm font-semibold ${isCollapsed ? 'md:hidden' : 'block'}`}>
+                        {item.label}
+                      </span>
+                    </div>
+                    <svg className={`w-4 h-4 transition-transform duration-200 ${openGroups[item.id] ? 'rotate-180' : ''} ${isCollapsed ? 'md:hidden' : 'block'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {openGroups[item.id] && (
+                    <div className={`mt-1 ml-4 pl-4 border-l border-gray-100 space-y-1 ${isCollapsed ? 'md:hidden' : 'block'}`}>
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.path}
+                          to={child.path}
+                          className={`block px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-200 ${
+                            isActive(child.path) ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:text-blue-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  to={item.path}
+                  className={`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
+                    isCollapsed ? 'md:justify-center' : 'space-x-2'
+                  } ${
+                    isActive(item.path)
+                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
+                      : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'
+                  }`}
+                  title={isCollapsed ? item.label : ''}
+                >
+                  <div className={`${isActive(item.path) ? 'text-blue-600' : 'text-gray-500'} flex items-center`} style={{ minWidth: 20 }}>
+                    {item.icon}
+                  </div>
+                  <span className={`text-sm text-gray-700 font-medium ${isCollapsed ? 'md:hidden' : 'block'}`}>
+                    {item.label}
+                  </span>
+                </Link>
+              )}
+            </div>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-gray-200 hidden md:block">
+          <div className="flex justify-center mt-2">
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+              title={isCollapsed ? 'Agrandir' : 'Réduire'}
+            >
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {isCollapsed ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 19l-7-7 7-7m8 14l-7-7 7-7z" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 };
