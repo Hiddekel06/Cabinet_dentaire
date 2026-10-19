@@ -44,12 +44,20 @@ class AppointmentController extends Controller
             });
         }
 
-        // Filtre par date si ?date=YYYY-MM-DD fourni
+        // Filtre par date exacte si ?date=YYYY-MM-DD fourni
         if ($request->filled('date')) {
             $date = $request->input('date');
             $dayStart = Carbon::parse($date)->startOfDay();
             $dayEnd = Carbon::parse($date)->endOfDay();
             $query->whereBetween('appointment_date', [$dayStart, $dayEnd]);
+        }
+
+        // Filtre par plage de dates (mode calendrier) : date_from et date_to
+        $hasDateRange = $request->filled('date_from') && $request->filled('date_to');
+        if ($hasDateRange) {
+            $from = Carbon::parse($request->input('date_from'))->startOfDay();
+            $to   = Carbon::parse($request->input('date_to'))->endOfDay();
+            $query->whereBetween('appointment_date', [$from, $to]);
         }
 
         // Filtre par docteur
@@ -83,6 +91,14 @@ class AppointmentController extends Controller
         }
 
         $perPage = max(1, min(500, (int) $request->input('per_page', 15)));
+
+        // Mode calendrier par plage de dates : on retourne TOUS les résultats sans pagination
+        // pour garantir que le calendrier affiche tous les rendez-vous du mois/semaine/jour
+        if ($hasDateRange) {
+            return response()->json(
+                $query->orderBy('appointment_date')->get()
+            );
+        }
 
         if ($request->filled('date')) {
             return response()->json(

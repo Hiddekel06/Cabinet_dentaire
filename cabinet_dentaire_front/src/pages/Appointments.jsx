@@ -121,6 +121,14 @@ const Appointments = () => {
     return `${y}-${m}-${day}`;
   };
 
+  // Convertit un objet Date en string YYYY-MM-DD (utilisé aussi dans loadAppointments)
+  const toDateStr = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   const loadDoctors = async () => {
     try {
       const { data } = await doctorAPI.getAll();
@@ -145,17 +153,51 @@ const Appointments = () => {
         everything: 'everything',
       };
 
-      const params = { 
-        page,
-        per_page: viewMode === 'calendar' ? 300 : 15,
-        search: searchTerm, // Ajout du support de la recherche côté serveur
+      const params = {
+        search: searchTerm,
         status_group: statusGroupBySelection[selectedStatus] || 'all',
       };
+
       if (selectedDoctorId) {
         params.assigned_doctor_id = selectedDoctorId;
       }
+
+      // Mode calendrier : on utilise une plage de dates pour récupérer TOUS les
+      // rendez-vous du mois/semaine/jour affiché, sans limite de pagination.
+      if (viewMode === 'calendar') {
+        let dateFrom, dateTo;
+        if (calendarView === 'month') {
+          // Tout le mois affiché
+          const year = currentDate.getFullYear();
+          const month = currentDate.getMonth();
+          dateFrom = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+          const lastDay = new Date(year, month + 1, 0).getDate();
+          dateTo = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        } else if (calendarView === 'week') {
+          // Toute la semaine affichée (lundi → dimanche)
+          const startOfWeek = new Date(currentDate);
+          startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+          const endOfWeek = new Date(startOfWeek);
+          endOfWeek.setDate(startOfWeek.getDate() + 6);
+          dateFrom = toDateStr(startOfWeek);
+          dateTo = toDateStr(endOfWeek);
+        } else {
+          // Vue journalière : un seul jour
+          dateFrom = toDateStr(currentDate);
+          dateTo = toDateStr(currentDate);
+        }
+        params.date_from = dateFrom;
+        params.date_to   = dateTo;
+      } else {
+        // Mode tableau : pagination classique
+        params.page     = page;
+        params.per_page = 15;
+      }
+
       const { data } = await appointmentAPI.getAll(params);
-      const list = Array.isArray(data?.data) ? data.data : [];
+      // En mode calendrier le backend retourne un tableau brut (pas paginé)
+      // En mode tableau il retourne un objet paginé avec data.data
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
       const mapped = list.map((a) => {
         const date = getAppDateStr(a.appointment_date);
         const dateObj = a.appointment_date ? new Date(a.appointment_date) : null;
@@ -170,7 +212,7 @@ const Appointments = () => {
           : '–';
         const patient = a.patient ? `${a.patient.first_name || ''} ${a.patient.last_name || ''}`.trim() : '';
         const statut = getAppointmentDisplayStatus(date, a.status);
-        
+
         // Use assigned doctor name, fallback to dentist (creator) name
         const praticien = a.assigned_doctor?.name || a.dentist?.name || 'Praticien';
 
@@ -198,6 +240,7 @@ const Appointments = () => {
       setAppointmentsLoading(false);
     }
   };
+
 
   const loadPatients = async () => {
     setPatientsLoading(true);
@@ -247,8 +290,10 @@ const Appointments = () => {
     loadAppointments();
     loadPatients();
     loadDoctors();
+    // currentDate est inclus pour re-fetcher quand l'utilisateur navigue dans le calendrier
     // eslint-disable-next-line
-  }, [page, selectedDoctorId, searchTerm, selectedStatus, viewMode]);
+  }, [page, selectedDoctorId, searchTerm, selectedStatus, viewMode, calendarView, currentDate]);
+
 
   useEffect(() => {
     if (page !== 1) {
@@ -471,12 +516,6 @@ const Appointments = () => {
     setSelectedDoctorId('');
   };
 
-  const toDateStr = (date) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
 
   const todayDateStr = toDateStr(new Date());
 
